@@ -117,7 +117,7 @@ public final class NekoAuthOAuthHandler extends ApiServlet {
     private static int statusFor(String code) {
         return switch (code) {
             case "oauth_disabled", "oauth_not_configured", "oauth_unavailable" -> HttpServletResponse.SC_SERVICE_UNAVAILABLE;
-            case "access_denied", "account_not_linked", "email_mismatch", "email_unverified" -> HttpServletResponse.SC_FORBIDDEN;
+            case "access_denied", "account_not_linked", "email_mismatch" -> HttpServletResponse.SC_FORBIDDEN;
             case "token_exchange_failed", "userinfo_failed" -> HttpServletResponse.SC_BAD_GATEWAY;
             case "token_issue_failed" -> HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
             default -> HttpServletResponse.SC_BAD_REQUEST;

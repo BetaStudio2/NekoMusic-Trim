@@ -45,6 +45,7 @@ curl -fsS http://127.0.0.1:65535/version
 
 - `auth_user_id` 保存 NekoAuth 的稳定数字用户 ID，并建立唯一索引；这是账号关联的第一依据。
 - `email` 是 NekoAuth 返回的邮箱快照，用于旧 API 响应、后台展示、邮件通知和首次关联补偿；它不是密码或登录凭据。
+- 邮箱验证状态由 NekoAuth 管理，不作为 NekoMusic 登录门槛；NekoMusic 按 `sub` 关联本地业务资料。
 - `nickname`、`avatar`、`vip_expires_at` 继续由 NekoMusic 本地维护。NekoAuth 的显示名不会覆盖 NekoMusic 昵称。
 - 用户密码、注册验证码、找回密码验证码、账号启用状态、用户 access token 的签发、校验与吊销全部由 NekoAuth 处理；NekoMusic 的 Redis 不再保存任何 `user_token` 键。
 

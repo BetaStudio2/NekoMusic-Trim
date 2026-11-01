@@ -233,29 +233,12 @@ public final class NekoAuthOAuthService {
 
     private LoginResult createLocalSession(String shortLivedToken, JsonNode userInfo, String returnTo)
             throws OAuthLoginException {
-        String subject = textOrEmpty(userInfo, "sub");
-        long authUserId;
-        try {
-            authUserId = Long.parseLong(subject);
-            if (authUserId <= 0) {
-                throw new NumberFormatException("out of range");
-            }
-        } catch (NumberFormatException exception) {
-            throw new OAuthLoginException("invalid_subject", "NekoAuth 用户标识无效");
-        }
-
-        // 只读取 sub/email；不读取 name/preferred_username，避免把 NekoAuth 昵称带进 NekoMusic。
-        if (userInfo.has("email_verified") && !userInfo.get("email_verified").asBoolean(true)) {
-            throw new OAuthLoginException("email_unverified", "NekoAuth 邮箱尚未验证");
-        }
-        String oauthEmail = textOrEmpty(userInfo, "email");
-        if (oauthEmail.isBlank()) {
-            throw new OAuthLoginException("email_missing", "NekoAuth 未返回邮箱");
-        }
+        OAuthIdentity identity = parseOAuthIdentity(userInfo);
+        long authUserId = identity.authUserId();
 
         User localUser;
         try {
-            localUser = userAuthService.findOrLinkNekoAuthUser(authUserId, oauthEmail, null);
+            localUser = userAuthService.findOrLinkNekoAuthUser(authUserId, identity.email(), null);
         } catch (RuntimeException exception) {
             logger.warn("关联 NekoAuth 账号与本地资料失败: authUserId={}", authUserId, exception);
             throw new OAuthLoginException("account_link_failed", "关联 NekoMusic 账户失败", exception);
@@ -285,6 +268,26 @@ public final class NekoAuthOAuthService {
         }
         logger.info("NekoAuth 登录成功: authUserId={} localUserId={}", authUserId, localUser.id());
         return new LoginResult(handoff, returnTo);
+    }
+
+    static OAuthIdentity parseOAuthIdentity(JsonNode userInfo) throws OAuthLoginException {
+        String subject = textOrEmpty(userInfo, "sub");
+        long authUserId;
+        try {
+            authUserId = Long.parseLong(subject);
+            if (authUserId <= 0) {
+                throw new NumberFormatException("out of range");
+            }
+        } catch (NumberFormatException exception) {
+            throw new OAuthLoginException("invalid_subject", "NekoAuth 用户标识无效");
+        }
+
+        // 只读取 sub/email；email_verified 属于 NekoAuth 的账号状态，不作为 NekoMusic 登录门槛。
+        String email = textOrEmpty(userInfo, "email");
+        if (email.isBlank()) {
+            throw new OAuthLoginException("email_missing", "NekoAuth 未返回邮箱");
+        }
+        return new OAuthIdentity(authUserId, email);
     }
 
     private HttpResponse<String> send(HttpRequest request, String interruptMessage) throws OAuthLoginException {
@@ -425,6 +428,9 @@ public final class NekoAuthOAuthService {
     }
 
     private record OAuthState(String returnTo, long issuedAt) {
+    }
+
+    record OAuthIdentity(long authUserId, String email) {
     }
 
     private record Handoff(String accessToken, String returnTo, long issuedAt) {
