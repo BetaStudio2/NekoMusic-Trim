@@ -135,8 +135,8 @@ class UserManagementHandlersTest {
         }
 
         @Override
-        public Account adminCreate(String email, String password) {
-            return new Account(9001, email, "listener", "USER", true,
+        public Account adminCreate(String email, String password, String nickname) {
+            return new Account(9001, email, "listener", nickname, "USER", true,
                     "test-access-token", "Bearer", 3600);
         }
     }

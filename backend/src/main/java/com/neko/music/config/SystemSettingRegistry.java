@@ -68,7 +68,7 @@ public final class SystemSettingRegistry {
                     "https://music.nekocore.cn/oauth/nekocore/callback",
                     "必须与 NekoAuth 应用中登记的回调地址完全一致；本地联调可填 http://localhost:65535/oauth/nekocore/callback"),
             text("oauth.scopes", Group.AUTH, "授权范围", "openid profile email roles",
-                    "空格分隔；接入 NekoMusic 至少需要 openid email，建议保留 roles 以便后续权限映射"),
+                    "空格分隔；接入 NekoMusic 至少需要 openid profile email，建议保留 roles 以便后续权限映射"),
 
             // ---------- 邮件 ----------
             text("smtp.host", Group.MAIL, "SMTP 主机", "", "例如 smtp.qq.com；留空则无法发送验证码邮件"),

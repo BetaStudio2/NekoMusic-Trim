@@ -16,7 +16,7 @@ class NekoAuthOAuthServiceTest {
     @DisplayName("未验证邮箱不影响 NekoMusic 登录")
     void unverifiedEmailIsAccepted() throws Exception {
         JsonNode userInfo = OBJECT_MAPPER.readTree("""
-                {"sub":"10001","email":"user@example.com","email_verified":false}
+                {"sub":"10001","email":"user@example.com","name":"猫娘","email_verified":false}
                 """);
 
         NekoAuthOAuthService.OAuthIdentity identity =
@@ -24,6 +24,7 @@ class NekoAuthOAuthServiceTest {
 
         assertEquals(10001L, identity.authUserId());
         assertEquals("user@example.com", identity.email());
+        assertEquals("猫娘", identity.nickname());
     }
 
     @Test

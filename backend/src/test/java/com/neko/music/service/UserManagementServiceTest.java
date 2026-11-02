@@ -179,14 +179,16 @@ class UserManagementServiceTest {
     @Test
     void ownNicknameChangeTrimsAndValidates() throws Exception {
         FakeStore store = new FakeStore();
-        UserManagementService service = new UserManagementService(store, new RecordingRevoker());
+        RecordingAuthBridge authBridge = new RecordingAuthBridge();
+        UserManagementService service = new UserManagementService(store, new RecordingRevoker(), authBridge);
 
         String saved = service.changeUserNickname(7, "  新昵称  ");
         assertEquals("新昵称", saved);
         assertEquals("新昵称", store.nickname);
+        assertEquals(List.of("listener@example.com:新昵称"), authBridge.nicknameChanges);
 
         UserManagementException invalid = assertThrows(UserManagementException.class,
-                () -> service.changeUserNickname(7, "x".repeat(21)));
+                () -> service.changeUserNickname(7, "x".repeat(33)));
         assertTrue(invalid.messageKey().contains("昵称长度"));
     }
 
@@ -220,7 +222,7 @@ class UserManagementServiceTest {
 
         UserManagementException nickname = assertThrows(UserManagementException.class,
                 () -> service.changeUserNickname(99, "listener"));
-        assertEquals("user.nickname.change_failed", nickname.messageKey());
+        assertEquals("user.not_exists", nickname.messageKey());
 
         UserManagementException avatar = assertThrows(UserManagementException.class,
                 () -> service.changeUserAvatar(99, "avatars/new.png"));
@@ -290,6 +292,7 @@ class UserManagementServiceTest {
     private static class RecordingAuthBridge extends NekoAuthAccountService {
         private final List<String> changes = new ArrayList<>();
         private final List<String> adminResets = new ArrayList<>();
+        private final List<String> nicknameChanges = new ArrayList<>();
 
         RecordingAuthBridge() {
             super(null, null);
@@ -303,6 +306,11 @@ class UserManagementServiceTest {
         @Override
         public void adminResetPassword(String email, String newPassword) {
             adminResets.add(email + ":" + newPassword);
+        }
+
+        @Override
+        public void updateNickname(String email, String nickname) {
+            nicknameChanges.add(email + ":" + nickname);
         }
     }
 

@@ -74,7 +74,7 @@ class UserProfileHandlersTest {
     void nicknameChangeReturnsSavedNicknameAndDisablesCaching() throws Exception {
         FakeStore store = new FakeStore();
         UserNicknameChangeHandler handler = new UserNicknameChangeHandler(
-                new UserManagementService(store, new RecordingRevoker()), request -> 7);
+                new UserManagementService(store, new RecordingRevoker(), new RecordingAuthBridge()), request -> 7);
         CapturingResponse capture = new CapturingResponse();
 
         handler.doPost(request("{\"nickname\":\"  喵喵  \"}"), responseProxy(capture));
@@ -88,10 +88,11 @@ class UserProfileHandlersTest {
     @Test
     void nicknameChangeRejectsInvalidLength() throws Exception {
         UserNicknameChangeHandler handler = new UserNicknameChangeHandler(
-                new UserManagementService(new FakeStore(), new RecordingRevoker()), request -> 7);
+                new UserManagementService(new FakeStore(), new RecordingRevoker(),
+                        new RecordingAuthBridge()), request -> 7);
         CapturingResponse capture = new CapturingResponse();
 
-        handler.doPost(request("{\"nickname\":\"" + "x".repeat(21) + "\"}"), responseProxy(capture));
+        handler.doPost(request("{\"nickname\":\"" + "x".repeat(33) + "\"}"), responseProxy(capture));
 
         assertEquals(400, capture.status);
         assertTrue(capture.body().contains("昵称长度"));
@@ -278,6 +279,8 @@ class UserProfileHandlersTest {
         private String email;
         private String currentPassword;
         private String newPassword;
+        private String nicknameEmail;
+        private String nickname;
 
         RecordingAuthBridge() {
             super(null, null);
@@ -288,6 +291,12 @@ class UserProfileHandlersTest {
             this.email = email;
             this.currentPassword = currentPassword;
             this.newPassword = newPassword;
+        }
+
+        @Override
+        public void updateNickname(String email, String nickname) {
+            this.nicknameEmail = email;
+            this.nickname = nickname;
         }
     }
 

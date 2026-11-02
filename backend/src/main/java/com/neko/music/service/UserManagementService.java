@@ -152,13 +152,24 @@ public final class UserManagementService {
         }
 
         try {
+            if (nekoAuthAccountService == null) {
+                throw UserManagementException.internal("auth.service_unavailable", null);
+            }
+            UserProfile profile = store.findUserProfile(userId)
+                    .orElseThrow(() -> UserManagementException.notFound("user.not_exists"));
+            nekoAuthAccountService.updateNickname(profile.email(), normalizedNickname);
             if (!store.updateUserNickname(userId, normalizedNickname)) {
                 throw UserManagementException.internal("user.nickname.change_failed", null);
             }
-            logger.info("用户 {} 修改昵称成功: {}", userId, normalizedNickname);
+            logger.info("用户 {} 已通过 NekoAuth 修改昵称并同步本地缓存: {}", userId, normalizedNickname);
             return normalizedNickname;
         } catch (SQLException e) {
             throw databaseFailure("user.nickname.change_failed", e);
+        } catch (NekoAuthAccountService.AccountBridgeException e) {
+            if (e.status() == 400) {
+                throw UserManagementException.validation("昵称格式不正确喵");
+            }
+            throw bridgeFailure(e, "user.nickname.change_failed");
         }
     }
 
@@ -249,15 +260,17 @@ public final class UserManagementService {
                 throw UserManagementException.internal("auth.service_unavailable", null);
             }
             NekoAuthAccountService.Account account =
-                    nekoAuthAccountService.adminCreate(normalizedEmail, rawPassword);
+                    nekoAuthAccountService.adminCreate(normalizedEmail, rawPassword, normalizedNickname);
+            String authNickname = account.nickname() == null || account.nickname().isBlank()
+                    ? normalizedNickname : account.nickname();
             if (store.userEmailExists(normalizedEmail)) {
                 store.bindUserAuthId(normalizedEmail, account.id());
             } else {
-                store.createUser(normalizedNickname, normalizedEmail);
+                store.createUser(authNickname, normalizedEmail);
                 store.bindUserAuthId(normalizedEmail, account.id());
             }
             logger.info("管理员 {} 通过 NekoAuth 创建普通用户 {} authUserId={}",
-                    actor.username(), normalizedNickname, account.id());
+                    actor.username(), authNickname, account.id());
         } catch (SQLException e) {
             if (isDuplicateKey(e)) {
                 throw UserManagementException.conflict("admin.user.email_exists");

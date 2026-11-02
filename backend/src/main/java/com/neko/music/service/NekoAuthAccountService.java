@@ -51,26 +51,36 @@ public class NekoAuthAccountService {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("email", email);
         body.put("password", password);
-        return postAccount("/login", body, "登录");
+        return postAccount("/login", body, "登录", true);
     }
 
     public void sendRegistrationCode(String email) {
         postNoContent("/register/code", Map.of("email", email), "发送注册验证码");
     }
 
-    public Account register(String email, String password, String verificationCode) {
+    public Account register(String email, String password, String verificationCode, String nickname) {
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put("nickname", nickname);
         body.put("email", email);
         body.put("password", password);
         body.put("verificationCode", verificationCode);
-        return postAccount("/register", body, "注册");
+        return postAccount("/register", body, "注册", true);
     }
 
-    public Account adminCreate(String email, String password) {
+    public Account adminCreate(String email, String password, String nickname) {
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put("nickname", nickname);
         body.put("email", email);
         body.put("password", password);
-        return postAccount("/admin-create", body, "创建账号");
+        return postAccount("/admin-create", body, "创建账号", false);
+    }
+
+    /** 昵称以 NekoAuth 为唯一权威源；本地只更新展示缓存。 */
+    public void updateNickname(String email, String nickname) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("email", email);
+        body.put("nickname", nickname);
+        postNoContent("/nickname", body, "修改昵称");
     }
 
     public void sendPasswordResetCode(String email) {
@@ -132,6 +142,7 @@ public class NekoAuthAccountService {
         return Optional.of(new Introspection(
                 authUserId,
                 text(json, "email"),
+                firstNonBlank(text(json, "name"), text(json, "username")),
                 json.path("email_verified").asBoolean(false),
                 text(json, "role"),
                 text(json, "scope")));
@@ -174,14 +185,16 @@ public class NekoAuthAccountService {
         postForm("/oauth2/revoke", Map.of("token", accessToken), "吊销访问令牌");
     }
 
-    private Account postAccount(String path, Map<String, Object> payload, String operation) {
+    private Account postAccount(String path, Map<String, Object> payload, String operation,
+                                boolean requireAccessToken) {
         HttpResponse<String> response = post(path, payload, operation);
         JsonNode json = parseJson(response.body());
         JsonNode id = json == null ? null : json.get("id");
         JsonNode email = json == null ? null : json.get("email");
         String accessToken = text(json, "accessToken");
         if (id == null || !id.canConvertToLong() || id.asLong() <= 0
-                || email == null || !email.isTextual() || accessToken.isBlank()) {
+                || email == null || !email.isTextual()
+                || (requireAccessToken && accessToken.isBlank())) {
             throw new AccountBridgeException(502, "NEKO_AUTH_BAD_RESPONSE",
                     "NekoAuth 返回的账号或令牌信息格式不正确", 0);
         }
@@ -191,6 +204,7 @@ public class NekoAuthAccountService {
                 id.asLong(),
                 email.asText(),
                 text(json, "username"),
+                firstNonBlank(text(json, "nickname"), text(json, "username")),
                 text(json, "role"),
                 json.path("enabled").asBoolean(true),
                 accessToken,
@@ -318,6 +332,10 @@ public class NekoAuthAccountService {
         return value == null || value.isNull() ? "" : value.asText("");
     }
 
+    private static String firstNonBlank(String first, String second) {
+        return first == null || first.isBlank() ? second : first;
+    }
+
     private static long retryAfterSeconds(HttpResponse<String> response) {
         return response.headers().firstValue("Retry-After")
                 .map(value -> {
@@ -349,14 +367,14 @@ public class NekoAuthAccountService {
         return builder.toString();
     }
 
-    public record Account(long id, String email, String username, String role, boolean enabled,
+    public record Account(long id, String email, String username, String nickname, String role, boolean enabled,
                           String accessToken, String tokenType, long expiresIn) {
     }
 
     public record IssuedToken(String accessToken, String tokenType, long expiresIn) {
     }
 
-    public record Introspection(long userId, String email, boolean emailVerified,
+    public record Introspection(long userId, String email, String nickname, boolean emailVerified,
                                 String role, String scope) {
     }
 

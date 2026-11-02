@@ -96,7 +96,11 @@ function handleNotificationSync(event) {
 
 function handleVisibilityChange() {
   // 切回前台时重建连接，顺便用新的 `ready` 帧校准红点，避免长时间挂后台后计数漂移
-  if (!document.hidden) reconnectNotificationStream()
+  if (!document.hidden) {
+    reconnectNotificationStream()
+    // 用户可能在 NekoAuth 页面改了昵称；回到站内时从 Auth 拉取最新展示资料。
+    loadUserInfo({ force: true })
+  }
 }
 
 const avatarVersion = useAvatarVersion()

@@ -76,7 +76,7 @@
                 ref="nicknameInputEl"
                 v-model="nicknameInput"
                 class="info__edit"
-                maxlength="20"
+                maxlength="32"
                 :placeholder="$t('profile.nicknamePlaceholder')"
                 @keyup.enter="saveNickname"
                 @keyup.esc="cancelEditNickname"
@@ -266,7 +266,7 @@ const saveNickname = async () => {
     toast.error(t('profile.nicknameEmpty'))
     return
   }
-  if (nickname.length > 20) {
+  if (nickname.length > 32) {
     toast.error(t('profile.nicknameLength'))
     return
   }

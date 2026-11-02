@@ -28,9 +28,8 @@ import java.util.Map;
  * handoff，再用它领取 NekoAuth 签发的用户 Token。state 存 Redis、只消费一次，并把登录前的相对路径绑定在里面，回调时不再接受
  * 客户端传入的跳转地址，避免开放重定向。</p>
  *
- * <p><b>昵称边界：</b>本服务只读取 UserInfo 的 {@code sub} 与 {@code email} 用于身份匹配，
- * 从不读取 {@code name}/{@code preferred_username}，也从不写入 NekoMusic 的 {@code nickname}。
- * 昵称仍由 NekoMusic 自己管理。</p>
+ * <p><b>昵称边界：</b>NekoAuth 是昵称唯一权威源。本服务读取 UserInfo 的
+ * {@code sub}/{@code email} 匹配本地资料，并把 {@code name} 同步为 NekoMusic 的展示缓存。</p>
  */
 public final class NekoAuthOAuthService {
 
@@ -238,7 +237,8 @@ public final class NekoAuthOAuthService {
 
         User localUser;
         try {
-            localUser = userAuthService.findOrLinkNekoAuthUser(authUserId, identity.email(), null);
+            localUser = userAuthService.findOrLinkNekoAuthUser(
+                    authUserId, identity.email(), identity.nickname());
         } catch (RuntimeException exception) {
             logger.warn("关联 NekoAuth 账号与本地资料失败: authUserId={}", authUserId, exception);
             throw new OAuthLoginException("account_link_failed", "关联 NekoMusic 账户失败", exception);
@@ -282,12 +282,16 @@ public final class NekoAuthOAuthService {
             throw new OAuthLoginException("invalid_subject", "NekoAuth 用户标识无效");
         }
 
-        // 只读取 sub/email；email_verified 属于 NekoAuth 的账号状态，不作为 NekoMusic 登录门槛。
+        // email_verified 属于 NekoAuth 的账号状态，不作为 NekoMusic 登录门槛。
         String email = textOrEmpty(userInfo, "email");
         if (email.isBlank()) {
             throw new OAuthLoginException("email_missing", "NekoAuth 未返回邮箱");
         }
-        return new OAuthIdentity(authUserId, email);
+        String nickname = textOrEmpty(userInfo, "name");
+        if (nickname.isBlank()) {
+            nickname = textOrEmpty(userInfo, "preferred_username");
+        }
+        return new OAuthIdentity(authUserId, email, nickname);
     }
 
     private HttpResponse<String> send(HttpRequest request, String interruptMessage) throws OAuthLoginException {
@@ -430,7 +434,7 @@ public final class NekoAuthOAuthService {
     private record OAuthState(String returnTo, long issuedAt) {
     }
 
-    record OAuthIdentity(long authUserId, String email) {
+    record OAuthIdentity(long authUserId, String email, String nickname) {
     }
 
     private record Handoff(String accessToken, String returnTo, long issuedAt) {
