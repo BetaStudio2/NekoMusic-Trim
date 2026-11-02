@@ -21,7 +21,7 @@
     "@pixi/filter-bulge-pinch": "^5.1.1",
     "@pixi/filter-color-matrix": "^7.4.3",
     "@pixi/sprite": "^7.4.3",
-    "axios": "1.20.0",
+    "axios": "1.21.0",
     "chart.js": "^4.6.1",
     "lucide": "^1.57.0",
     "morphicons": "^2.0.0",
