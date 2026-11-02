@@ -24,6 +24,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -162,8 +163,9 @@ public class UserNotificationHandler extends ApiServlet {
 
         JsonArray items = new JsonArray();
         int latestId = since == null ? 0 : since;
+        Map<Integer, String> nicknames = resolveNicknames(page.rows);
         for (NotificationRow row : page.rows) {
-            items.add(toJson(row));
+            items.add(toJson(row, nicknames));
             latestId = Math.max(latestId, row.id);
         }
 
@@ -342,8 +344,9 @@ public class UserNotificationHandler extends ApiServlet {
             }
             List<NotificationRow> ascending = new ArrayList<>(page.rows);
             Collections.reverse(ascending);
+            Map<Integer, String> nicknames = resolveNicknames(ascending);
             for (NotificationRow row : ascending) {
-                writeEvent(writer, "message", toJson(row), row.id);
+                writeEvent(writer, "message", toJson(row, nicknames), row.id);
                 latest = Math.max(latest, row.id);
             }
             if (!page.hasMore) {
@@ -431,7 +434,7 @@ public class UserNotificationHandler extends ApiServlet {
     // ──────────────────────────── 工具 ────────────────────────────
 
     /** 单条消息的对外结构；字段名即客户端契约，改动要同步 API 文档。 */
-    static JsonObject toJson(NotificationRow row) {
+    static JsonObject toJson(NotificationRow row, Map<Integer, String> nicknames) {
         JsonObject json = new JsonObject();
         json.addProperty("id", row.id);
         json.addProperty("type", row.type);
@@ -443,10 +446,18 @@ public class UserNotificationHandler extends ApiServlet {
         if (row.actorUserId != null) {
             JsonObject actor = new JsonObject();
             actor.addProperty("id", row.actorUserId);
-            actor.addProperty("nickname", row.actorNickname == null ? "" : row.actorNickname);
+            actor.addProperty("nickname", nicknames.getOrDefault(row.actorUserId, "有人"));
             json.add("actor", actor);
         }
         return json;
+    }
+
+    private static Map<Integer, String> resolveNicknames(List<NotificationRow> rows) {
+        List<Integer> actorIds = rows.stream()
+                .map(row -> row.actorUserId)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        return Main.getNicknameResolver().resolveByLocalUserIds(actorIds, "有人");
     }
 
     private static Integer intParam(HttpServletRequest req, String name) {

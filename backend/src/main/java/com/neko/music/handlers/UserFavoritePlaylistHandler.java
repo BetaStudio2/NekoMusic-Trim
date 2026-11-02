@@ -155,11 +155,10 @@ public class UserFavoritePlaylistHandler extends ApiServlet {
     private List<JsonObject> getFavoritePlaylists(int userId) throws SQLException {
         List<JsonObject> playlists = new ArrayList<>();
         String sql = "SELECT p.id, p.name, p.description, p.music_count, p.created_at, p.updated_at, " +
-                     "u.nickname as creator_name, u.id as creator_id, " +
+                     "p.user_id as creator_id, " +
                      "ufp.created_at as favorite_time " +
                      "FROM user_favorite_playlists ufp " +
                      "JOIN playlists p ON ufp.playlist_id = p.id " +
-                     "JOIN users u ON p.user_id = u.id " +
                      "WHERE ufp.user_id = ? " +
                      "ORDER BY ufp.created_at DESC";
         
@@ -181,11 +180,20 @@ public class UserFavoritePlaylistHandler extends ApiServlet {
                 
                 JsonObject creator = new JsonObject();
                 creator.addProperty("id", rs.getInt("creator_id"));
-                creator.addProperty("nickname", rs.getString("creator_name"));
                 playlist.add("creator", creator);
                 
                 playlists.add(playlist);
             }
+        }
+
+        java.util.Map<Integer, String> nicknames = Main.getNicknameResolver().resolveByLocalUserIds(
+                playlists.stream()
+                        .map(playlist -> playlist.getAsJsonObject("creator").get("id").getAsInt())
+                        .toList(),
+                "未知用户");
+        for (JsonObject playlist : playlists) {
+            JsonObject creator = playlist.getAsJsonObject("creator");
+            creator.addProperty("nickname", nicknames.getOrDefault(creator.get("id").getAsInt(), "未知用户"));
         }
         
         return playlists;

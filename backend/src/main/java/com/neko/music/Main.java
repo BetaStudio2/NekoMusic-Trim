@@ -87,6 +87,7 @@ public class Main {
     private static SourceBanService sourceBanService;
     private static UserAuthService userAuthService;
     private static NekoAuthAccountService nekoAuthAccountService;
+    private static NicknameResolver nicknameResolver;
     private static NekoAuthOAuthService nekoAuthOAuthService;
     private static QrLoginService qrLoginService;
     private static EmailService emailService;
@@ -240,9 +241,10 @@ public class Main {
 
         // 初始化用户认证服务
         nekoAuthAccountService = new NekoAuthAccountService(configManager, objectMapper);
+        nicknameResolver = new NicknameResolver(databaseManager, nekoAuthAccountService);
         userAuthService = new UserAuthService(
                 databaseManager, configManager, emailService, redisService, tokenStore,
-                verificationCodeRateLimitService, nekoAuthAccountService);
+                verificationCodeRateLimitService, nekoAuthAccountService, nicknameResolver);
         nekoAuthOAuthService = new NekoAuthOAuthService(
                 configManager, redisService, userAuthService, nekoAuthAccountService, objectMapper);
         userManagementService = new UserManagementService(
@@ -258,7 +260,8 @@ public class Main {
                         userAuthService.revokeAllTokensForUser(userId);
                     }
                 },
-                nekoAuthAccountService);
+                nekoAuthAccountService,
+                nicknameResolver);
 
         // 扫码登录会话（Redis 短 TTL，PC 轮询取 token）
         qrLoginService = new QrLoginService(redisService, objectMapper);
@@ -598,6 +601,10 @@ public class Main {
 
     public static NekoAuthAccountService getNekoAuthAccountService() {
         return nekoAuthAccountService;
+    }
+
+    public static NicknameResolver getNicknameResolver() {
+        return nicknameResolver;
     }
 
     public static NekoAuthOAuthService getNekoAuthOAuthService() {

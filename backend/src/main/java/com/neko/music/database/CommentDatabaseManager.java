@@ -28,12 +28,8 @@ public class CommentDatabaseManager {
 
     private static final String SQL_SELECT_BASE = """
             SELECT c.id, c.music_id, c.user_id, c.parent_id, c.reply_to_user_id,
-                   c.content, c.ip_region, c.client_ip, c.created_at,
-                   u.nickname AS nickname,
-                   ru.nickname AS reply_to_nickname
+                   c.content, c.ip_region, c.client_ip, c.created_at
             FROM music_comments c
-            JOIN users u ON u.id = c.user_id
-            LEFT JOIN users ru ON ru.id = c.reply_to_user_id
             """;
 
     private final DatabaseManager databaseManager;
@@ -42,7 +38,7 @@ public class CommentDatabaseManager {
         this.databaseManager = databaseManager;
     }
 
-    /** 一行评论（含作者昵称与被回复者昵称）。 */
+    /** 一行评论；昵称由调用方从 NekoAuth 实时解析。 */
     public static final class CommentRow {
         public int id;
         public int musicId;
@@ -53,8 +49,6 @@ public class CommentDatabaseManager {
         public String ipRegion;
         public String clientIp;
         public String createdAt;
-        public String nickname;
-        public String replyToNickname;
     }
 
     /** 顶层楼层数量（分页用）。 */
@@ -284,8 +278,6 @@ public class CommentDatabaseManager {
         row.ipRegion = rs.getString("ip_region");
         row.clientIp = rs.getString("client_ip");
         row.createdAt = DbTimeUtil.formatStoredWallClock(rs.getString("created_at"));
-        row.nickname = rs.getString("nickname");
-        row.replyToNickname = rs.getString("reply_to_nickname");
         return row;
     }
 }

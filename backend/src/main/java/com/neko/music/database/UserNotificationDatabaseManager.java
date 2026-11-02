@@ -33,7 +33,7 @@ public class UserNotificationDatabaseManager {
         this.databaseManager = databaseManager;
     }
 
-    /** 一行站内消息（含触发者昵称）。 */
+    /** 一行站内消息；触发者昵称由调用方从 NekoAuth 实时解析。 */
     public static final class NotificationRow {
         public int id;
         public String type;
@@ -43,7 +43,6 @@ public class UserNotificationDatabaseManager {
         public Integer actorUserId;
         public boolean read;
         public String createdAt;
-        public String actorNickname;
     }
 
     /** 查询结果：本次返回的行 + 是否还有更早的记录。 */
@@ -94,10 +93,8 @@ public class UserNotificationDatabaseManager {
      */
     public Page list(int userId, Integer sinceId, Integer beforeId, int limit) {
         StringBuilder sql = new StringBuilder("""
-                SELECT n.id, n.type, n.title, n.body, n.link, n.actor_user_id, n.is_read, n.created_at,
-                       u.nickname AS actor_nickname
+                SELECT n.id, n.type, n.title, n.body, n.link, n.actor_user_id, n.is_read, n.created_at
                 FROM user_notifications n
-                LEFT JOIN users u ON u.id = n.actor_user_id
                 WHERE n.user_id = ?
                 """);
         List<Object> params = new ArrayList<>();
@@ -192,7 +189,6 @@ public class UserNotificationDatabaseManager {
         row.actorUserId = rs.wasNull() ? null : actorId;
         row.read = rs.getInt("is_read") != 0;
         row.createdAt = DbTimeUtil.formatStoredWallClock(rs.getString("created_at"));
-        row.actorNickname = rs.getString("actor_nickname");
         return row;
     }
 

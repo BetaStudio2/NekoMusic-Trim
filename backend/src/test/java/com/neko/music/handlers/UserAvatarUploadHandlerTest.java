@@ -196,16 +196,11 @@ class UserAvatarUploadHandlerTest {
         }
 
         @Override
-        public void createUser(String nickname, String email) {
+        public void createUser(String email) {
         }
 
         @Override
         public boolean updateUserVip(int id, Timestamp vipExpiresAt) {
-            return id == 7;
-        }
-
-        @Override
-        public boolean updateUserNickname(int id, String nickname) {
             return id == 7;
         }
 

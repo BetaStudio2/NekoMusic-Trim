@@ -2,6 +2,7 @@ package com.neko.music.handlers;
 
 import com.neko.music.model.ErrorResponse;
 import com.neko.music.Main;
+import com.neko.music.service.NicknameResolver;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,9 +11,6 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 import com.neko.music.i18n.ApiMessages;
@@ -56,28 +54,13 @@ public class UserSearchHandler extends HttpServlet {
     
     private List<User> searchUsers(String query) {
         List<User> results = new ArrayList<>();
-        
-        try (Connection conn = Main.getDatabaseManager().getConnection()) {
-            String sql = "SELECT id, nickname, email, created_at FROM users WHERE nickname LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT 20";
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                String likeQuery = "%" + query + "%";
-                stmt.setString(1, likeQuery);
-                stmt.setString(2, likeQuery);
-                
-                ResultSet rs = stmt.executeQuery();
-                
-                while (rs.next()) {
-                    results.add(new User(
-                            rs.getInt("id"),
-                            rs.getString("nickname"),
-                            rs.getString("email"),
-                            rs.getTimestamp("created_at").toString()));
-                }
+        try {
+            for (NicknameResolver.SearchUser user : Main.getNicknameResolver().search(query)) {
+                results.add(new User(user.id(), user.nickname(), user.email(), user.createdAt()));
             }
         } catch (Exception e) {
             logger.error("搜索用户时出错", e);
         }
-        
         return results;
     }
     

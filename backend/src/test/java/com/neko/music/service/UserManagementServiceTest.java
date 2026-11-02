@@ -184,7 +184,7 @@ class UserManagementServiceTest {
 
         String saved = service.changeUserNickname(7, "  新昵称  ");
         assertEquals("新昵称", saved);
-        assertEquals("新昵称", store.nickname);
+        assertEquals("listener", store.nickname, "昵称不应再写入本地数据库");
         assertEquals(List.of("listener@example.com:新昵称"), authBridge.nicknameChanges);
 
         UserManagementException invalid = assertThrows(UserManagementException.class,
@@ -411,8 +411,8 @@ class UserManagementServiceTest {
         }
 
         @Override
-        public void createUser(String nickname, String email) {
-            users.add(new UserAccount(20 + users.size(), nickname, email, "2026-01-01", false, null));
+        public void createUser(String email) {
+            users.add(new UserAccount(20 + users.size(), null, email, "2026-01-01", false, null));
         }
 
         @Override
@@ -421,15 +421,6 @@ class UserManagementServiceTest {
                 return false;
             }
             vip = vipExpiresAt;
-            return true;
-        }
-
-        @Override
-        public boolean updateUserNickname(int id, String nickname) {
-            if (id != 7) {
-                return false;
-            }
-            this.nickname = nickname;
             return true;
         }
 

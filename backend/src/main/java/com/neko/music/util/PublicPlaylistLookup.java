@@ -43,8 +43,7 @@ public final class PublicPlaylistLookup {
 
     private static PublicPlaylist loadPlaylist(Connection conn, int playlistId) throws Exception {
         String sql = "SELECT p.id, p.user_id, p.name, p.description, p.music_count, "
-                + "p.created_at, p.updated_at, u.nickname "
-                + "FROM playlists p LEFT JOIN users u ON u.id = p.user_id WHERE p.id = ?";
+                + "p.created_at, p.updated_at FROM playlists p WHERE p.id = ?";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, playlistId);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -59,7 +58,8 @@ public final class PublicPlaylistLookup {
                 p.musicCount = rs.getInt("music_count");
                 p.createdAt = iso(rs.getTimestamp("created_at"));
                 p.updatedAt = iso(rs.getTimestamp("updated_at"));
-                p.creatorName = rs.getString("nickname");
+                p.creatorName = Main.getNicknameResolver()
+                        .resolveByLocalUserId(p.userId, "未知用户");
                 return p;
             }
         }

@@ -10,5 +10,10 @@ public record UserProfile(
         String nickname,
         String email,
         String createdAt,
-        Timestamp vipExpiresAt) {
+        Timestamp vipExpiresAt,
+        Long authUserId) {
+
+    public UserProfile(int id, String nickname, String email, String createdAt, Timestamp vipExpiresAt) {
+        this(id, nickname, email, createdAt, vipExpiresAt, null);
+    }
 }

@@ -9,5 +9,11 @@ public record UserAccount(
         String email,
         String registerTime,
         boolean vip,
-        String vipExpiresAt) {
+        String vipExpiresAt,
+        Long authUserId) {
+
+    public UserAccount(int id, String nickname, String email, String registerTime, boolean vip,
+                       String vipExpiresAt) {
+        this(id, nickname, email, registerTime, vip, vipExpiresAt, null);
+    }
 }

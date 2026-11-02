@@ -139,7 +139,7 @@ public final class JdbcUserAccountStore implements UserAccountStore {
     @Override
     public List<UserAccount> listUsers() throws SQLException {
         String sql = """
-                SELECT id, nickname, email, created_at, vip_expires_at
+                SELECT id, auth_user_id, email, created_at, vip_expires_at
                 FROM users ORDER BY created_at DESC, id DESC
                 """;
         List<UserAccount> users = new ArrayList<>();
@@ -151,11 +151,12 @@ public final class JdbcUserAccountStore implements UserAccountStore {
                 boolean hasVip = !rs.wasNull();
                 users.add(new UserAccount(
                         rs.getInt("id"),
-                        rs.getString("nickname"),
+                        null,
                         rs.getString("email"),
                         rs.getTimestamp("created_at").toString(),
                         hasVip && VipUtil.isVipActiveNow(vip),
-                        hasVip ? vip.toInstant().toString() : null));
+                        hasVip ? vip.toInstant().toString() : null,
+                        nullableLong(rs, "auth_user_id")));
             }
         }
         return users;
@@ -164,7 +165,7 @@ public final class JdbcUserAccountStore implements UserAccountStore {
     @Override
     public Optional<UserAccount> findUser(int id) throws SQLException {
         String sql = """
-                SELECT id, nickname, email, created_at, vip_expires_at FROM users WHERE id = ?
+                SELECT id, auth_user_id, email, created_at, vip_expires_at FROM users WHERE id = ?
                 """;
         try (Connection conn = databaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -177,11 +178,12 @@ public final class JdbcUserAccountStore implements UserAccountStore {
                 boolean hasVip = !rs.wasNull();
                 return Optional.of(new UserAccount(
                         rs.getInt("id"),
-                        rs.getString("nickname"),
+                        null,
                         rs.getString("email"),
                         rs.getTimestamp("created_at").toString(),
                         hasVip && VipUtil.isVipActiveNow(vip),
-                        hasVip ? vip.toInstant().toString() : null));
+                        hasVip ? vip.toInstant().toString() : null,
+                        nullableLong(rs, "auth_user_id")));
             }
         }
     }
@@ -189,7 +191,7 @@ public final class JdbcUserAccountStore implements UserAccountStore {
     @Override
     public Optional<UserProfile> findUserProfile(int id) throws SQLException {
         String sql = """
-                SELECT id, nickname, email, created_at, vip_expires_at FROM users WHERE id = ?
+                SELECT id, auth_user_id, email, created_at, vip_expires_at FROM users WHERE id = ?
                 """;
         try (Connection conn = databaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -202,10 +204,11 @@ public final class JdbcUserAccountStore implements UserAccountStore {
                 boolean hasVip = !rs.wasNull();
                 return Optional.of(new UserProfile(
                         rs.getInt("id"),
-                        rs.getString("nickname"),
+                        null,
                         rs.getString("email"),
                         DbTimeUtil.formatStoredWallClock(rs.getString("created_at")),
-                        hasVip ? vip : null));
+                        hasVip ? vip : null,
+                        nullableLong(rs, "auth_user_id")));
             }
         }
     }
@@ -248,15 +251,14 @@ public final class JdbcUserAccountStore implements UserAccountStore {
     }
 
     @Override
-    public void createUser(String nickname, String email) throws SQLException {
+    public void createUser(String email) throws SQLException {
         String sql = """
-                INSERT INTO users (nickname, email, created_at)
-                VALUES (?, ?, %s)
+                INSERT INTO users (email, created_at)
+                VALUES (?, %s)
                 """.formatted(DbTimeUtil.SQL_NOW_SHANGHAI);
         try (Connection conn = databaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, nickname);
-            stmt.setString(2, email);
+            stmt.setString(1, email);
             stmt.executeUpdate();
         }
     }
@@ -271,16 +273,6 @@ public final class JdbcUserAccountStore implements UserAccountStore {
             } else {
                 stmt.setTimestamp(1, vipExpiresAt);
             }
-            stmt.setInt(2, id);
-            return stmt.executeUpdate() > 0;
-        }
-    }
-
-    @Override
-    public boolean updateUserNickname(int id, String nickname) throws SQLException {
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("UPDATE users SET nickname = ? WHERE id = ?")) {
-            stmt.setString(1, nickname);
             stmt.setInt(2, id);
             return stmt.executeUpdate() > 0;
         }
@@ -405,5 +397,10 @@ public final class JdbcUserAccountStore implements UserAccountStore {
             }
         }
         return count;
+    }
+
+    private static Long nullableLong(ResultSet rs, String column) throws SQLException {
+        long value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
     }
 }

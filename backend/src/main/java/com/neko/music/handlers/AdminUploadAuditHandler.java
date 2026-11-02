@@ -136,10 +136,8 @@ public class AdminUploadAuditHandler extends ApiServlet {
         try {
             String sql = """
                 SELECT u.id, u.user_id, u.title, u.artist, u.album, u.language, u.tags, u.duration,
-                       u.music_file_path, u.cover_file_path, u.lyrics_file_path, u.status, u.created_at,
-                       usr.nickname AS user_nickname
+                       u.music_file_path, u.cover_file_path, u.lyrics_file_path, u.status, u.created_at
                 FROM user_uploads u
-                LEFT JOIN users usr ON usr.id = u.user_id
                 WHERE u.status = 'pending'
                 ORDER BY u.created_at DESC
                 """;
@@ -164,14 +162,22 @@ public class AdminUploadAuditHandler extends ApiServlet {
                     upload.put("coverFilePath", rs.getString("cover_file_path"));
                     upload.put("lyricsFilePath", rs.getString("lyrics_file_path"));
                     upload.put("status", rs.getString("status"));
-                    upload.put("userNickname", rs.getString("user_nickname"));
-                    
                     // 将 Timestamp 转换为字符串
                     java.sql.Timestamp createdAt = rs.getTimestamp("created_at");
                     upload.put("createdAt", createdAt != null ? createdAt.toString() : null);
                     
                     pendingUploads.add(upload);
                 }
+            }
+
+            java.util.Map<Integer, String> nicknames = Main.getNicknameResolver().resolveByLocalUserIds(
+                    pendingUploads.stream()
+                            .map(upload -> (Integer) upload.get("userId"))
+                            .toList(),
+                    "未知用户");
+            for (Map<String, Object> upload : pendingUploads) {
+                int uploaderId = (Integer) upload.get("userId");
+                upload.put("userNickname", nicknames.getOrDefault(uploaderId, "未知用户"));
             }
             
             Map<String, Object> result = new HashMap<>();

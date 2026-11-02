@@ -22,6 +22,7 @@ public class UserAuthService {
     private final RedisTokenStore tokenStore;
     private final VerificationCodeRateLimitService verificationCodeRateLimitService;
     private final NekoAuthAccountService nekoAuthAccountService;
+    private final NicknameResolver nicknameResolver;
     private static final String INTROSPECTION_SCOPE_PREFIX = "nekoAuthIntrospection:";
 
     /**
@@ -54,6 +55,17 @@ public class UserAuthService {
                            RedisTokenStore tokenStore,
                            VerificationCodeRateLimitService verificationCodeRateLimitService,
                            NekoAuthAccountService nekoAuthAccountService) {
+        this(databaseManager, configManager, emailService, redisService, tokenStore,
+                verificationCodeRateLimitService, nekoAuthAccountService,
+                new NicknameResolver(databaseManager, nekoAuthAccountService));
+    }
+
+    public UserAuthService(DatabaseManager databaseManager, ConfigManager configManager,
+                           EmailService emailService, RedisService redisService,
+                           RedisTokenStore tokenStore,
+                           VerificationCodeRateLimitService verificationCodeRateLimitService,
+                           NekoAuthAccountService nekoAuthAccountService,
+                           NicknameResolver nicknameResolver) {
         this.databaseManager = databaseManager;
         this.configManager = configManager;
         this.emailService = emailService;
@@ -61,6 +73,9 @@ public class UserAuthService {
         this.tokenStore = tokenStore;
         this.verificationCodeRateLimitService = verificationCodeRateLimitService;
         this.nekoAuthAccountService = nekoAuthAccountService;
+        this.nicknameResolver = nicknameResolver == null
+                ? new NicknameResolver(databaseManager, nekoAuthAccountService)
+                : nicknameResolver;
     }
 
     /**
@@ -88,7 +103,7 @@ public class UserAuthService {
 
     /**
      * 通过 NekoAuth 注册账号，再在 NekoMusic 创建或关联本地资料。
-     * 昵称由 NekoAuth 保存，本地资料只保留用于 JOIN 与展示的同步缓存。
+     * 昵称由 NekoAuth 保存，本地资料不保存昵称。
      */
     public boolean registerUserWithCode(String nickname, String password, String email,
                                         String verificationCode) {
@@ -102,7 +117,7 @@ public class UserAuthService {
     /**
      * 按 NekoAuth 的稳定用户 ID 查找本地资料；首次见到该账号时自动创建本地资料。
      * 同时兼容旧数据：本地已有同邮箱账号但尚未绑定 auth_user_id 时会自动补绑定。
-     * 已存在本地资料时以 NekoAuth 昵称为准，仅在值变化时更新本地缓存。
+     * 昵称不落本地库，返回结果直接使用本次 Auth 提供的昵称。
      */
     public User findOrLinkNekoAuthUser(long authUserId, String email, String authNickname) {
         if (authUserId <= 0) {
@@ -113,16 +128,16 @@ public class UserAuthService {
             throw new IllegalStateException("NekoAuth 未返回邮箱");
         }
 
-        User byAuthId = findUserByAuthId(authUserId);
+        User byAuthId = findUserByAuthId(authUserId, authNickname);
         if (byAuthId != null) {
             if (!normalizedEmail.equalsIgnoreCase(byAuthId.email())) {
                 updateLocalAccountBinding(byAuthId.id(), authUserId, normalizedEmail);
                 byAuthId = findUserById(byAuthId.id()).orElse(byAuthId);
             }
-            return syncLocalNickname(byAuthId, authNickname);
+            return byAuthId;
         }
 
-        User byEmail = findUserByEmail(normalizedEmail);
+        User byEmail = findUserByEmail(normalizedEmail, authNickname);
         if (byEmail != null) {
             Long boundAuthUserId = findAuthUserIdByLocalId(byEmail.id());
             if (boundAuthUserId != null && boundAuthUserId != authUserId) {
@@ -131,36 +146,34 @@ public class UserAuthService {
             updateLocalAccountBinding(byEmail.id(), authUserId, normalizedEmail);
             logger.info("已关联本地用户资料: localUserId={} authUserId={}", byEmail.id(), authUserId);
             User linked = findUserById(byEmail.id()).orElse(byEmail);
-            return syncLocalNickname(linked, authNickname);
+            return withNickname(linked, authNickname);
         }
 
-        String nickname = safeLocalNickname(authNickname, normalizedEmail);
-        String sql = "INSERT INTO users (nickname, email, auth_user_id, created_at) VALUES (?, ?, ?, "
+        String sql = "INSERT INTO users (email, auth_user_id, created_at) VALUES (?, ?, "
                 + DbTimeUtil.SQL_NOW_SHANGHAI + ")";
         try (Connection conn = databaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            stmt.setString(1, nickname);
-            stmt.setString(2, normalizedEmail);
-            stmt.setLong(3, authUserId);
+            stmt.setString(1, normalizedEmail);
+            stmt.setLong(2, authUserId);
             stmt.executeUpdate();
             try (ResultSet keys = stmt.getGeneratedKeys()) {
                 if (keys.next()) {
                     int localId = keys.getInt(1);
-                    return findUserById(localId).orElseThrow(
-                            () -> new IllegalStateException("创建本地用户资料失败"));
+                    return withNickname(findUserById(localId).orElseThrow(
+                            () -> new IllegalStateException("创建本地用户资料失败")), authNickname);
                 }
             }
             throw new IllegalStateException("创建本地用户资料失败");
         } catch (SQLException exception) {
-            User raced = findUserByAuthId(authUserId);
+            User raced = findUserByAuthId(authUserId, authNickname);
             if (raced != null) {
-                return syncLocalNickname(raced, authNickname);
+                return raced;
             }
-            User racedByEmail = findUserByEmail(normalizedEmail);
+            User racedByEmail = findUserByEmail(normalizedEmail, authNickname);
             if (racedByEmail != null) {
                 updateLocalAccountBinding(racedByEmail.id(), authUserId, normalizedEmail);
                 User linked = findUserById(racedByEmail.id()).orElse(racedByEmail);
-                return syncLocalNickname(linked, authNickname);
+                return withNickname(linked, authNickname);
             }
             logger.error("创建本地用户资料失败: authUserId={} email={} error={}",
                     authUserId, normalizedEmail, exception.getMessage(), exception);
@@ -172,13 +185,14 @@ public class UserAuthService {
         return nekoAuthAccountService != null;
     }
 
-    private User findUserByAuthId(long authUserId) {
-        String sql = "SELECT id, nickname, email, created_at, vip_expires_at FROM users WHERE auth_user_id = ?";
+    private User findUserByAuthId(long authUserId, String nicknameOverride) {
+        String sql = "SELECT id, email, created_at, vip_expires_at, auth_user_id "
+                + "FROM users WHERE auth_user_id = ?";
         try (Connection conn = databaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setLong(1, authUserId);
             try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next() ? mapUser(rs) : null;
+                return rs.next() ? mapUser(rs, nicknameOverride) : null;
             }
         } catch (SQLException e) {
             logger.error("按 NekoAuth 用户 ID 查询本地资料失败: authUserId={} error={}",
@@ -187,13 +201,14 @@ public class UserAuthService {
         }
     }
 
-    private User findUserByEmail(String email) {
-        String sql = "SELECT id, nickname, email, created_at, vip_expires_at FROM users WHERE email = ? LIMIT 1";
+    private User findUserByEmail(String email, String nicknameOverride) {
+        String sql = "SELECT id, email, created_at, vip_expires_at, auth_user_id "
+                + "FROM users WHERE email = ? LIMIT 1";
         try (Connection conn = databaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, email);
             try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next() ? mapUser(rs) : null;
+                return rs.next() ? mapUser(rs, nicknameOverride) : null;
             }
         } catch (SQLException e) {
             logger.error("按邮箱查询本地资料失败: email={} error={}", email, e.getMessage(), e);
@@ -234,49 +249,21 @@ public class UserAuthService {
         }
     }
 
-    private User syncLocalNickname(User user, String authNickname) {
+    private static User withNickname(User user, String authNickname) {
         String nickname = authNickname == null ? "" : authNickname.trim();
         if (nickname.isEmpty() || nickname.equals(user.nickname())) {
             return user;
         }
-        String sql = "UPDATE users SET nickname = ? WHERE id = ?";
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, nickname);
-            stmt.setInt(2, user.id());
-            if (stmt.executeUpdate() == 0) {
-                throw new IllegalStateException("更新本地昵称缓存失败");
-            }
-            logger.info("已同步 NekoAuth 昵称到本地资料: localUserId={}", user.id());
-            return findUserById(user.id()).orElse(user);
-        } catch (SQLException exception) {
-            logger.error("同步 NekoAuth 昵称失败: localUserId={} error={}",
-                    user.id(), exception.getMessage(), exception);
-            throw new IllegalStateException("同步 NekoAuth 昵称失败", exception);
-        }
-    }
-
-    private static String safeLocalNickname(String authNickname, String email) {
-        String candidate = authNickname == null ? "" : authNickname.trim();
-        if (candidate.isEmpty()) {
-            int separator = email.indexOf('@');
-            candidate = separator > 0 ? email.substring(0, separator) : email;
-        }
-        candidate = candidate.trim();
-        if (candidate.isEmpty()) {
-            candidate = "听众";
-        }
-        if (candidate.length() > 32) {
-            candidate = candidate.substring(0, 32);
-        }
-        return candidate;
+        return new User(user.id(), nickname, user.password(), user.email(), user.emailVerified(),
+                user.avatar(), user.createdAt(), user.vipExpiresAt());
     }
 
     /**
      * 按用户 ID 查询用户信息（不含密码字段），用于扫码登录等需要回传用户资料的场景。
      */
     public Optional<User> findUserById(int userId) {
-        String sql = "SELECT id, nickname, email, created_at, vip_expires_at FROM users WHERE id = ?";
+        String sql = "SELECT id, email, created_at, vip_expires_at, auth_user_id "
+                + "FROM users WHERE id = ?";
 
         try (Connection conn = databaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -297,16 +284,26 @@ public class UserAuthService {
     }
 
     /**
-     * 将 users 查询结果行映射为 {@link User}（读取 id/nickname/email/created_at/vip_expires_at）。
+     * 将 users 查询结果行映射为 {@link User}；昵称每次从 NekoAuth 解析，不读本地列。
      */
-    private static User mapUser(ResultSet rs) throws SQLException {
+    private User mapUser(ResultSet rs) throws SQLException {
+        return mapUser(rs, null);
+    }
+
+    private User mapUser(ResultSet rs, String nicknameOverride) throws SQLException {
         java.sql.Timestamp vipTs = rs.getTimestamp("vip_expires_at");
         boolean hasVip = !rs.wasNull();
+        String email = rs.getString("email");
+        long rawAuthUserId = rs.getLong("auth_user_id");
+        Long authUserId = rs.wasNull() ? null : rawAuthUserId;
+        String nickname = nicknameOverride == null || nicknameOverride.isBlank()
+                ? nicknameResolver.resolveByAuthId(authUserId, email)
+                : nicknameOverride.trim();
         return new User(
                 rs.getInt("id"),
-                rs.getString("nickname"),
+                nickname,
                 null,
-                rs.getString("email"),
+                email,
                 false,
                 null,
                 DbTimeUtil.formatStoredWallClock(rs.getString("created_at")),
@@ -687,8 +684,22 @@ public class UserAuthService {
         if (introspection.isEmpty()) {
             return Optional.empty();
         }
-        User user = findUserByAuthId(introspection.get().userId());
-        return user == null ? Optional.empty() : Optional.of(user.id());
+        return findLocalUserIdByAuthId(introspection.get().userId());
+    }
+
+    private Optional<Integer> findLocalUserIdByAuthId(long authUserId) {
+        String sql = "SELECT id FROM users WHERE auth_user_id = ?";
+        try (Connection conn = databaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setLong(1, authUserId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? Optional.of(rs.getInt("id")) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            logger.error("按 NekoAuth 用户 ID 查询本地资料失败: authUserId={} error={}",
+                    authUserId, e.getMessage(), e);
+            return Optional.empty();
+        }
     }
 
     /** 在 NekoAuth 吊销用户令牌。 */

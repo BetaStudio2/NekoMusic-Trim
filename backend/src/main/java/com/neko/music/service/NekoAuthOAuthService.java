@@ -29,7 +29,7 @@ import java.util.Map;
  * 客户端传入的跳转地址，避免开放重定向。</p>
  *
  * <p><b>昵称边界：</b>NekoAuth 是昵称唯一权威源。本服务读取 UserInfo 的
- * {@code sub}/{@code email} 匹配本地资料，并把 {@code name} 同步为 NekoMusic 的展示缓存。</p>
+ * {@code sub}/{@code email} 匹配本地资料；{@code name} 只用于本次响应，不写入本地数据库。</p>
  */
 public final class NekoAuthOAuthService {
 

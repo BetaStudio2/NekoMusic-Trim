@@ -91,7 +91,7 @@ public class UserRegisterHandler extends ApiServlet {
                 return;
             }
 
-            // 5. 验证码与账号创建都由 NekoAuth 校验；本地只保存昵称和业务资料
+            // 5. 验证码、昵称与账号创建都由 NekoAuth 处理；本地只保存业务资料
             boolean success = userAuthService.registerUserWithCode(
                     nickname, password, email, verificationCode);
             if (success) {

@@ -60,11 +60,9 @@ public interface UserAccountStore {
     default void bindUserAuthId(String email, long authUserId) throws SQLException {
     }
 
-    void createUser(String nickname, String email) throws SQLException;
+    void createUser(String email) throws SQLException;
 
     boolean updateUserVip(int id, Timestamp vipExpiresAt) throws SQLException;
-
-    boolean updateUserNickname(int id, String nickname) throws SQLException;
 
     AvatarUpdateResult updateUserAvatar(int id, String avatarPath) throws SQLException;
 

@@ -15,8 +15,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -75,12 +78,38 @@ public class NekoAuthAccountService {
         return postAccount("/admin-create", body, "创建账号", false);
     }
 
-    /** 昵称以 NekoAuth 为唯一权威源；本地只更新展示缓存。 */
+    /** 昵称以 NekoAuth 为唯一权威源；本地不保存昵称。 */
     public void updateNickname(String email, String nickname) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("email", email);
         body.put("nickname", nickname);
         postNoContent("/nickname", body, "修改昵称");
+    }
+
+    /** 按 NekoAuth 用户 ID 批量读取当前昵称；NekoAuth 是唯一权威源。 */
+    public Map<Long, String> lookupNicknames(Collection<Long> authUserIds) {
+        if (authUserIds == null || authUserIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = authUserIds.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        HttpResponse<String> response = post("/lookup", Map.of("authUserIds", ids), "查询昵称");
+        Map<Long, String> nicknames = new LinkedHashMap<>();
+        for (AccountSummary account : parseSummaries(response, "查询昵称")) {
+            nicknames.put(account.id(), account.nickname());
+        }
+        return nicknames;
+    }
+
+    /** 在 NekoAuth 中按昵称、用户名或邮箱搜索账号。 */
+    public List<AccountSummary> searchAccounts(String query) {
+        HttpResponse<String> response = post("/search", Map.of("query", query), "搜索账号");
+        return parseSummaries(response, "搜索账号");
     }
 
     public void sendPasswordResetCode(String email) {
@@ -212,6 +241,27 @@ public class NekoAuthAccountService {
                 expiresIn);
     }
 
+    private List<AccountSummary> parseSummaries(HttpResponse<String> response, String operation) {
+        JsonNode json = parseJson(response.body());
+        if (json == null || !json.isArray()) {
+            throw new AccountBridgeException(502, "NEKO_AUTH_BAD_RESPONSE",
+                    "NekoAuth 返回的账号摘要格式不正确", 0);
+        }
+        List<AccountSummary> accounts = new ArrayList<>();
+        for (JsonNode item : json) {
+            JsonNode id = item.get("id");
+            if (id == null || !id.canConvertToLong() || id.asLong() <= 0) {
+                continue;
+            }
+            accounts.add(new AccountSummary(
+                    id.asLong(),
+                    text(item, "email"),
+                    text(item, "username"),
+                    firstNonBlank(text(item, "nickname"), text(item, "username"))));
+        }
+        return accounts;
+    }
+
     private void postNoContent(String path, Map<String, Object> payload, String operation) {
         post(path, payload, operation);
     }
@@ -264,6 +314,15 @@ public class NekoAuthAccountService {
             JsonNode error = parseJson(response.body());
             String code = text(error, "code");
             String message = text(error, "message");
+            Map<String, String> fields = new LinkedHashMap<>();
+            JsonNode fieldErrors = error.get("fields");
+            if (fieldErrors != null && fieldErrors.isObject()) {
+                fieldErrors.fields().forEachRemaining(entry -> {
+                    if (entry.getValue().isTextual()) {
+                        fields.put(entry.getKey(), entry.getValue().asText());
+                    }
+                });
+            }
             if (code.isBlank()) {
                 code = "NEKO_AUTH_ERROR";
             }
@@ -279,7 +338,7 @@ public class NekoAuthAccountService {
                 logger.warn("NekoAuth 账号桥接失败: operation={} status={} code={}",
                         operation, response.statusCode(), code);
             }
-            throw new AccountBridgeException(response.statusCode(), code, message, retryAfter);
+            throw new AccountBridgeException(response.statusCode(), code, message, retryAfter, fields);
         }
         return response;
     }
@@ -374,6 +433,9 @@ public class NekoAuthAccountService {
     public record IssuedToken(String accessToken, String tokenType, long expiresIn) {
     }
 
+    public record AccountSummary(long id, String email, String username, String nickname) {
+    }
+
     public record Introspection(long userId, String email, String nickname, boolean emailVerified,
                                 String role, String scope) {
     }
@@ -382,12 +444,19 @@ public class NekoAuthAccountService {
         private final int status;
         private final String code;
         private final long retryAfterSeconds;
+        private final Map<String, String> fields;
 
         public AccountBridgeException(int status, String code, String message, long retryAfterSeconds) {
+            this(status, code, message, retryAfterSeconds, Map.of());
+        }
+
+        public AccountBridgeException(int status, String code, String message, long retryAfterSeconds,
+                                      Map<String, String> fields) {
             super(message);
             this.status = status;
             this.code = code;
             this.retryAfterSeconds = retryAfterSeconds;
+            this.fields = fields == null ? Map.of() : Map.copyOf(fields);
         }
 
         public int status() {
@@ -400,6 +469,10 @@ public class NekoAuthAccountService {
 
         public long retryAfterSeconds() {
             return retryAfterSeconds;
+        }
+
+        public String field(String name) {
+            return fields.get(name);
         }
 
         public boolean invalidCredentials() {

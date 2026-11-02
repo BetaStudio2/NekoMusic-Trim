@@ -52,7 +52,6 @@ public class DatabaseManager {
             String createUserTable = """
                 CREATE TABLE IF NOT EXISTS users (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    nickname VARCHAR(50) NOT NULL,
                     email VARCHAR(100) UNIQUE NOT NULL,
                     auth_user_id BIGINT NULL,
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -436,32 +435,7 @@ public class DatabaseManager {
             }
 
             migrateUsersCreatedAtToDatetime(conn);
-
-            // 为已存在的 users 表迁移约束（移除nickname唯一约束，添加email唯一约束）
-            try {
-                // 检查是否有nickname的唯一索引
-                String checkIndex = """
-                    SELECT COUNT(*) FROM information_schema.statistics
-                    WHERE table_schema = DATABASE()
-                    AND table_name = 'users'
-                    AND index_name != 'PRIMARY'
-                    AND column_name = 'nickname'
-                    AND non_unique = 0
-                    """;
-                try (PreparedStatement stmt = conn.prepareStatement(checkIndex);
-                     ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next() && rs.getInt(1) > 0) {
-                        // 删除nickname的唯一索引
-                        String dropIndex = "ALTER TABLE users DROP INDEX nickname";
-                        try (PreparedStatement dropStmt = conn.prepareStatement(dropIndex)) {
-                            dropStmt.execute();
-                            logger.info("已删除 users 表的 nickname 唯一索引");
-                        }
-                    }
-                }
-            } catch (SQLException e) {
-                logger.debug("删除 nickname 唯一索引失败（可能不存在）: {}", e.getMessage());
-            }
+            dropUsersNicknameColumn(conn);
 
             try {
                 // 检查email字段是否有唯一约束
@@ -704,6 +678,31 @@ public class DatabaseManager {
             }
         } catch (SQLException e) {
             logger.debug("users.created_at 迁移为 DATETIME 跳过或失败: {}", e.getMessage());
+        }
+    }
+
+    /** NekoAuth 是昵称唯一权威源；旧库中的 users.nickname 直接删除。 */
+    private void dropUsersNicknameColumn(Connection conn) {
+        try {
+            String checkColumn = """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                AND table_name = 'users'
+                AND column_name = 'nickname'
+                """;
+            try (PreparedStatement stmt = conn.prepareStatement(checkColumn);
+                 ResultSet rs = stmt.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) {
+                    try (PreparedStatement dropStmt = conn.prepareStatement(
+                            "ALTER TABLE users DROP COLUMN nickname")) {
+                        dropStmt.execute();
+                        logger.info("已删除 users 表的 nickname 字段（昵称改由 NekoAuth 实时提供）");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            logger.warn("删除 users.nickname 字段失败；代码已不再读写该列，请检查数据库迁移权限: {}",
+                    e.getMessage());
         }
     }
 

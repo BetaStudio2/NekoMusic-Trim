@@ -86,7 +86,8 @@ class UserManagementHandlersTest {
 
         assertEquals(200, capture.status);
         assertEquals(1, store.users.size());
-        assertEquals("listener", store.users.get(0).nickname());
+        assertEquals("listener@example.com", store.users.get(0).email());
+        assertEquals(null, store.users.get(0).nickname(), "本地资料不应保存昵称");
         assertTrue(capture.body().contains("\"success\":true"));
     }
 
@@ -254,17 +255,12 @@ class UserManagementHandlersTest {
         }
 
         @Override
-        public void createUser(String nickname, String email) {
-            users.add(new UserAccount(users.size() + 20, nickname, email, "2026-01-01", false, null));
+        public void createUser(String email) {
+            users.add(new UserAccount(users.size() + 20, null, email, "2026-01-01", false, null));
         }
 
         @Override
         public boolean updateUserVip(int id, Timestamp vipExpiresAt) {
-            return findUser(id).isPresent();
-        }
-
-        @Override
-        public boolean updateUserNickname(int id, String nickname) {
             return findUser(id).isPresent();
         }
 

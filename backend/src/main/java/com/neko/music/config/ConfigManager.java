@@ -989,7 +989,7 @@ public class ConfigManager {
         return oauthRedirectUri == null ? "" : oauthRedirectUri.trim();
     }
 
-    /** 空格分隔的 OAuth scope；空值时退回 openid profile email，确保能同步 NekoAuth 昵称。 */
+    /** 空格分隔的 OAuth scope；空值时退回 openid profile email，确保能读取 NekoAuth 昵称。 */
     public String getOAuthScopes() {
         String value = oauthScopes == null ? "" : oauthScopes.trim();
         return value.isEmpty() ? "openid profile email" : value;

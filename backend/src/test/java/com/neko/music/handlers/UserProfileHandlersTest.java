@@ -73,8 +73,9 @@ class UserProfileHandlersTest {
     @Test
     void nicknameChangeReturnsSavedNicknameAndDisablesCaching() throws Exception {
         FakeStore store = new FakeStore();
+        RecordingAuthBridge authBridge = new RecordingAuthBridge();
         UserNicknameChangeHandler handler = new UserNicknameChangeHandler(
-                new UserManagementService(store, new RecordingRevoker(), new RecordingAuthBridge()), request -> 7);
+                new UserManagementService(store, new RecordingRevoker(), authBridge), request -> 7);
         CapturingResponse capture = new CapturingResponse();
 
         handler.doPost(request("{\"nickname\":\"  喵喵  \"}"), responseProxy(capture));
@@ -82,7 +83,7 @@ class UserProfileHandlersTest {
         assertEquals(200, capture.status);
         assertEquals("private, no-store", capture.headers.get("Cache-Control"));
         assertTrue(capture.body().contains("\"nickname\":\"喵喵\""));
-        assertEquals("喵喵", store.nickname);
+        assertEquals("喵喵", authBridge.nickname);
     }
 
     @Test
@@ -96,6 +97,39 @@ class UserProfileHandlersTest {
 
         assertEquals(400, capture.status);
         assertTrue(capture.body().contains("昵称长度"));
+    }
+
+    @Test
+    void nicknameChangePropagatesAuthNicknameFieldError() throws Exception {
+        UserNicknameChangeHandler handler = new UserNicknameChangeHandler(
+                new UserManagementService(new FakeStore(), new RecordingRevoker(),
+                        new RejectingNicknameAuthBridge(
+                                new NekoAuthAccountService.AccountBridgeException(
+                                        400, "VALIDATION_ERROR", "提交的数据不符合要求", 0,
+                                        Map.of("nickname", "昵称不能包含控制字符")))),
+                request -> 7);
+        CapturingResponse capture = new CapturingResponse();
+
+        handler.doPost(request("{\"nickname\":\"合法昵称\"}"), responseProxy(capture));
+
+        assertEquals(400, capture.status);
+        assertTrue(capture.body().contains("昵称不能包含控制字符"));
+    }
+
+    @Test
+    void nicknameChangeExplainsImmutableAdminNickname() throws Exception {
+        UserNicknameChangeHandler handler = new UserNicknameChangeHandler(
+                new UserManagementService(new FakeStore(), new RecordingRevoker(),
+                        new RejectingNicknameAuthBridge(
+                                new NekoAuthAccountService.AccountBridgeException(
+                                        400, "ADMIN_NICKNAME_IMMUTABLE", "管理员昵称固定为用户名", 0))),
+                request -> 7);
+        CapturingResponse capture = new CapturingResponse();
+
+        handler.doPost(request("{\"nickname\":\"合法昵称\"}"), responseProxy(capture));
+
+        assertEquals(400, capture.status);
+        assertTrue(capture.body().contains("管理员昵称固定为用户名"));
     }
 
     @Test
@@ -238,7 +272,7 @@ class UserProfileHandlersTest {
         }
 
         @Override
-        public void createUser(String nickname, String email) {
+        public void createUser(String email) {
         }
 
         @Override
@@ -247,15 +281,6 @@ class UserProfileHandlersTest {
                 return false;
             }
             this.vipExpiresAt = vipExpiresAt;
-            return true;
-        }
-
-        @Override
-        public boolean updateUserNickname(int id, String nickname) {
-            if (id != 7) {
-                return false;
-            }
-            this.nickname = nickname;
             return true;
         }
 
@@ -305,6 +330,19 @@ class UserProfileHandlersTest {
         public void changePassword(String email, String currentPassword, String newPassword) {
             throw new NekoAuthAccountService.AccountBridgeException(
                     401, "INVALID_CREDENTIALS", "当前密码错误", 0);
+        }
+    }
+
+    private static final class RejectingNicknameAuthBridge extends RecordingAuthBridge {
+        private final NekoAuthAccountService.AccountBridgeException exception;
+
+        RejectingNicknameAuthBridge(NekoAuthAccountService.AccountBridgeException exception) {
+            this.exception = exception;
+        }
+
+        @Override
+        public void updateNickname(String email, String nickname) {
+            throw exception;
         }
     }
 

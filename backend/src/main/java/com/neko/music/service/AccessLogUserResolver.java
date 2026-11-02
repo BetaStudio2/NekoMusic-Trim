@@ -11,9 +11,9 @@ import java.util.function.LongSupplier;
 /**
  * 访问日志里的「已登录用户是谁」：用户 ID → 昵称，带进程内缓存。
  *
- * <p>请求侧已经用 Redis 解析出用户 ID（{@link UserAuthService#findUserIdByToken}），但昵称在主库
- * 的 {@code users} 表里——每个已登录请求都去查一次主库，等于把日志变成业务库的热点。因此这里做一层
- * 只读缓存：命中直接返回，未命中才查一次库，并在 TTL 内记住结果。</p>
+ * <p>请求侧已经解析出本地用户 ID（{@link UserAuthService#findUserIdByToken}），但昵称的权威源在
+ * NekoAuth。每个已登录请求都远程查询一次会放大 Auth 压力，因此这里做一层只读缓存：命中直接返回，
+ * 未命中才解析一次，并在 TTL 内记住结果。</p>
  *
  * <p>取舍与约束：</p>
  * <ul>
@@ -76,7 +76,7 @@ public final class AccessLogUserResolver {
         return nickname;
     }
 
-    /** 生产实现：查主库 {@code users}；主库未就绪或查询异常都按「不知道」处理。 */
+    /** 生产实现：按本地用户 ID 从 NekoAuth 解析；服务未就绪或查询异常都按「不知道」处理。 */
     private static String loadFromDatabase(int userId) {
         UserAuthService authService = Main.getUserAuthService();
         if (authService == null) {

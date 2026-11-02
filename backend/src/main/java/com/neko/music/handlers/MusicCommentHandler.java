@@ -88,14 +88,32 @@ public class MusicCommentHandler extends ApiServlet {
             repliesByRoot.computeIfAbsent(reply.parentId, key -> new ArrayList<>()).add(reply);
         }
 
+        List<Integer> userIds = new ArrayList<>();
+        for (CommentRow root : roots) {
+            userIds.add(root.userId);
+            if (root.replyToUserId != null) {
+                userIds.add(root.replyToUserId);
+            }
+        }
+        for (List<CommentRow> replies : repliesByRoot.values()) {
+            for (CommentRow reply : replies) {
+                userIds.add(reply.userId);
+                if (reply.replyToUserId != null) {
+                    userIds.add(reply.replyToUserId);
+                }
+            }
+        }
+        Map<Integer, String> nicknames = Main.getNicknameResolver()
+                .resolveByLocalUserIds(userIds, "听众");
+
         JsonArray comments = new JsonArray();
         for (CommentRow root : roots) {
-            JsonObject floor = toJson(root, viewerId, admin);
+            JsonObject floor = toJson(root, viewerId, admin, nicknames);
             List<CommentRow> replies = repliesByRoot.getOrDefault(root.id, List.of());
             floor.addProperty("replyCount", replies.size());
             JsonArray replyArr = new JsonArray();
             for (CommentRow reply : replies) {
-                replyArr.add(toJson(reply, viewerId, admin));
+                replyArr.add(toJson(reply, viewerId, admin, nicknames));
             }
             floor.add("replies", replyArr);
             comments.add(floor);
@@ -308,7 +326,8 @@ public class MusicCommentHandler extends ApiServlet {
     }
 
     /** 单条评论（含作者、被回复者、可否删除）→ JSON。 */
-    private static JsonObject toJson(CommentRow row, Integer viewerId, boolean admin) {
+    private static JsonObject toJson(CommentRow row, Integer viewerId, boolean admin,
+                                     Map<Integer, String> nicknames) {
         JsonObject json = new JsonObject();
         json.addProperty("id", row.id);
         json.addProperty("musicId", row.musicId);
@@ -319,13 +338,13 @@ public class MusicCommentHandler extends ApiServlet {
 
         JsonObject user = new JsonObject();
         user.addProperty("id", row.userId);
-        user.addProperty("nickname", row.nickname == null ? "" : row.nickname);
+        user.addProperty("nickname", nicknames.getOrDefault(row.userId, "听众"));
         json.add("user", user);
 
         if (row.replyToUserId != null) {
             JsonObject replyTo = new JsonObject();
             replyTo.addProperty("id", row.replyToUserId);
-            replyTo.addProperty("nickname", row.replyToNickname == null ? "" : row.replyToNickname);
+            replyTo.addProperty("nickname", nicknames.getOrDefault(row.replyToUserId, "听众"));
             json.add("replyToUser", replyTo);
         }
         return json;

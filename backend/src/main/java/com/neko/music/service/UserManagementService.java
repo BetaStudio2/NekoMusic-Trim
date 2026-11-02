@@ -24,6 +24,7 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -58,17 +59,25 @@ public final class UserManagementService {
     private final UserAccountStore store;
     private final SessionRevoker sessionRevoker;
     private final NekoAuthAccountService nekoAuthAccountService;
+    private final NicknameResolver nicknameResolver;
     private final Argon2 argon2;
 
     public UserManagementService(UserAccountStore store, SessionRevoker sessionRevoker) {
-        this(store, sessionRevoker, null);
+        this(store, sessionRevoker, null, null);
     }
 
     public UserManagementService(UserAccountStore store, SessionRevoker sessionRevoker,
                                  NekoAuthAccountService nekoAuthAccountService) {
+        this(store, sessionRevoker, nekoAuthAccountService, null);
+    }
+
+    public UserManagementService(UserAccountStore store, SessionRevoker sessionRevoker,
+                                 NekoAuthAccountService nekoAuthAccountService,
+                                 NicknameResolver nicknameResolver) {
         this.store = store;
         this.sessionRevoker = sessionRevoker;
         this.nekoAuthAccountService = nekoAuthAccountService;
+        this.nicknameResolver = nicknameResolver;
         this.argon2 = Argon2Factory.create();
     }
 
@@ -89,7 +98,15 @@ public final class UserManagementService {
     public List<UserAccount> listUsers(Admin actor) throws UserManagementException {
         requirePermission(actor, Permission.USER_VIEW);
         try {
-            return store.listUsers();
+            List<UserAccount> users = store.listUsers();
+            if (nicknameResolver == null || users.isEmpty()) {
+                return users;
+            }
+            Map<Integer, String> nicknames = nicknameResolver.resolveByLocalUserIds(
+                    users.stream().map(UserAccount::id).toList(), "");
+            return users.stream()
+                    .map(user -> withNickname(user, nicknames.get(user.id())))
+                    .toList();
         } catch (SQLException e) {
             throw databaseFailure("admin.user.list_failed", e);
         }
@@ -97,8 +114,13 @@ public final class UserManagementService {
 
     public UserProfile getUserProfile(int userId) throws UserManagementException {
         try {
-            return store.findUserProfile(userId)
+            UserProfile profile = store.findUserProfile(userId)
                     .orElseThrow(() -> UserManagementException.notFound("user.not_exists"));
+            if (nicknameResolver == null) {
+                return profile;
+            }
+            String nickname = nicknameResolver.resolveByLocalUserId(userId, profile.nickname());
+            return withNickname(profile, nickname);
         } catch (SQLException e) {
             throw databaseFailure("common.internal_error", e);
         }
@@ -158,18 +180,12 @@ public final class UserManagementService {
             UserProfile profile = store.findUserProfile(userId)
                     .orElseThrow(() -> UserManagementException.notFound("user.not_exists"));
             nekoAuthAccountService.updateNickname(profile.email(), normalizedNickname);
-            if (!store.updateUserNickname(userId, normalizedNickname)) {
-                throw UserManagementException.internal("user.nickname.change_failed", null);
-            }
-            logger.info("用户 {} 已通过 NekoAuth 修改昵称并同步本地缓存: {}", userId, normalizedNickname);
+            logger.info("用户 {} 已通过 NekoAuth 修改昵称: {}", userId, normalizedNickname);
             return normalizedNickname;
         } catch (SQLException e) {
             throw databaseFailure("user.nickname.change_failed", e);
         } catch (NekoAuthAccountService.AccountBridgeException e) {
-            if (e.status() == 400) {
-                throw UserManagementException.validation("昵称格式不正确喵");
-            }
-            throw bridgeFailure(e, "user.nickname.change_failed");
+            throw nicknameBridgeFailure(e);
         }
     }
 
@@ -266,7 +282,7 @@ public final class UserManagementService {
             if (store.userEmailExists(normalizedEmail)) {
                 store.bindUserAuthId(normalizedEmail, account.id());
             } else {
-                store.createUser(authNickname, normalizedEmail);
+                store.createUser(normalizedEmail);
                 store.bindUserAuthId(normalizedEmail, account.id());
             }
             logger.info("管理员 {} 通过 NekoAuth 创建普通用户 {} authUserId={}",
@@ -475,10 +491,46 @@ public final class UserManagementService {
         };
     }
 
+    private static UserManagementException nicknameBridgeFailure(
+            NekoAuthAccountService.AccountBridgeException error) {
+        if (error.status() != 400) {
+            return bridgeFailure(error, "user.nickname.change_failed");
+        }
+        if ("ADMIN_NICKNAME_IMMUTABLE".equals(error.code())) {
+            return UserManagementException.validation("管理员昵称固定为用户名喵");
+        }
+        String nicknameError = error.field("nickname");
+        if (nicknameError != null && !nicknameError.isBlank()) {
+            return UserManagementException.validation(nicknameError);
+        }
+        if (error.field("email") != null) {
+            logger.warn("NekoAuth 拒绝昵称修改：本地邮箱快照未通过校验");
+            return UserManagementException.validation("账号邮箱信息异常，请联系管理员喵");
+        }
+        logger.warn("NekoAuth 拒绝昵称修改: code={} message={}", error.code(), error.getMessage());
+        return UserManagementException.validation("NekoAuth 未接受昵称修改请求喵");
+    }
+
     private static boolean isDuplicateKey(SQLException e) {
         return e instanceof SQLIntegrityConstraintViolationException
                 || "23000".equals(e.getSQLState())
                 || e.getErrorCode() == 1062;
+    }
+
+    private static UserAccount withNickname(UserAccount user, String nickname) {
+        if (nickname == null || nickname.isBlank() || nickname.equals(user.nickname())) {
+            return user;
+        }
+        return new UserAccount(user.id(), nickname, user.email(), user.registerTime(), user.vip(),
+                user.vipExpiresAt(), user.authUserId());
+    }
+
+    private static UserProfile withNickname(UserProfile profile, String nickname) {
+        if (nickname == null || nickname.isBlank() || nickname.equals(profile.nickname())) {
+            return profile;
+        }
+        return new UserProfile(profile.id(), nickname, profile.email(), profile.createdAt(),
+                profile.vipExpiresAt(), profile.authUserId());
     }
 
     private static String normalizeEmail(String email) {
