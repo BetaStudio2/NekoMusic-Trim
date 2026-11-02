@@ -117,22 +117,6 @@ class UserProfileHandlersTest {
     }
 
     @Test
-    void nicknameChangeExplainsImmutableAdminNickname() throws Exception {
-        UserNicknameChangeHandler handler = new UserNicknameChangeHandler(
-                new UserManagementService(new FakeStore(), new RecordingRevoker(),
-                        new RejectingNicknameAuthBridge(
-                                new NekoAuthAccountService.AccountBridgeException(
-                                        400, "ADMIN_NICKNAME_IMMUTABLE", "管理员昵称固定为用户名", 0))),
-                request -> 7);
-        CapturingResponse capture = new CapturingResponse();
-
-        handler.doPost(request("{\"nickname\":\"合法昵称\"}"), responseProxy(capture));
-
-        assertEquals(400, capture.status);
-        assertTrue(capture.body().contains("管理员昵称固定为用户名"));
-    }
-
-    @Test
     void userInfoReturnsProfileWithPrivateNoStoreCache() throws Exception {
         FakeStore store = new FakeStore();
         store.vipExpiresAt = Timestamp.from(Instant.parse("2027-01-01T00:00:00Z"));

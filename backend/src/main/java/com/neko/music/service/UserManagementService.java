@@ -496,9 +496,6 @@ public final class UserManagementService {
         if (error.status() != 400) {
             return bridgeFailure(error, "user.nickname.change_failed");
         }
-        if ("ADMIN_NICKNAME_IMMUTABLE".equals(error.code())) {
-            return UserManagementException.validation("管理员昵称固定为用户名喵");
-        }
         String nicknameError = error.field("nickname");
         if (nicknameError != null && !nicknameError.isBlank()) {
             return UserManagementException.validation(nicknameError);
