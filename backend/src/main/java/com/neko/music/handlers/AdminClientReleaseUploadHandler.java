@@ -80,10 +80,7 @@ public class AdminClientReleaseUploadHandler extends HttpServlet {
         String expectedFileName = ClientReleaseStorage.expectedFileNameForPlatform(platform, release.get());
         if (expectedFileName == null) {
             response.setStatus(HttpStatus.BAD_REQUEST_400);
-            String messageKey = "watch".equalsIgnoreCase(platform.trim()) && release.get().watchVer() == null
-                    ? "admin.release.upload.versions_required"
-                    : "admin.release.upload.platform_invalid";
-            writeJson(response, false, ApiMessages.translate(messageKey));
+            writeJson(response, false, ApiMessages.translate("admin.release.upload.platform_invalid"));
             return;
         }
 
@@ -189,7 +186,7 @@ public class AdminClientReleaseUploadHandler extends HttpServlet {
         }
     }
 
-    /** 手机 APK 校验包名、版本与签名；手表包为独立构建，不做 APK 校验。 */
+    /** Android APK 校验包名、版本与签名。 */
     static void validateUploadedArtifact(String platform, Path file, AppReleaseService.AppRelease release)
             throws IOException {
         if ("android".equalsIgnoreCase(platform.trim())) {

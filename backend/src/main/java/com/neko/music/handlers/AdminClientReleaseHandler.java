@@ -43,8 +43,7 @@ public class AdminClientReleaseHandler extends ApiServlet {
         } else {
             data.putNull("androidVer");
             data.putNull("pcVer");
-            data.putNull("watchVer");
-            data.set("packages", buildEmptyPackagesArray());
+            data.set("packages", Main.getObjectMapper().createArrayNode());
         }
 
         sendResponse(response, true, "admin.lyrics.query_ok", data);
@@ -67,8 +66,7 @@ public class AdminClientReleaseHandler extends ApiServlet {
         }
 
         if (req.androidVer() == null || req.androidVer().isBlank()
-                || req.pcVer() == null || req.pcVer().isBlank()
-                || req.watchVer() == null || req.watchVer().isBlank()) {
+                || req.pcVer() == null || req.pcVer().isBlank()) {
             response.setStatus(HttpStatus.BAD_REQUEST_400);
             sendErrorResponse(response, "admin.release.versions_required");
             return;
@@ -76,15 +74,14 @@ public class AdminClientReleaseHandler extends ApiServlet {
 
         String androidVer = req.androidVer().trim();
         String pcVer = req.pcVer().trim();
-        String watchVer = req.watchVer().trim();
-        if (!isValidVersionToken(androidVer) || !isValidVersionToken(pcVer) || !isValidVersionToken(watchVer)) {
+        if (!isValidVersionToken(androidVer) || !isValidVersionToken(pcVer)) {
             response.setStatus(HttpStatus.BAD_REQUEST_400);
             sendErrorResponse(response, "admin.release.invalid_version");
             return;
         }
 
         Optional<AppReleaseService.AppReleaseState> state =
-                Main.getAppReleaseService().scheduleReleaseUpdate(androidVer, pcVer, watchVer);
+                Main.getAppReleaseService().scheduleReleaseUpdate(androidVer, pcVer);
         if (state.isEmpty()) {
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR_500);
             sendErrorResponse(response, "admin.release.save_failed");
@@ -108,22 +105,18 @@ public class AdminClientReleaseHandler extends ApiServlet {
         AppReleaseService.AppRelease pub = state.published();
         data.put("androidVer", pub.androidVer());
         data.put("pcVer", pub.pcVer());
-        data.put("watchVer", pub.watchVer());
         data.put("publishedAndroidVer", pub.androidVer());
         data.put("publishedPcVer", pub.pcVer());
-        data.put("publishedWatchVer", pub.watchVer());
 
         if (state.hasPending() && state.pending() != null) {
             data.put("pendingAndroidVer", state.pending().androidVer());
             data.put("pendingPcVer", state.pending().pcVer());
-            data.put("pendingWatchVer", state.pending().watchVer());
             data.put("pendingEffectiveAt", formatEffectiveAt(state.pendingEffectiveAt()));
             data.put("versionJsonDelayMinutes", AppReleaseService.VERSION_JSON_DELAY_MINUTES);
             data.set("packages", buildPackagesArray(siteBase, state.pending()));
         } else {
             data.putNull("pendingAndroidVer");
             data.putNull("pendingPcVer");
-            data.putNull("pendingWatchVer");
             data.putNull("pendingEffectiveAt");
             data.set("packages", buildPackagesArray(siteBase, pub));
         }
@@ -139,17 +132,9 @@ public class AdminClientReleaseHandler extends ApiServlet {
     private ArrayNode buildPackagesArray(String siteBase, AppReleaseService.AppRelease r) {
         ArrayNode arr = Main.getObjectMapper().createArrayNode();
         addPackageEntry(arr, siteBase, "android", ClientReleaseStorage.androidApkFileName(r.androidVer()));
-        addPackageEntry(arr, siteBase, "watch", ClientReleaseStorage.watchApkFileName(r.watchVer()));
         addPackageEntry(arr, siteBase, "windows", ClientReleaseStorage.windowsExeFileName(r.pcVer()));
         addPackageEntry(arr, siteBase, "linux", ClientReleaseStorage.linuxDebFileName(r.pcVer()));
         addPackageEntry(arr, siteBase, "mac", ClientReleaseStorage.macPkgFileName(r.pcVer()));
-        return arr;
-    }
-
-    /** 尚未保存任何版本时也保留手表上传入口，版本号配置后再生成目标文件名。 */
-    private ArrayNode buildEmptyPackagesArray() {
-        ArrayNode arr = Main.getObjectMapper().createArrayNode();
-        addPackageEntry(arr, null, "watch", null);
         return arr;
     }
 
@@ -211,6 +196,6 @@ public class AdminClientReleaseHandler extends ApiServlet {
 
 
 
-    private record VersionUpdateRequest(String androidVer, String pcVer, String watchVer) {
+    private record VersionUpdateRequest(String androidVer, String pcVer) {
     }
 }

@@ -9,10 +9,9 @@
       </div>
     </header>
 
-    <NCard v-if="publishedAndroidVer || publishedPcVer || publishedWatchVer" pad="lg" class="card">
+    <NCard v-if="publishedAndroidVer || publishedPcVer" pad="lg" class="card">
       <h2 class="card__title">当前对外（/version）</h2>
       <p class="line">Android：<code class="code">{{ publishedAndroidVer }}</code></p>
-      <p class="line">手表：<code class="code">{{ publishedWatchVer }}</code></p>
       <p class="line">PC：<code class="code">{{ publishedPcVer }}</code></p>
     </NCard>
 
@@ -25,10 +24,6 @@
       <div class="field">
         <label class="field__label" for="rel-android">Android 版本 (ver)</label>
         <NInput id="rel-android" v-model="androidVer" placeholder="如 20260207-36" />
-      </div>
-      <div class="field">
-        <label class="field__label" for="rel-watch">手表版本 (watch_ver)</label>
-        <NInput id="rel-watch" v-model="watchVer" placeholder="如 1.4.0" />
       </div>
       <div class="field">
         <label class="field__label" for="rel-pc">PC 版本 (pc_ver)</label>
@@ -57,7 +52,7 @@
         {{ loadError }}
       </p>
 
-      <div v-for="pkg in displayPackages" :key="pkg.platform" class="pkg">
+      <div v-for="pkg in packages" :key="pkg.platform" class="pkg">
         <div class="pkg__meta">
           <span class="pkg__platform">{{ platformLabel(pkg.platform) }}</span>
           <span class="pkg__name" :title="pkg.fileName">{{ pkg.fileName || '保存版本号后生成文件名' }}</span>
@@ -102,14 +97,14 @@
       </div>
 
       <p class="hint">
-        请先保存待发布版本号，再上传安装包；手表使用独立版本与独立 APK，不校验 APK 版本号与签名。落盘文件名与上表一致。
+        请先保存待发布版本号，再上传安装包。落盘文件名与上表一致。
       </p>
     </NCard>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import NIcon from '@/icons/NIcon.vue'
@@ -125,10 +120,8 @@ const router = useRouter()
 const toast = useToast()
 const adminInfo = ref({})
 const androidVer = ref('')
-const watchVer = ref('')
 const pcVer = ref('')
 const publishedAndroidVer = ref('')
-const publishedWatchVer = ref('')
 const publishedPcVer = ref('')
 const pendingEffectiveAt = ref('')
 const packages = ref([])
@@ -138,32 +131,14 @@ const loadError = ref('')
 const uploadingPlatform = ref('')
 const uploadProgress = ref(-1)
 
-const WATCH_PLACEHOLDER = Object.freeze({
-  platform: 'watch',
-  fileName: null,
-  downloadUrl: null,
-  uploaded: false,
-  size: null
-})
-
-/** 手表上传入口固定在本地渲染，不依赖后端当前是否已返回 watch 包信息。 */
-const displayPackages = computed(() => {
-  const list = Array.isArray(packages.value) ? [...packages.value] : []
-  if (list.some((pkg) => pkg.platform === 'watch')) return list
-  const androidIndex = list.findIndex((pkg) => pkg.platform === 'android')
-  list.splice(androidIndex >= 0 ? androidIndex + 1 : 0, 0, WATCH_PLACEHOLDER)
-  return list
-})
-
 const platformLabel = (p) => {
-  const map = { android: 'Android', watch: '手表', windows: 'Windows', linux: 'Linux', mac: 'macOS' }
+  const map = { android: 'Android', windows: 'Windows', linux: 'Linux', mac: 'macOS' }
   return map[p] || p
 }
 
 const acceptForPlatform = (platform) => {
   const map = {
     android: '.apk,application/vnd.android.package-archive',
-    watch: '.apk,application/vnd.android.package-archive',
     windows: '.exe,application/vnd.microsoft.portable-executable',
     linux: '.deb,application/vnd.debian.binary-package',
     mac: '.pkg'
@@ -182,11 +157,9 @@ const formatSize = (bytes) => {
 
 const applyReleaseData = (data) => {
   publishedAndroidVer.value = data.publishedAndroidVer || data.androidVer || ''
-  publishedWatchVer.value = data.publishedWatchVer || data.watchVer || ''
   publishedPcVer.value = data.publishedPcVer || data.pcVer || ''
   pendingEffectiveAt.value = data.pendingEffectiveAt || ''
   androidVer.value = data.pendingAndroidVer || data.androidVer || publishedAndroidVer.value
-  watchVer.value = data.pendingWatchVer || data.watchVer || publishedWatchVer.value
   pcVer.value = data.pendingPcVer || data.pcVer || publishedPcVer.value
   packages.value = Array.isArray(data.packages) ? data.packages : []
 }
@@ -207,15 +180,14 @@ const loadData = async () => {
 
 const saveVersions = async () => {
   const av = androidVer.value.trim()
-  const wv = watchVer.value.trim()
   const pv = pcVer.value.trim()
-  if (!av || !wv || !pv) {
-    toast.error('请填写 Android、手表与 PC 版本号')
+  if (!av || !pv) {
+    toast.error('请填写 Android 与 PC 版本号')
     return
   }
   savingVersions.value = true
   try {
-    const data = await saveAdminClientReleaseVersions({ androidVer: av, pcVer: pv, watchVer: wv })
+    const data = await saveAdminClientReleaseVersions({ androidVer: av, pcVer: pv })
     applyReleaseData(data)
     toast.success(data.pendingEffectiveAt
       ? `已排期，/version 将于 ${data.pendingEffectiveAt} 生效`
@@ -233,7 +205,7 @@ const onFilePick = async (event, pkg) => {
   input.value = ''
   if (!file) return
 
-  if (!androidVer.value.trim() || !watchVer.value.trim() || !pcVer.value.trim()) {
+  if (!androidVer.value.trim() || !pcVer.value.trim()) {
     toast.error('请先保存版本号再上传安装包')
     return
   }

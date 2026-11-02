@@ -19,7 +19,7 @@ import java.util.Set;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-/** 管理员上传 Android 手机 APK：校验包名、版本号与签名；手表包由上传入口直接放行。 */
+/** 管理员上传 Android 手机 APK：校验包名、版本号与签名。 */
 public final class ApkUploadValidator {
 
     /** 与 Android/app/build.gradle.kts applicationId 一致 */

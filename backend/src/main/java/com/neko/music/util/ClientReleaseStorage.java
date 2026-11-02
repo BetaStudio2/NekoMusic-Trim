@@ -21,8 +21,7 @@ import com.neko.music.i18n.ApiMessages;
 public final class ClientReleaseStorage {
 
     private static final String RELEASES_DIR_NAME = "releases";
-    private static final String WATCH_FILE_PREFIX = "NekoMusic-watch-";
-    private static final List<String> PLATFORMS = List.of("android", "watch", "windows", "linux", "mac");
+    private static final List<String> PLATFORMS = List.of("android", "windows", "linux", "mac");
 
     /** 50 MiB（二进制），非 50 MB（十进制） */
     public static final long MAX_UPLOAD_BYTES = 50L * 1024 * 1024;
@@ -46,14 +45,6 @@ public final class ClientReleaseStorage {
         return androidVer + ".apk";
     }
 
-    /** 手表包使用独立版本号；文件名带固定前缀，避免与手机 APK 冲突。 */
-    public static String watchApkFileName(String watchVer) {
-        if (watchVer == null || watchVer.isBlank()) {
-            return null;
-        }
-        return WATCH_FILE_PREFIX + watchVer.trim() + ".apk";
-    }
-
     public static String windowsExeFileName(String pcVer) {
         return "Neko歌姬计划 Setup " + pcVer + ".exe";
     }
@@ -72,7 +63,6 @@ public final class ClientReleaseStorage {
         }
         return switch (platform.trim().toLowerCase(Locale.ROOT)) {
             case "android" -> androidApkFileName(release.androidVer());
-            case "watch" -> watchApkFileName(release.watchVer());
             case "windows" -> windowsExeFileName(release.pcVer());
             case "linux" -> linuxDebFileName(release.pcVer());
             case "mac" -> macPkgFileName(release.pcVer());
@@ -86,7 +76,6 @@ public final class ClientReleaseStorage {
         }
         return switch (platform.trim().toLowerCase(Locale.ROOT)) {
             case "android" -> ".apk";
-            case "watch" -> ".apk";
             case "windows" -> ".exe";
             case "linux" -> ".deb";
             case "mac" -> ".pkg";
@@ -232,15 +221,14 @@ public final class ClientReleaseStorage {
 
     /** 当前发布版本生效后清理所有平台的历史安装包。 */
     public static int deleteObsoleteReleasePackages(
-            String androidVer, String pcVer, String watchVer) throws IOException {
-        return deleteObsoleteReleasePackages(storageDir(), androidVer, pcVer, watchVer);
+            String androidVer, String pcVer) throws IOException {
+        return deleteObsoleteReleasePackages(storageDir(), androidVer, pcVer);
     }
 
     static int deleteObsoleteReleasePackages(
-            Path directory, String androidVer, String pcVer, String watchVer) throws IOException {
+            Path directory, String androidVer, String pcVer) throws IOException {
         Set<String> keep = new HashSet<>();
         addIfPresent(keep, androidVer == null || androidVer.isBlank() ? null : androidApkFileName(androidVer));
-        addIfPresent(keep, watchApkFileName(watchVer));
         addIfPresent(keep, pcVer == null || pcVer.isBlank() ? null : windowsExeFileName(pcVer));
         addIfPresent(keep, pcVer == null || pcVer.isBlank() ? null : linuxDebFileName(pcVer));
         addIfPresent(keep, pcVer == null || pcVer.isBlank() ? null : macPkgFileName(pcVer));
@@ -300,8 +288,7 @@ public final class ClientReleaseStorage {
     private static boolean belongsToPlatform(String fileName, String normalizedPlatform) {
         String lower = fileName.toLowerCase(Locale.ROOT);
         return switch (normalizedPlatform) {
-            case "android" -> lower.endsWith(".apk") && !lower.startsWith(WATCH_FILE_PREFIX.toLowerCase(Locale.ROOT));
-            case "watch" -> lower.endsWith(".apk") && lower.startsWith(WATCH_FILE_PREFIX.toLowerCase(Locale.ROOT));
+            case "android" -> lower.endsWith(".apk");
             case "windows" -> lower.endsWith(".exe");
             case "linux" -> lower.endsWith(".deb");
             case "mac" -> lower.endsWith(".pkg");

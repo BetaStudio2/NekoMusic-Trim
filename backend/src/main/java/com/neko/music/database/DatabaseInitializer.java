@@ -395,7 +395,7 @@ public class DatabaseInitializer {
         void bind(PreparedStatement updateStmt, ResultSet rs) throws Exception;
     }
 
-    /** 单行版本表：无 id，保存 Android / PC / 手表三端版本 */
+    /** 单行版本表：无 id，保存 Android / PC 两端版本 */
     private static void migrateAppReleaseTable(Connection conn, Statement stmt) {
         try {
             boolean tableExists = false;
@@ -451,12 +451,8 @@ public class DatabaseInitializer {
                     ALTER TABLE app_release
                     ADD COLUMN IF NOT EXISTS pc_ver VARCHAR(64) NOT NULL DEFAULT '' AFTER android_ver
                     """);
-                stmt.execute("""
-                    ALTER TABLE app_release
-                    ADD COLUMN IF NOT EXISTS watch_ver VARCHAR(64) NULL AFTER pc_ver
-                    """);
             } catch (Exception e) {
-                logger.debug("app_release 添加 pc_ver/watch_ver 列: {}", e.getMessage());
+                logger.debug("app_release 添加 pc_ver 列: {}", e.getMessage());
             }
 
             try {
@@ -470,11 +466,7 @@ public class DatabaseInitializer {
                     """);
                 stmt.execute("""
                     ALTER TABLE app_release
-                    ADD COLUMN IF NOT EXISTS pending_watch_ver VARCHAR(64) NULL AFTER pending_pc_ver
-                    """);
-                stmt.execute("""
-                    ALTER TABLE app_release
-                    ADD COLUMN IF NOT EXISTS pending_effective_at TIMESTAMP NULL AFTER pending_watch_ver
+                    ADD COLUMN IF NOT EXISTS pending_effective_at TIMESTAMP NULL AFTER pending_pc_ver
                     """);
             } catch (Exception e) {
                 logger.debug("app_release 添加 pending 列: {}", e.getMessage());
@@ -490,10 +482,8 @@ public class DatabaseInitializer {
             CREATE TABLE IF NOT EXISTS app_release (
                 android_ver VARCHAR(64) NOT NULL,
                 pc_ver VARCHAR(64) NOT NULL,
-                watch_ver VARCHAR(64) NULL,
                 pending_android_ver VARCHAR(64) NULL,
                 pending_pc_ver VARCHAR(64) NULL,
-                pending_watch_ver VARCHAR(64) NULL,
                 pending_effective_at TIMESTAMP NULL,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

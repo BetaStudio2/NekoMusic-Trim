@@ -11,7 +11,7 @@ function adminAuthHeader() {
 }
 
 /**
- * @returns {Promise<{ androidVer: string|null, watchVer: string|null, pcVer: string|null, packages: Array }>}
+ * @returns {Promise<{ androidVer: string|null, pcVer: string|null, packages: Array }>}
  */
 export async function fetchAdminClientReleases() {
   const res = await fetch(`${API_CONFIG.BASE_URL}/api/admin/releases`, {
@@ -24,11 +24,11 @@ export async function fetchAdminClientReleases() {
   if (!res.ok || !data.success) {
     throw new Error(data.message || `加载失败 (${res.status})`)
   }
-  return data.data || { androidVer: null, watchVer: null, pcVer: null, packages: [] }
+  return data.data || { androidVer: null, pcVer: null, packages: [] }
 }
 
 /**
- * @param {{ androidVer: string, pcVer: string, watchVer: string }} payload
+ * @param {{ androidVer: string, pcVer: string }} payload
  */
 export async function saveAdminClientReleaseVersions(payload) {
   const res = await fetch(`${API_CONFIG.BASE_URL}/api/admin/releases`, {
@@ -48,7 +48,6 @@ export async function saveAdminClientReleaseVersions(payload) {
 
 const PLATFORM_EXT = {
   android: '.apk',
-  watch: '.apk',
   windows: '.exe',
   linux: '.deb',
   mac: '.pkg'
@@ -56,7 +55,7 @@ const PLATFORM_EXT = {
 
 /**
  * @param {File} file
- * @param {'android'|'watch'|'windows'|'linux'|'mac'} platform
+ * @param {'android'|'windows'|'linux'|'mac'} platform
  * @param {(loaded: number, total: number) => void} [onProgress]
  */
 export async function uploadAdminClientRelease(file, platform, onProgress) {

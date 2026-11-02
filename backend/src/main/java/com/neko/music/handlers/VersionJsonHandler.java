@@ -62,14 +62,6 @@ public class VersionJsonHandler extends HttpServlet {
         // 安装包体积（字节，0 表示暂未上传），下载页据此展示「大小」
         root.put("size", ClientReleaseStorage.fileSizeOrZero(androidApk));
 
-        String watchApk = ClientReleaseStorage.watchApkFileName(r.watchVer());
-        if (watchApk != null) {
-            ObjectNode watch = root.putObject("watch");
-            watch.put("ver", r.watchVer());
-            watch.put("url", ClientReleaseStorage.publicDownloadUrl(siteBase, watchApk));
-            watch.put("size", ClientReleaseStorage.fileSizeOrZero(watchApk));
-        }
-
         ObjectNode pc = root.putObject("pc");
         String pcVer = r.pcVer();
         String windowsExe = ClientReleaseStorage.windowsExeFileName(pcVer);
@@ -83,7 +75,7 @@ public class VersionJsonHandler extends HttpServlet {
         pc.put("linux_size", ClientReleaseStorage.fileSizeOrZero(linuxDeb));
         pc.put("mac_size", ClientReleaseStorage.fileSizeOrZero(macPkg));
 
-        logger.debug("/version ver={} pc_ver={} watch_ver={}", r.androidVer(), pcVer, r.watchVer());
+        logger.debug("/version ver={} pc_ver={}", r.androidVer(), pcVer);
         try {
             return Main.getObjectMapper().writeValueAsString(root);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
