@@ -157,6 +157,16 @@ const router = createRouter({
       }
     },
     {
+      path: '/sso/native-complete',
+      name: 'oauth-native-complete',
+      component: () => import('@/views/AuthNativeSsoCompleteView.vue'),
+      meta: {
+        title: '正在返回客户端 - Neko歌姬计划',
+        description: '正在完成 NekoAuth 统一登录。',
+        keywords: '登录,NekoAuth,单点登录'
+      }
+    },
+    {
       // 旧回调地址兼容；服务端只会在新流程中跳转到 /sso/complete。
       path: '/oauth/nekocore/complete',
       redirect: (to) => ({ path: '/sso/complete', query: to.query }),

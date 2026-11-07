@@ -121,8 +121,11 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
   一次性 state 与 nonce，并通过 JWKS 校验 ID Token 的签名、issuer、audience、azp、nonce、at_hash
   和 subject。
 - 规范回调地址为 `/sso/nekocore/callback`；旧 `/oauth/nekocore/callback` 只作兼容别名。
-- 原生客户端只使用 `nekomusic://sso/complete?handoff=...` 接收一次性交接；禁止把 access token
-  放进深链，回跳目标只能由服务端按 state 中的客户端类型选择。
+- 原生客户端回跳先经过站内 HTTPS 页面 `/sso/native-complete`，再由页面打开
+  `nekomusic://sso/complete?handoff=...`；禁止服务端直接 302 到自定义协议，避免 CDN 拒绝非 HTTP
+  Location。页面必须保留手动按钮，处理浏览器阻止自动跳转的情况。
+- 一次性 handoff 可以进入深链，access token 禁止进入深链；回跳目标只能由服务端按 state 中的
+  客户端类型选择。
 - NekoAuth 客户端密钥只能保存在服务端，不得下发到浏览器、Android 或 PC 客户端。
 - Web、Android 与 PC 新界面不得再提供邮箱密码、注册验证码或原生改密/改昵称表单；注册与账号资料
   修改统一打开 NekoAuth 页面。Android 使用应用内 WebView，Web 使用当前浏览器，PC 使用系统浏览器。

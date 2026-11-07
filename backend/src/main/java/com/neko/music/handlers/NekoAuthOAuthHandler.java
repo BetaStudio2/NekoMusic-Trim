@@ -85,7 +85,9 @@ public final class NekoAuthOAuthHandler extends ApiServlet {
             String handoff = URLEncoder.encode(result.handoff(), StandardCharsets.UTF_8);
             String location;
             if ("android".equals(result.client()) || "pc".equals(result.client())) {
-                location = "nekomusic://sso/complete?handoff=" + handoff;
+                location = "/sso/native-complete?client="
+                        + URLEncoder.encode(result.client(), StandardCharsets.UTF_8)
+                        + "&handoff=" + handoff;
             } else {
                 location = "/sso/complete?handoff=" + handoff;
             }

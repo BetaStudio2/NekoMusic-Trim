@@ -82,8 +82,9 @@ NekoAuth 的 `account:bridge` 只允许服务端 Basic 认证，不能用于浏�
 - `POST /api/user/sso/password-reset-url`：返回 NekoAuth 的 `/forgot-password` 完整地址，前端随后直接导航。
 
 Android / PC 调用 `/api/user/sso/start` 时分别传 `client=android`、`client=pc`。完成 NekoAuth 授权后，
-服务端只把一次性 handoff 回跳到 `nekomusic://sso/complete`，App 再调用
-`POST /api/user/sso/claim` 兑换 token；长期 token 不会出现在深链或浏览器历史中。
+服务端先回跳到站内 HTTPS 引导页 `/sso/native-complete`，再由页面打开
+`nekomusic://sso/complete`，App 再调用 `POST /api/user/sso/claim` 兑换 token；长期 token 不会出现在
+深链或浏览器历史中。HTTPS 引导页保留手动按钮，处理浏览器阻止自定义协议自动跳转的情况。
 注册、找回密码和账号资料修改统一跳转 NekoAuth：Web 在当前浏览器中打开，Android 使用应用内
 WebView，PC 使用系统浏览器。
 
