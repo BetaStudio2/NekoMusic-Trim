@@ -63,7 +63,6 @@ public final class NekoAuthOAuthService {
     private final ConfigManager configManager;
     private final RedisService redisService;
     private final UserAuthService userAuthService;
-    private final NekoAuthAccountService accountService;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpTransport.createWithoutRedirects(HTTP_TIMEOUT);
     private volatile OidcDiscovery discoveryCache;
@@ -71,12 +70,10 @@ public final class NekoAuthOAuthService {
 
     public NekoAuthOAuthService(ConfigManager configManager, RedisService redisService,
                                 UserAuthService userAuthService,
-                                NekoAuthAccountService accountService,
                                 ObjectMapper objectMapper) {
         this.configManager = configManager;
         this.redisService = redisService;
         this.userAuthService = userAuthService;
-        this.accountService = accountService;
         this.objectMapper = objectMapper;
     }
 
@@ -178,16 +175,21 @@ public final class NekoAuthOAuthService {
         return issuerUri().toString() + path;
     }
 
-    /** Auth 普通登录页地址；登录完成后直接回跳第一方子域，不进入 OAuth 授权码流程。 */
-    public String webLoginEntryUrl(String returnTo) throws OAuthLoginException {
+    /** 标准 OIDC RP-Initiated Logout 地址。 */
+    public String logoutUrl(String idToken) throws OAuthLoginException {
         requireEnabled();
-        String safeReturnTo = normalizeReturnTo(returnTo);
+        if (idToken == null || idToken.isBlank() || idToken.length() > 8192) {
+            throw new OAuthLoginException("id_token_missing", "缺少登录凭据，无法同步退出 NekoAuth");
+        }
+        String clientId = requireConfigured(configManager.getOAuthClientId(), "oauth.client_id");
         String redirectUri = requireConfigured(configManager.getOAuthRedirectUri(), "oauth.redirect_uri");
         validateRedirectUri(redirectUri);
-        String absoluteReturnTo = originOf(redirectUri)
-                + safeReturnTo.substring(1);
-        return issuerUri() + "/login?return_to="
-                + URLEncoder.encode(absoluteReturnTo, StandardCharsets.UTF_8);
+        String postLogoutRedirect = URI.create(redirectUri).resolve("/").toString();
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("id_token_hint", idToken);
+        query.put("client_id", clientId);
+        query.put("post_logout_redirect_uri", postLogoutRedirect);
+        return issuerUri() + "/oauth2/logout?" + encodeForm(query);
     }
 
     /**
@@ -281,29 +283,6 @@ public final class NekoAuthOAuthService {
         }
     }
 
-    /**
-     * 使用父域共享 SSO 会话直接登录当前子域，不创建跳转 state、不需要浏览器访问 Auth。
-     */
-    public ClaimResult loginWithSsoSession(String ssoSession) throws OAuthLoginException {
-        if (ssoSession == null || ssoSession.isBlank()) {
-            throw new OAuthLoginException("sso_session_missing", "未找到共享登录会话");
-        }
-        NekoAuthAccountService.Account account;
-        try {
-            account = accountService.loginWithSsoSession(ssoSession);
-        } catch (NekoAuthAccountService.AccountBridgeException exception) {
-            throw new OAuthLoginException(exception.code(), exception.getMessage(), exception);
-        }
-        try {
-            User localUser = userAuthService.findOrLinkNekoAuthUser(
-                    account.id(), account.email(), account.nickname());
-            return new ClaimResult(account.accessToken(), "", "/", localUser);
-        } catch (RuntimeException exception) {
-            logger.warn("共享 SSO 会话关联本地账号失败: authUserId={}", account.id(), exception);
-            throw new OAuthLoginException("account_link_failed", "关联 NekoMusic 账户失败", exception);
-        }
-    }
-
     private TokenResponse exchangeAuthorizationCode(String code, String codeVerifier,
                                                     URI tokenEndpoint) throws OAuthLoginException {
         String clientId = requireConfigured(configManager.getOAuthClientId(), "oauth.client_id");
@@ -380,14 +359,7 @@ public final class NekoAuthOAuthService {
             throw new OAuthLoginException("account_link_failed", "关联 NekoMusic 账户失败", exception);
         }
 
-        String token;
-        try {
-            token = accountService.exchangeToken(shortLivedToken).accessToken();
-        } catch (NekoAuthAccountService.AccountBridgeException exception) {
-            logger.warn("NekoAuth 长期令牌交换失败: status={} code={}",
-                    exception.status(), exception.code());
-            throw new OAuthLoginException("token_issue_failed", "登录令牌签发失败", exception);
-        }
+        String token = shortLivedToken;
         if (token == null || token.isBlank()) {
             throw new OAuthLoginException("token_issue_failed", "登录令牌签发失败");
         }
@@ -722,20 +694,6 @@ public final class NekoAuthOAuthService {
         }
         if (uri.getRawQuery() != null || uri.getFragment() != null || uri.getRawUserInfo() != null) {
             throw new OAuthLoginException("oauth_not_configured", "回调地址不能包含查询、片段或用户信息");
-        }
-    }
-
-    static String originOf(String value) throws OAuthLoginException {
-        try {
-            URI uri = URI.create(value);
-            String host = uri.getHost();
-            if (host.contains(":")) {
-                host = "[" + host + "]";
-            }
-            return uri.getScheme() + "://" + host
-                    + (uri.getPort() < 0 ? "" : ":" + uri.getPort()) + "/";
-        } catch (IllegalArgumentException exception) {
-            throw new OAuthLoginException("oauth_not_configured", "回调地址格式不正确", exception);
         }
     }
 

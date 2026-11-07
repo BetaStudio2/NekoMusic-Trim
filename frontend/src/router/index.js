@@ -332,17 +332,6 @@ const router = createRouter({
           }
         },
         {
-          path: 'users',
-          name: 'admin-users',
-          component: () => import('@/views/admin/AdminUsersView.vue'),
-          beforeEnter: adminGuard,
-          meta: {
-            title: '用户管理 - Neko歌姬计划',
-            description: '管理平台免费音乐用户，查看用户信息和统计数据。',
-            keywords: '用户管理,用户统计,免费音乐用户'
-          }
-        },
-        {
           path: 'vip-pricing',
           name: 'admin-vip-pricing',
           component: () => import('@/views/admin/AdminVipPricingView.vue'),
@@ -457,7 +446,6 @@ const ROUTE_TITLE_KEYS = {
   'admin-music': 'route.adminMusic',
   'admin-lyrics': 'route.adminLyrics',
   'admin-audit': 'route.adminAudit',
-  'admin-users': 'route.adminUsers',
   'admin-vip-pricing': 'route.adminVipPricing',
   'admin-releases': 'route.adminReleases',
   'admin-settings': 'route.adminSettings',

@@ -277,7 +277,7 @@ const getAdminInfo = () => {
 }
 
 const openUserManagement = (userId) => {
-  router.push({ name: 'admin-users', query: { q: `id=${userId}` } })
+  window.open(`https://auth.nekocore.cn/admin?user=${encodeURIComponent(userId)}`, '_blank', 'noopener')
 }
 
 const copyText = async (value, label) => {

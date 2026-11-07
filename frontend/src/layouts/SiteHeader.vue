@@ -200,6 +200,7 @@ function goToLogin() {
 async function logout() {
   const previousToken = localStorage.getItem('userToken')
   localStorage.removeItem('userToken')
+  localStorage.removeItem('userIdToken')
   clearUser()
   if (previousToken) {
     window.dispatchEvent(

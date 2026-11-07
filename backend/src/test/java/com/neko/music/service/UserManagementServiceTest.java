@@ -105,77 +105,13 @@ class UserManagementServiceTest {
     }
 
     @Test
-    void regularUserEditRequiresAFieldAndRejectsInvalidVip() {
-        FakeStore store = new FakeStore();
-        UserManagementService service = new UserManagementService(store, new RecordingRevoker());
-
-        UserManagementException empty = assertThrows(UserManagementException.class,
-                () -> service.updateUser(admin(2, "admin"), 7, "  ", false, null));
-        assertEquals("admin.user.update_fields_required", empty.messageKey());
-
-        UserManagementException vip = assertThrows(UserManagementException.class,
-                () -> service.updateUser(admin(2, "admin"), 7, null, true, "not-a-date"));
-        assertEquals("admin.user.invalid_vip", vip.messageKey());
-    }
-
-    @Test
-    void passwordChangeDelegatesToAuthAndRevokesButVipOnlyDoesNotLogOut() throws Exception {
-        FakeStore store = new FakeStore();
-        RecordingRevoker revoker = new RecordingRevoker();
-        RecordingAuthBridge authBridge = new RecordingAuthBridge();
-        UserManagementService service = new UserManagementService(store, revoker, authBridge);
-
-        service.updateUser(admin(2, "admin"), 7, "secret12", true, "2027-01-01T00:00:00Z");
-
-        assertEquals(List.of("listener@example.com:secret12"), authBridge.adminResets);
-        assertEquals(Instant.parse("2027-01-01T00:00:00Z"), store.vip.toInstant());
-        assertEquals(List.of(7), revoker.users);
-
-        service.updateUser(admin(2, "admin"), 7, null, true, "2028-01-01T00:00:00+08:00");
-        assertEquals(List.of(7), revoker.users, "只改会员时间不应吊销登录会话");
-    }
-
-    @Test
-    void passwordWhitespaceIsPreservedWhenDelegatingToAuth() throws Exception {
-        FakeStore store = new FakeStore();
-        RecordingAuthBridge authBridge = new RecordingAuthBridge();
-        UserManagementService service = new UserManagementService(store, new RecordingRevoker(), authBridge);
-
-        service.updateUser(admin(2, "admin"), 7, " secret12 ", false, null);
-
-        assertEquals(List.of("listener@example.com: secret12 "), authBridge.adminResets);
-    }
-
-    @Test
-    void ownNicknameChangeTrimsAndValidates() throws Exception {
-        FakeStore store = new FakeStore();
-        RecordingAuthBridge authBridge = new RecordingAuthBridge();
-        UserManagementService service = new UserManagementService(store, new RecordingRevoker(), authBridge);
-
-        String saved = service.changeUserNickname(7, "  新昵称  ");
-        assertEquals("新昵称", saved);
-        assertEquals("listener", store.nickname, "昵称不应再写入本地数据库");
-        assertEquals(List.of("listener@example.com:新昵称"), authBridge.nicknameChanges);
-
-        UserManagementException invalid = assertThrows(UserManagementException.class,
-                () -> service.changeUserNickname(7, "x".repeat(33)));
-        assertTrue(invalid.messageKey().contains("昵称长度"));
-    }
-
-    @Test
     void missingUserKeepsLegacySelfServiceFailures() {
-        UserManagementService service = new UserManagementService(
-                new FakeStore(), new RecordingRevoker(), new RecordingAuthBridge());
+        UserManagementService service = new UserManagementService(new FakeStore(), new RecordingRevoker());
 
         UserManagementException profile = assertThrows(UserManagementException.class,
                 () -> service.getUserProfile(99));
         assertEquals(UserManagementException.Kind.NOT_FOUND, profile.kind());
         assertEquals("user.not_exists", profile.messageKey());
-
-        UserManagementException nickname = assertThrows(UserManagementException.class,
-                () -> service.changeUserNickname(99, "listener"));
-        assertEquals("user.not_exists", nickname.messageKey());
-
     }
 
     @Test
@@ -187,23 +123,6 @@ class UserManagementServiceTest {
     }
 
     @Test
-    void createUserRequiresSuperAdminAndUniqueEmail() throws Exception {
-        FakeStore store = new FakeStore();
-        UserManagementService service = new UserManagementService(
-                store, new RecordingRevoker(), new RecordingAuthBridge());
-
-        UserManagementException forbidden = assertThrows(UserManagementException.class,
-                () -> service.createUser(admin(2, "admin"), "listener", "listener@example.com", "secret12"));
-        assertEquals("admin.user.create_forbidden", forbidden.messageKey());
-
-        store.userEmailTaken = true;
-        UserManagementException conflict = assertThrows(UserManagementException.class,
-                () -> service.createUser(admin(1, "super_admin"), "listener", "listener@example.com", "secret12"));
-        assertEquals("admin.user.email_exists", conflict.messageKey());
-        assertTrue(store.users.isEmpty());
-    }
-
-    @Test
     void accountCreationRejectsWhitespaceOnlyPassword() {
         UserManagementService service = new UserManagementService(new FakeStore(), new RecordingRevoker());
 
@@ -212,10 +131,6 @@ class UserManagementServiceTest {
                         "      ", "admin"));
         assertEquals("admin.account.password_too_short", adminError.messageKey());
 
-        UserManagementException userError = assertThrows(UserManagementException.class,
-                () -> service.createUser(admin(1, "super_admin"), "listener", "listener@example.com",
-                        "      "));
-        assertEquals("admin.user.password_too_short", userError.messageKey());
     }
 
     private static Admin admin(int id, String role) {
@@ -235,25 +150,6 @@ class UserManagementServiceTest {
         @Override
         public void revokeUser(int userId) {
             users.add(userId);
-        }
-    }
-
-    private static class RecordingAuthBridge extends NekoAuthAccountService {
-        private final List<String> adminResets = new ArrayList<>();
-        private final List<String> nicknameChanges = new ArrayList<>();
-
-        RecordingAuthBridge() {
-            super(null, null);
-        }
-
-        @Override
-        public void adminResetPassword(String email, String newPassword) {
-            adminResets.add(email + ":" + newPassword);
-        }
-
-        @Override
-        public void updateNickname(String email, String nickname) {
-            nicknameChanges.add(email + ":" + nickname);
         }
     }
 

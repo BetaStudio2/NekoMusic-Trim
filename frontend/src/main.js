@@ -9,7 +9,7 @@ import './design/reset.css'
 import VueToastification from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 import { installBenignPlayAbortGuard } from './utils/benignPlayAbort'
-import { clearUser, getToken, setUser } from './utils/userStore.js'
+import { clearUser, getToken } from './utils/userStore.js'
 import { initPwa } from './composables/usePwa.js'
 import { installI18n, t } from './i18n'
 import API_CONFIG from './config/apiConfig.js'
@@ -109,45 +109,67 @@ app.use(VueToastification, {
   rtl: false
 })
 
-/** Auth 登录后写入父域共享会话 Cookie；子域后端直接兑换登录态，不发生跳转。 */
-async function syncSharedSsoLogin() {
-  const previousToken = getToken()
+function clearLocalSession() {
+  const previous = getToken()
+  if (!previous) return
+  localStorage.removeItem('userToken')
+  localStorage.removeItem('userIdToken')
+  clearUser()
+  window.dispatchEvent(new StorageEvent('storage', {
+    key: 'userToken',
+    oldValue: previous,
+    newValue: null,
+  }))
+}
+
+/** 当前用户的 OAuth access token 是否仍被 Auth 接受。 */
+async function validateSharedSession() {
+  const token = getToken()
+  if (!token) return false
   try {
-    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/cookie-login`, {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/info`, {
+      cache: 'no-store',
+    })
+    if (response.status === 401 || response.status === 403) {
+      clearLocalSession()
+      return false
+    }
+    return response.ok
+  } catch {
+    return true
+  }
+}
+
+async function refreshSharedSessionIfVisible() {
+  if (document.visibilityState !== 'visible' || !getToken()) return
+  await validateSharedSession()
+}
+
+/** Auth 登录后留下只读会话提示；子域用标准 OIDC prompt=none 静默换取自己的 token。 */
+async function trySilentLogin() {
+  if (getToken() || !document.cookie.includes('nekoauth_session_hint=')) return false
+  if (window.location.pathname.startsWith('/sso/')
+      || window.location.pathname.startsWith('/oauth/nekocore/')) {
+    return false
+  }
+  try {
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/start`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client: 'web', returnTo: current || '/', silent: true }),
       cache: 'no-store',
     })
     const body = await response.json().catch(() => ({}))
-    const token = body?.data?.token
-    const user = body?.data?.user
-    if (response.ok && body?.success && typeof token === 'string' && token && user) {
-      localStorage.setItem('userToken', token)
-      setUser(user)
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'userToken',
-        oldValue: previousToken,
-        newValue: token,
-      }))
+    const url = body?.data?.url
+    if (response.ok && body?.success && typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      window.location.assign(url)
       return true
     }
-    if (response.status === 401 && previousToken) {
-      localStorage.removeItem('userToken')
-      clearUser()
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'userToken',
-        oldValue: previousToken,
-        newValue: null,
-      }))
-    }
   } catch {
-    /* Auth 暂时不可用时保留当前本地登录态 */
+    /* Auth 暂时不可用时继续以未登录状态展示 */
   }
   return false
-}
-
-async function refreshSharedSsoSessionIfVisible() {
-  if (document.visibilityState !== 'visible' || !getToken()) return
-  await syncSharedSsoLogin()
 }
 
 /**
@@ -156,12 +178,16 @@ async function refreshSharedSsoSessionIfVisible() {
  * 网络慢最多等 3 秒，拉不到就照常挂载（页面会显示兜底提示）。
  */
 async function bootstrap() {
-  await Promise.race([
-    syncSharedSsoLogin(),
-    new Promise((resolve) => setTimeout(resolve, 3000)),
-  ])
-  document.addEventListener('visibilitychange', refreshSharedSsoSessionIfVisible)
-  window.setInterval(refreshSharedSsoSessionIfVisible, 60_000)
+  if (getToken()) {
+    await Promise.race([
+      validateSharedSession(),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ])
+  } else if (await trySilentLogin()) {
+    return
+  }
+  document.addEventListener('visibilitychange', refreshSharedSessionIfVisible)
+  window.setInterval(refreshSharedSessionIfVisible, 60_000)
   app.mount('#app')
 }
 

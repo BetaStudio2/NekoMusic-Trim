@@ -19,19 +19,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class RequestAuditFilterTest {
 
     @Test
-    @DisplayName("系统设置 / 审核 / 歌词 / 用户 / 版本 的写操作有语义化动作")
+    @DisplayName("系统设置 / 审核 / 歌词 / 版本 的写操作有语义化动作")
     void resolvesSemanticActionsForAdminWrites() {
         assertRule("PUT", "/api/admin/settings", "系统设置", "修改系统设置");
         assertRule("POST", "/api/admin/audit/approve/37", "审核管理", "审核通过");
         assertRule("POST", "/api/admin/audit/reject/37", "审核管理", "审核驳回");
         assertRule("PUT", "/api/admin/lyrics-files/file/148.lrc", "歌词管理", "修改歌词");
         assertRule("DELETE", "/api/admin/lyrics-files/file/148.lrc", "歌词管理", "删除歌词");
-        assertRule("PUT", "/api/admin/users/12/edit", "用户管理", "修改用户信息");
-        assertRule("DELETE", "/api/admin/users/12", "用户管理", "删除用户");
-        assertRule("PUT", "/api/users/12/edit", "用户管理", "修改用户信息");
-        assertRule("DELETE", "/api/users/12", "用户管理", "删除用户");
         assertRule("POST", "/api/admin/create", "管理员管理", "创建管理员账号");
-        assertRule("POST", "/api/admin/create-user", "用户管理", "创建用户");
         assertRule("PUT", "/api/admin/releases", "客户端更新", "更新客户端版本号");
         assertRule("POST", "/api/admin/releases/upload", "客户端更新", "上传客户端安装包");
         assertRule("PUT", "/api/admin/vip/pricing", "VIP 定价", "修改 VIP 价目");
@@ -83,7 +78,6 @@ class RequestAuditFilterTest {
         assertEquals("#148", RequestAuditFilter.targetDetail("/api/music/148"));
         assertEquals("#148", RequestAuditFilter.targetDetail("/api/admin/lyrics-files/file/148.lrc"));
         assertEquals("#37", RequestAuditFilter.targetDetail("/api/admin/audit/approve/37"));
-        assertEquals("#12", RequestAuditFilter.targetDetail("/api/admin/users/12/edit"));
         assertNull(RequestAuditFilter.targetDetail("/api/admin/settings"));
         assertNull(RequestAuditFilter.targetDetail("/api/music/upload"));
         assertNull(RequestAuditFilter.targetDetail(null));

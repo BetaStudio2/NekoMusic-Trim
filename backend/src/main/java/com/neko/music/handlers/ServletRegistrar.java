@@ -42,15 +42,12 @@ public final class ServletRegistrar {
         context.addServlet(nekoAuthForgotPasswordHolder, "/oauth/nekocore/forgot-password");
         ServletHolder nekoAuthSsoClaimHolder = new ServletHolder(new NekoAuthSsoClaimHandler());
         context.addServlet(nekoAuthSsoClaimHolder, "/api/user/sso/claim");
-        ServletHolder nekoAuthSsoCookieLoginHolder =
-                new ServletHolder(new NekoAuthSsoCookieLoginHandler());
-        context.addServlet(nekoAuthSsoCookieLoginHolder, "/api/user/sso/cookie-login");
         ServletHolder nekoAuthSsoAuthorizeHolder = new ServletHolder(new NekoAuthSsoStartHandler());
         context.addServlet(nekoAuthSsoAuthorizeHolder, "/api/user/sso/start");
-        ServletHolder nekoAuthSsoLoginEntryHolder = new ServletHolder(new NekoAuthSsoStartHandler());
-        context.addServlet(nekoAuthSsoLoginEntryHolder, "/api/user/sso/login-entry");
         ServletHolder nekoAuthSsoPasswordResetHolder = new ServletHolder(new NekoAuthSsoStartHandler());
         context.addServlet(nekoAuthSsoPasswordResetHolder, "/api/user/sso/password-reset-url");
+        ServletHolder nekoAuthSsoLogoutHolder = new ServletHolder(new NekoAuthSsoStartHandler());
+        context.addServlet(nekoAuthSsoLogoutHolder, "/api/user/sso/logout-url");
         ServletHolder nekoAuthPortalHolder = new ServletHolder(new NekoAuthPortalHandler());
         context.addServlet(nekoAuthPortalHolder, "/api/user/sso/portal-url");
         
@@ -87,18 +84,10 @@ public final class ServletRegistrar {
         ServletHolder adminStatsHolder = new ServletHolder(new AdminStatsHandler());
         context.addServlet(adminStatsHolder, "/api/admin/stats");
 
-        // 注册管理员用户管理API处理器
-        ServletHolder adminUserManagementHolder = new ServletHolder(new AdminUserManagementHandler());
-        context.addServlet(adminUserManagementHolder, "/api/admin/users/*");
-
         // 注册管理员创建API处理器
         ServletHolder adminCreateHolder = new ServletHolder(new AdminCreateHandler());
         context.addServlet(adminCreateHolder, "/api/admin/create");
 
-        // 注册管理员创建普通用户API处理器
-        ServletHolder adminCreateUserHolder = new ServletHolder(new AdminCreateUserHandler());
-        context.addServlet(adminCreateUserHolder, "/api/admin/create-user");
-        
         // 注册图表数据API处理器
         ServletHolder chartDataHolder = new ServletHolder(new ChartDataHandler());
         context.addServlet(chartDataHolder, "/api/admin/chart-data");
@@ -211,12 +200,6 @@ public final class ServletRegistrar {
         ServletHolder sliderCaptchaVerifyHolder = new ServletHolder(new SliderCaptchaVerifyHandler());
         context.addServlet(sliderCaptchaVerifyHolder, "/api/captcha/slider/verify");
         
-        // 注册用户头像上传API处理器（更具体的路径先注册）
-        ServletHolder userAvatarUploadHolder = new ServletHolder(new UserAvatarUploadHandler());
-        jakarta.servlet.MultipartConfigElement avatarMultipartConfig = new jakarta.servlet.MultipartConfigElement(System.getProperty("java.io.tmpdir"));
-        userAvatarUploadHolder.getRegistration().setMultipartConfig(avatarMultipartConfig);
-        context.addServlet(userAvatarUploadHolder, "/api/user/avatar/upload");
-        
         // 注册用户头像API处理器
         ServletHolder userAvatarHolder = new ServletHolder(new UserAvatarHandler());
         context.addServlet(userAvatarHolder, "/api/user/avatar/*");
@@ -224,10 +207,6 @@ public final class ServletRegistrar {
         // 注册用户登出API处理器（服务端吊销当前 user token）
         ServletHolder userLogoutHolder = new ServletHolder(new UserLogoutHandler());
         context.addServlet(userLogoutHolder, "/api/user/logout");
-
-        // 注册用户修改昵称API处理器
-        ServletHolder userNicknameChangeHolder = new ServletHolder(new UserNicknameChangeHandler());
-        context.addServlet(userNicknameChangeHolder, "/api/user/nickname/change");
 
         // 注册用户信息API处理器（当前登录用户资料，客户端启动时刷新昵称等）
         ServletHolder userInfoHolder = new ServletHolder(new UserInfoHandler());
@@ -245,10 +224,6 @@ public final class ServletRegistrar {
         ServletHolder userDailyRecoHolder = new ServletHolder(new UserDailyRecommendationHandler());
         context.addServlet(userDailyRecoHolder, "/api/user/recommendations/daily");
         
-        // 注册用户管理API处理器（管理员权限）
-        ServletHolder userManagementHolder = new ServletHolder(new UserManagementHandler());
-        context.addServlet(userManagementHolder, "/api/users/*");
-
         ServletHolder vipPricingPublicHolder = new ServletHolder(new VipPricingPublicHandler());
         context.addServlet(vipPricingPublicHolder, "/api/vip/pricing");
 

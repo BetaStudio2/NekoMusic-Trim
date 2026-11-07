@@ -30,9 +30,11 @@ function safeReturnTo(value) {
   return value
 }
 
-function persistLogin(token, user) {
+function persistLogin(token, user, idToken = '') {
   const previousToken = localStorage.getItem('userToken')
   localStorage.setItem('userToken', token)
+  if (idToken) localStorage.setItem('userIdToken', idToken)
+  else localStorage.removeItem('userIdToken')
   setUser(user)
   window.dispatchEvent(
     new StorageEvent('storage', {
@@ -56,7 +58,7 @@ async function claimLogin(handoff) {
     if (!response.data?.success || !payload?.token || !payload?.user) {
       throw new Error(response.data?.message || '登录交接失败')
     }
-    persistLogin(payload.token, payload.user)
+    persistLogin(payload.token, payload.user, payload.idToken)
     window.location.replace(safeReturnTo(payload.returnTo))
   } catch (error) {
     status.value = 'error'

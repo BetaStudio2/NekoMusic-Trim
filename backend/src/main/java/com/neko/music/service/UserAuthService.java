@@ -240,7 +240,7 @@ public class UserAuthService {
     private NekoAuthAccountService requireBridge() {
         if (nekoAuthAccountService == null) {
             throw new NekoAuthAccountService.AccountBridgeException(
-                    503, "NEKO_AUTH_NOT_CONFIGURED", "未配置 NekoAuth 账号桥接", 0);
+                    503, "NEKO_AUTH_NOT_CONFIGURED", "未配置 NekoAuth 登录服务", 0);
         }
         return nekoAuthAccountService;
     }
@@ -338,11 +338,6 @@ public class UserAuthService {
                     exception.status(), exception.code());
             return false;
         }
-    }
-
-    /** 把当前短期 OAuth 令牌换成 NekoAuth 所有的长期第一方令牌。 */
-    public String exchangeAccessToken(String token) {
-        return requireBridge().exchangeToken(token).accessToken();
     }
 
     private Optional<NekoAuthAccountService.Introspection> introspectToken(String token) {

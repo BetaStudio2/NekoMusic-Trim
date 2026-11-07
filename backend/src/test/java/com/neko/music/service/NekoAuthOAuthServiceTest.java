@@ -118,19 +118,11 @@ class NekoAuthOAuthServiceTest {
     @DisplayName("账号页面目标只允许 account / register / forgot-password")
     void accountPortalTargetIsValidated() {
         NekoAuthOAuthService service = new NekoAuthOAuthService(
-                null, null, null, null, OBJECT_MAPPER);
+                null, null, null, OBJECT_MAPPER);
         NekoAuthOAuthService.OAuthLoginException invalid = assertThrows(
                 NekoAuthOAuthService.OAuthLoginException.class,
                 () -> service.portalUrl("admin"));
         assertEquals("invalid_portal_target", invalid.code());
-    }
-
-    @Test
-    @DisplayName("Web 登录回跳使用回调地址的站点根")
-    void webLoginEntryUsesCallbackOrigin() throws Exception {
-        assertEquals("https://music.nekocore.cn/",
-                NekoAuthOAuthService.originOf(
-                        "https://music.nekocore.cn/oauth/nekocore/callback"));
     }
 
     private static void assertInvalid(String value) {

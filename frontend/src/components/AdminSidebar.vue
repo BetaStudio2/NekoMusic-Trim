@@ -104,9 +104,6 @@ const navGroups = computed(() => {
   }
 
   const ops = []
-  if (hasPermission('user_view')) {
-    ops.push({ to: '/admin/users', icon: 'users', label: '用户管理' })
-  }
   if (hasPermission('user_edit')) {
     ops.push({ to: '/admin/vip-pricing', icon: 'gem', label: 'VIP 价目' })
   }

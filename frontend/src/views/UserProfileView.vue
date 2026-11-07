@@ -10,25 +10,17 @@
             :src="userAvatar"
             :alt="$t('nav.avatarAlt')"
             class="profile__avatar"
-            :class="{ 'profile__avatar--busy': avatarUploading }"
             @error="handleAvatarError"
           />
-          <input
-            id="avatar-upload"
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp,image/bmp"
-            class="profile__file"
-            :disabled="avatarUploading"
-            @change="handleAvatarUpload"
-          />
-          <label
-            for="avatar-upload"
+          <button
+            type="button"
             class="profile__avatar-btn"
-            :class="{ 'profile__avatar-btn--busy': avatarUploading }"
-            :title="avatarUploading ? $t('profile.avatarUploading') : $t('profile.changeAvatar')"
+            :title="$t('profile.changeAvatar')"
+            :disabled="accountCenterLoading"
+            @click="openNekoAuthAccountCenter"
           >
-            <NIcon :name="avatarUploading ? 'loader-circle' : 'image-plus'" :size="16" />
-          </label>
+            <NIcon name="user" :size="16" />
+          </button>
         </div>
 
         <div class="profile__ident">
@@ -137,7 +129,7 @@ import NIcon from '@/icons/NIcon.vue'
 import { NButton } from '@/ui'
 import { PageShell, AmbientBackdrop } from '@/layouts'
 import { formatVipExpiresAt, syncUserVipFromPlaylistsApi, USER_VIP_SYNC_EVENT } from '@/utils/userVip.js'
-import { avatarUrl, useAvatarVersion, bumpAvatarVersion } from '@/utils/userAvatar.js'
+import { avatarUrl, useAvatarVersion } from '@/utils/userAvatar.js'
 import { openAuthDialog } from '@/composables/useAuthDialog'
 import { useAuth } from '@/composables/useAuth'
 import { getUser, loadUserInfo } from '@/utils/userStore.js'
@@ -243,68 +235,6 @@ const openNekoAuthAccountCenter = async () => {
     toast.error(error.message || t('profile.accountCenterFailed'))
   } finally {
     accountCenterLoading.value = false
-  }
-}
-
-// 头像上传：最大 10MiB（与后端 ImageUploadValidator 限制保持一致）
-const MAX_AVATAR_BYTES = 10 * 1024 * 1024
-const avatarUploading = ref(false)
-
-// 处理头像上传
-const handleAvatarUpload = async (event) => {
-  const input = event.target
-  const file = input.files && input.files[0]
-  if (!file) return
-
-  // 清空 input，保证连续选择同一张图片也能触发 change
-  const resetInput = () => {
-    input.value = ''
-  }
-
-  if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp'].includes(file.type)) {
-    toast.error(t('profile.pickImage'))
-    resetInput()
-    return
-  }
-  if (file.size > MAX_AVATAR_BYTES) {
-    toast.error(t('profile.avatarTooLarge'))
-    resetInput()
-    return
-  }
-
-  const token = localStorage.getItem('userToken')
-  if (!token) {
-    toast.error(t('profile.sessionExpired'))
-    resetInput()
-    return
-  }
-
-  avatarUploading.value = true
-  try {
-    const form = new FormData()
-    form.append('avatar', file)
-
-    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/avatar/upload`, {
-      method: 'POST',
-      // 不要手动设置 Content-Type，交给浏览器带 multipart boundary
-      headers: { Authorization: `Bearer ${token}` },
-      body: form
-    })
-
-    const data = await response.json().catch(() => ({}))
-    if (response.ok && data.success) {
-      // 版本号变化 => 头像 URL 变化，页面与会话内其它头像同步刷新
-      bumpAvatarVersion()
-      toast.success(data.message || t('profile.avatarSuccess'))
-    } else {
-      toast.error(data.message || data.error || t('profile.avatarFailed'))
-    }
-  } catch (error) {
-    console.error('上传头像失败:', error)
-    toast.error(t('profile.avatarFailedRetry'))
-  } finally {
-    avatarUploading.value = false
-    resetInput()
   }
 }
 

@@ -113,14 +113,8 @@ public class RequestAuditFilter implements Filter {
             new OperationRule("/api/music", Set.of("POST"), "音乐管理", "新增音乐"),
             new OperationRule("/api/music", Set.of("PUT"), "音乐管理", "修改音乐"),
             new OperationRule("/api/music", Set.of("DELETE"), "音乐管理", "删除音乐"),
-            // 用户
-            new OperationRule("/api/admin/users", Set.of("PUT"), "用户管理", "修改用户信息"),
-            new OperationRule("/api/admin/users", Set.of("DELETE"), "用户管理", "删除用户"),
-            new OperationRule("/api/users", Set.of("PUT"), "用户管理", "修改用户信息"),
-            new OperationRule("/api/users", Set.of("DELETE"), "用户管理", "删除用户"),
             // 管理员账号
             new OperationRule("/api/admin/create", Set.of("POST"), "管理员管理", "创建管理员账号"),
-            new OperationRule("/api/admin/create-user", Set.of("POST"), "用户管理", "创建用户"),
             // 客户端更新
             new OperationRule("/api/admin/releases/upload", Set.of("POST"), "客户端更新", "上传客户端安装包"),
             new OperationRule("/api/admin/releases", Set.of("PUT"), "客户端更新", "更新客户端版本号"),
@@ -143,8 +137,6 @@ public class RequestAuditFilter implements Filter {
             new String[] { "/api/admin/netease", "外站补全" },
             new String[] { "/api/admin/qq", "外站补全" },
             new String[] { "/api/admin/vip/pricing", "VIP 定价" },
-            new String[] { "/api/admin/users", "用户管理" },
-            new String[] { "/api/users", "用户管理" },
             new String[] { "/api/admin/music", "音乐管理" },
             new String[] { "/api/admin/audit", "审核管理" },
             new String[] { "/api/admin/create", "管理员管理" },
@@ -469,7 +461,7 @@ public class RequestAuditFilter implements Filter {
 
     /**
      * 操作目标：取路径里最后一段「纯数字」的片段（{@code /api/music/148}、
-     * {@code /api/admin/audit/approve/37}、{@code /api/admin/users/12/edit} 都能取到），
+     * {@code /api/admin/audit/approve/37} 都能取到），
      * 让日志能看出改的是哪一条记录；取不到返回 null。
      */
     static String targetDetail(String path) {

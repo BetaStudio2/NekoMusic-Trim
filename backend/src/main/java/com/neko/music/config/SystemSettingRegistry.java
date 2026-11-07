@@ -57,11 +57,11 @@ public final class SystemSettingRegistry {
 
             // ---------- NekoAuth 统一登录（OAuth 2.0 授权码） ----------
             flag("oauth.enabled", Group.AUTH, "启用浏览器 OAuth 登录", false,
-                    "控制浏览器授权码登录入口；旧邮箱密码 API 始终由 NekoAuth 账号桥接处理，需配置下方客户端凭据"),
+                    "控制 NekoAuth OAuth 登录入口，需配置下方客户端凭据"),
             text("oauth.issuer", Group.AUTH, "NekoAuth 根地址", "https://auth.nekocore.cn",
                     "OAuth 颁发者根地址，不带末尾斜杠；生产环境必须使用 HTTPS"),
             text("oauth.client_id", Group.AUTH, "客户端 ID", "",
-                    "NekoAuth 管理员自行注册的机密客户端 ID；该客户端还需包含 account:bridge scope 才能供服务端账号桥接使用"),
+                    "NekoAuth 管理员自行注册的机密客户端 ID"),
             secret("oauth.client_secret", Group.AUTH, "客户端密钥",
                     "机密客户端密钥，只写不读；泄露后请在 NekoAuth 后台轮换"),
             text("oauth.redirect_uri", Group.AUTH, "回调地址",

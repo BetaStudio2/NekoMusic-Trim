@@ -4,7 +4,6 @@ import com.neko.music.database.UserAccountStore;
 import com.neko.music.model.AdminAccount;
 import com.neko.music.model.UserAccount;
 import com.neko.music.model.UserProfile;
-import com.neko.music.service.NekoAuthAccountService;
 import com.neko.music.service.UserManagementService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,52 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UserProfileHandlersTest {
-
-    @Test
-    void nicknameChangeReturnsSavedNicknameAndDisablesCaching() throws Exception {
-        FakeStore store = new FakeStore();
-        RecordingAuthBridge authBridge = new RecordingAuthBridge();
-        UserNicknameChangeHandler handler = new UserNicknameChangeHandler(
-                new UserManagementService(store, new RecordingRevoker(), authBridge), request -> 7);
-        CapturingResponse capture = new CapturingResponse();
-
-        handler.doPost(request("{\"nickname\":\"  喵喵  \"}"), responseProxy(capture));
-
-        assertEquals(200, capture.status);
-        assertEquals("private, no-store", capture.headers.get("Cache-Control"));
-        assertTrue(capture.body().contains("\"nickname\":\"喵喵\""));
-        assertEquals("喵喵", authBridge.nickname);
-    }
-
-    @Test
-    void nicknameChangeRejectsInvalidLength() throws Exception {
-        UserNicknameChangeHandler handler = new UserNicknameChangeHandler(
-                new UserManagementService(new FakeStore(), new RecordingRevoker(),
-                        new RecordingAuthBridge()), request -> 7);
-        CapturingResponse capture = new CapturingResponse();
-
-        handler.doPost(request("{\"nickname\":\"" + "x".repeat(33) + "\"}"), responseProxy(capture));
-
-        assertEquals(400, capture.status);
-        assertTrue(capture.body().contains("昵称长度"));
-    }
-
-    @Test
-    void nicknameChangePropagatesAuthNicknameFieldError() throws Exception {
-        UserNicknameChangeHandler handler = new UserNicknameChangeHandler(
-                new UserManagementService(new FakeStore(), new RecordingRevoker(),
-                        new RejectingNicknameAuthBridge(
-                                new NekoAuthAccountService.AccountBridgeException(
-                                        400, "VALIDATION_ERROR", "提交的数据不符合要求", 0,
-                                        Map.of("nickname", "昵称不能包含控制字符")))),
-                request -> 7);
-        CapturingResponse capture = new CapturingResponse();
-
-        handler.doPost(request("{\"nickname\":\"合法昵称\"}"), responseProxy(capture));
-
-        assertEquals(400, capture.status);
-        assertTrue(capture.body().contains("昵称不能包含控制字符"));
-    }
 
     @Test
     void userInfoReturnsProfileWithPrivateNoStoreCache() throws Exception {
@@ -226,34 +179,6 @@ class UserProfileHandlersTest {
         @Override
         public boolean deleteUser(int id) {
             return false;
-        }
-    }
-
-    private static class RecordingAuthBridge extends NekoAuthAccountService {
-        private String nicknameEmail;
-        private String nickname;
-
-        RecordingAuthBridge() {
-            super(null, null);
-        }
-
-        @Override
-        public void updateNickname(String email, String nickname) {
-            this.nicknameEmail = email;
-            this.nickname = nickname;
-        }
-    }
-
-    private static final class RejectingNicknameAuthBridge extends RecordingAuthBridge {
-        private final NekoAuthAccountService.AccountBridgeException exception;
-
-        RejectingNicknameAuthBridge(NekoAuthAccountService.AccountBridgeException exception) {
-            this.exception = exception;
-        }
-
-        @Override
-        public void updateNickname(String email, String nickname) {
-            throw exception;
         }
     }
 

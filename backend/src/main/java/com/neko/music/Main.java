@@ -218,7 +218,7 @@ public class Main {
         userAuthService = new UserAuthService(
                 databaseManager, nekoAuthAccountService, nicknameResolver);
         nekoAuthOAuthService = new NekoAuthOAuthService(
-                configManager, redisService, userAuthService, nekoAuthAccountService, objectMapper);
+                configManager, redisService, userAuthService, objectMapper);
         userManagementService = new UserManagementService(
                 new com.neko.music.database.JdbcUserAccountStore(databaseManager),
                 new UserManagementService.SessionRevoker() {

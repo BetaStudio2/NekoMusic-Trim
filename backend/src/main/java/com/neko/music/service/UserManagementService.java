@@ -8,7 +8,6 @@ import com.neko.music.model.UserAccount;
 import com.neko.music.model.UserProfile;
 import com.neko.music.util.AdminPermissionUtil;
 import com.neko.music.util.AdminPermissionUtil.Permission;
-import com.neko.music.util.NicknameValidator;
 import de.mkammerer.argon2.Argon2;
 import de.mkammerer.argon2.Argon2Factory;
 import org.slf4j.Logger;
@@ -25,7 +24,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -122,51 +120,6 @@ public final class UserManagementService {
         }
     }
 
-    public String changeUserNickname(int userId, String nickname) throws UserManagementException {
-        String normalizedNickname = trim(nickname);
-        String validationError = NicknameValidator.validate(normalizedNickname);
-        if (validationError != null) {
-            throw UserManagementException.validation(validationError);
-        }
-
-        try {
-            if (nekoAuthAccountService == null) {
-                throw UserManagementException.internal("auth.service_unavailable", null);
-            }
-            UserProfile profile = store.findUserProfile(userId)
-                    .orElseThrow(() -> UserManagementException.notFound("user.not_exists"));
-            nekoAuthAccountService.updateNickname(profile.email(), normalizedNickname);
-            logger.info("用户 {} 已通过 NekoAuth 修改昵称: {}", userId, normalizedNickname);
-            return normalizedNickname;
-        } catch (SQLException e) {
-            throw databaseFailure("user.nickname.change_failed", e);
-        } catch (NekoAuthAccountService.AccountBridgeException e) {
-            throw nicknameBridgeFailure(e);
-        }
-    }
-
-    /** 头像上传只写 NekoAuth。 */
-    public void uploadUserAvatar(int userId, java.nio.file.Path avatarFile)
-            throws UserManagementException {
-        if (nekoAuthAccountService == null) {
-            throw UserManagementException.internal("auth.service_unavailable", null);
-        }
-        try {
-            UserProfile profile = store.findUserProfile(userId)
-                    .orElseThrow(() -> UserManagementException.notFound("user.not_exists"));
-            if (profile.authUserId() == null || profile.authUserId() <= 0) {
-                throw UserManagementException.internal("auth.account_not_linked", null);
-            }
-            nekoAuthAccountService.uploadAvatar(profile.authUserId(), avatarFile);
-            logger.info("用户 {} 已通过 NekoAuth 更新头像: authUserId={}",
-                    userId, profile.authUserId());
-        } catch (SQLException e) {
-            throw databaseFailure("user.avatar.upload_failed", e);
-        } catch (NekoAuthAccountService.AccountBridgeException e) {
-            throw bridgeFailure(e, "user.avatar.upload_failed");
-        }
-    }
-
     public void createAdmin(Admin actor, String username, String email, String rawPassword, String role)
             throws UserManagementException {
         requirePermission(actor, Permission.ADMIN_ADD);
@@ -211,52 +164,6 @@ public final class UserManagementService {
         }
     }
 
-    public void createUser(Admin actor, String nickname, String email, String rawPassword)
-            throws UserManagementException {
-        requireActor(actor);
-        if (!AdminPermissionUtil.isSuperAdmin(actor)) {
-            throw UserManagementException.forbidden("admin.user.create_forbidden");
-        }
-
-        String normalizedNickname = trim(nickname);
-        if (NicknameValidator.validate(normalizedNickname) != null) {
-            throw UserManagementException.validation("admin.user.nickname_invalid");
-        }
-
-        String normalizedEmail = normalizeEmail(email);
-        validateRequiredEmail(normalizedEmail, "admin.user.email_required", "admin.user.email_invalid");
-        validatePassword(rawPassword, "admin.user.password_too_short");
-
-        try {
-            Optional<Long> boundAuthId = store.findUserAuthIdByEmail(normalizedEmail);
-            if (boundAuthId.isPresent()) {
-                throw UserManagementException.conflict("admin.user.email_exists");
-            }
-            if (nekoAuthAccountService == null) {
-                throw UserManagementException.internal("auth.service_unavailable", null);
-            }
-            NekoAuthAccountService.Account account =
-                    nekoAuthAccountService.adminCreate(normalizedEmail, rawPassword, normalizedNickname);
-            String authNickname = account.nickname() == null || account.nickname().isBlank()
-                    ? normalizedNickname : account.nickname();
-            if (store.userEmailExists(normalizedEmail)) {
-                store.bindUserAuthId(normalizedEmail, account.id());
-            } else {
-                store.createUser(normalizedEmail);
-                store.bindUserAuthId(normalizedEmail, account.id());
-            }
-            logger.info("管理员 {} 通过 NekoAuth 创建普通用户 {} authUserId={}",
-                    actor.username(), authNickname, account.id());
-        } catch (SQLException e) {
-            if (isDuplicateKey(e)) {
-                throw UserManagementException.conflict("admin.user.email_exists");
-            }
-            throw databaseFailure("admin.user.create_failed", e);
-        } catch (NekoAuthAccountService.AccountBridgeException e) {
-            throw bridgeFailure(e, "admin.user.create_failed");
-        }
-    }
-
     public void updateAdminPassword(Admin actor, int adminId, String rawPassword)
             throws UserManagementException {
         requireActor(actor);
@@ -282,44 +189,6 @@ public final class UserManagementService {
         }
     }
 
-    public void updateUser(Admin actor, int userId, String rawPassword, boolean vipSpecified, String vipRaw)
-            throws UserManagementException {
-        requirePermission(actor, Permission.USER_EDIT);
-
-        String password = rawPassword == null ? "" : rawPassword;
-        boolean passwordSpecified = !password.isBlank();
-        if (!passwordSpecified && !vipSpecified) {
-            throw UserManagementException.validation("admin.user.update_fields_required");
-        }
-        if (passwordSpecified) {
-            validatePassword(password, "admin.user.password_too_short");
-        }
-        Timestamp vipExpiresAt = vipSpecified ? parseVipExpiresAt(vipRaw) : null;
-
-        try {
-            UserAccount account = store.findUser(userId)
-                    .orElseThrow(() -> UserManagementException.notFound("admin.user.not_found"));
-            if (passwordSpecified) {
-                if (nekoAuthAccountService == null) {
-                    throw UserManagementException.internal("auth.service_unavailable", null);
-                }
-                nekoAuthAccountService.adminResetPassword(account.email(), password);
-            }
-            if (vipSpecified && !store.updateUserVip(userId, vipExpiresAt)) {
-                throw UserManagementException.notFound("admin.user.not_found");
-            }
-            if (passwordSpecified) {
-                revokeUserSessions(userId);
-                logger.info("管理员 {} 通过 NekoAuth 重置普通用户 {} 的密码", actor.username(), userId);
-            }
-            logger.info("管理员 {} 更新普通用户 {}", actor.username(), userId);
-        } catch (SQLException e) {
-            throw databaseFailure("admin.user.update_failed", e);
-        } catch (NekoAuthAccountService.AccountBridgeException e) {
-            throw bridgeFailure(e, "admin.user.update_failed");
-        }
-    }
-
     public void deleteAdmin(Admin actor, int adminId) throws UserManagementException {
         requirePermission(actor, Permission.ADMIN_DELETE);
         if (actor.id() == adminId) {
@@ -337,19 +206,6 @@ public final class UserManagementService {
             logger.info("管理员 {} 删除管理员 {}", actor.username(), adminId);
         } catch (SQLException e) {
             throw databaseFailure("admin.account.delete_failed", e);
-        }
-    }
-
-    public void deleteUser(Admin actor, int userId) throws UserManagementException {
-        requirePermission(actor, Permission.USER_DELETE);
-        try {
-            if (!store.deleteUser(userId)) {
-                throw UserManagementException.notFound("admin.user.not_found");
-            }
-            revokeUserSessions(userId);
-            logger.info("管理员 {} 删除普通用户 {}", actor.username(), userId);
-        } catch (SQLException e) {
-            throw databaseFailure("admin.user.delete_failed", e);
         }
     }
 
@@ -423,49 +279,9 @@ public final class UserManagementService {
         }
     }
 
-    private void revokeUserSessions(int userId) {
-        try {
-            sessionRevoker.revokeUser(userId);
-        } catch (Exception e) {
-            logger.error("吊销用户会话失败 userId={}", userId, e);
-        }
-    }
-
     private static UserManagementException databaseFailure(String messageKey, SQLException cause) {
         logger.error("用户管理数据库操作失败", cause);
         return UserManagementException.internal(messageKey, cause);
-    }
-
-    private static UserManagementException bridgeFailure(
-            NekoAuthAccountService.AccountBridgeException error, String fallbackKey) {
-        if (error.invalidCredentials()) {
-            return UserManagementException.validation("auth.password_change.old_wrong");
-        }
-        return switch (error.code()) {
-            case "PASSWORD_UNCHANGED" -> UserManagementException.validation("auth.password_change.same_as_old");
-            case "WEAK_PASSWORD" -> UserManagementException.validation("admin.user.password_too_short");
-            case "EMAIL_TAKEN" -> UserManagementException.conflict("admin.user.email_exists");
-            case "NEKO_AUTH_NOT_CONFIGURED", "NEKO_AUTH_UNAVAILABLE" ->
-                    UserManagementException.internal("auth.service_unavailable", error);
-            default -> UserManagementException.internal(fallbackKey, error);
-        };
-    }
-
-    private static UserManagementException nicknameBridgeFailure(
-            NekoAuthAccountService.AccountBridgeException error) {
-        if (error.status() != 400) {
-            return bridgeFailure(error, "user.nickname.change_failed");
-        }
-        String nicknameError = error.field("nickname");
-        if (nicknameError != null && !nicknameError.isBlank()) {
-            return UserManagementException.validation(nicknameError);
-        }
-        if (error.field("email") != null) {
-            logger.warn("NekoAuth 拒绝昵称修改：本地邮箱快照未通过校验");
-            return UserManagementException.validation("账号邮箱信息异常，请联系管理员喵");
-        }
-        logger.warn("NekoAuth 拒绝昵称修改: code={} message={}", error.code(), error.getMessage());
-        return UserManagementException.validation("NekoAuth 未接受昵称修改请求喵");
     }
 
     private static boolean isDuplicateKey(SQLException e) {

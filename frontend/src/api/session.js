@@ -26,11 +26,28 @@ export function logoutUserSession() {
   return postLogout('/api/user/logout', token)
 }
 
-/** 全局退出：NekoMusic 后端会同时撤销 Auth 的父域共享会话。 */
+/** 全局退出：使用标准 OIDC RP-Initiated Logout 退出 Auth 浏览器会话。 */
 export async function logoutUserGlobally(tokenOverride = null) {
   if (typeof window === 'undefined') return false
   const token = tokenOverride || localStorage.getItem('userToken')
   await postLogout('/api/user/logout', token)
+  const idToken = localStorage.getItem('userIdToken')
+  if (!idToken) return false
+  try {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/logout-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    })
+    const body = await response.json().catch(() => ({}))
+    const url = body?.data?.url
+    if (response.ok && body?.success && typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      window.location.assign(url)
+      return true
+    }
+  } catch {
+    /* 仅吊销当前 access token */
+  }
   return false
 }
 
