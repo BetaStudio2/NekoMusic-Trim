@@ -34,12 +34,14 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * NekoAuth 统一登录（OpenID Connect 授权码 + 机密客户端 + PKCE S256）。
+ * NekoAuth 原生客户端登录（OpenID Connect 授权码 + 机密客户端 + PKCE S256）。
  *
  * <p>端点来自 NekoAuth 的 OIDC 发现文档。授权码只在服务端用 HTTP Basic 交换，客户端密钥不会进入
  * 浏览器；ID Token 通过 JWKS 验签并校验 issuer、audience、azp、nonce 与 UserInfo 的 subject。
  * 浏览器只拿到最终的一次性 handoff，再用它领取 NekoAuth 签发的用户 Token。state 存 Redis、只消费一次，
  * 并把登录前的相对路径绑定在里面，回调时不再接受客户端传入的跳转地址，避免开放重定向。</p>
+ *
+ * <p>Web 不使用本服务，而是通过 NekoAuth 父域共享会话恢复登录态。</p>
  *
  * <p><b>昵称边界：</b>NekoAuth 是昵称唯一权威源。本服务读取 UserInfo 的
  * {@code sub}/{@code email} 匹配本地资料；{@code name} 只用于本次响应，不写入本地数据库。</p>
@@ -103,7 +105,7 @@ public final class NekoAuthOAuthService {
         String scopes = requiredScopes();
         validateRedirectUri(redirectUri);
         String safeReturnTo = normalizeReturnTo(returnTo);
-        String safeClient = normalizeClient(client);
+        String safeClient = normalizeOidcClient(client);
 
         String state = randomToken(32);
         String codeVerifier = randomToken(48);
@@ -245,7 +247,7 @@ public final class NekoAuthOAuthService {
         validateIdToken(discovery, tokens.idToken(), tokens.accessToken(),
                 stored.nonce(), textOrEmpty(userInfo, "sub"));
         return createLocalSession(tokens.accessToken(), userInfo, stored.returnTo(),
-                normalizeClient(stored.client()), tokens.idToken());
+                normalizeOidcClient(stored.client()), tokens.idToken());
     }
 
     /**
@@ -740,6 +742,16 @@ public final class NekoAuthOAuthService {
             throw new OAuthLoginException("invalid_client_type", "不支持的客户端类型");
         }
         return value;
+    }
+
+    /** OIDC 只供原生客户端使用；Web 必须走 NekoAuth 父域共享会话。 */
+    static String normalizeOidcClient(String client) throws OAuthLoginException {
+        String normalized = normalizeClient(client);
+        if ("web".equals(normalized)) {
+            throw new OAuthLoginException(
+                    "web_oidc_disabled", "Web 登录必须使用 NekoAuth 共享会话");
+        }
+        return normalized;
     }
 
     static String originOf(String value) throws OAuthLoginException {

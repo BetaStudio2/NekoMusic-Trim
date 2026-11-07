@@ -14,6 +14,11 @@ import { initPwa } from './composables/usePwa.js'
 import { installI18n, t } from './i18n'
 import API_CONFIG from './config/apiConfig.js'
 
+const SHARED_SESSION_TOKEN_PREFIX = 'nekosso_'
+const AUTH_SESSION_HINT_STORAGE_KEY = 'nekoAuthSessionHint'
+const AUTH_SHARED_REDIRECT_STORAGE_KEY = 'nekoAuthSharedRedirectAt'
+const AUTH_SHARED_REDIRECT_COOLDOWN_MS = 5 * 60_000
+
 /**
  * 首屏骨架（index.html 的 #app-boot）在 JS 执行前就已可见，其中文案写死为中文。
  * 这里在挂载前按已确定的语言替换品牌名与提示语；Vue 一旦挂载，整个 #app 会被替换掉。
@@ -111,15 +116,67 @@ app.use(VueToastification, {
 
 function clearLocalSession() {
   const previous = getToken()
-  if (!previous) return
   localStorage.removeItem('userToken')
   localStorage.removeItem('userIdToken')
+  localStorage.removeItem(AUTH_SESSION_HINT_STORAGE_KEY)
   clearUser()
+  if (!previous) return
   window.dispatchEvent(new StorageEvent('storage', {
     key: 'userToken',
     oldValue: previous,
     newValue: null,
   }))
+}
+
+function isSharedSessionToken(token) {
+  return typeof token === 'string' && token.startsWith(SHARED_SESSION_TOKEN_PREFIX)
+}
+
+function readAuthSessionHint() {
+  if (typeof document === 'undefined') return ''
+  const prefix = 'nekoauth_session_hint='
+  const cookie = document.cookie
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix))
+  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : ''
+}
+
+/**
+ * Auth 已有浏览器会话、但尚未写入共享会话 Cookie 时，经 Auth 登录页完成一次
+ * 普通回跳。Auth 会在 bootstrap 刷新时补发共享 Cookie；这不是 OIDC 授权。
+ */
+async function redirectToAuthForSharedSession() {
+  if (!readAuthSessionHint()) return false
+  try {
+    const lastAttempt = Number(sessionStorage.getItem(AUTH_SHARED_REDIRECT_STORAGE_KEY) || 0)
+    if (Date.now() - lastAttempt < AUTH_SHARED_REDIRECT_COOLDOWN_MS) return false
+    sessionStorage.setItem(AUTH_SHARED_REDIRECT_STORAGE_KEY, String(Date.now()))
+  } catch {
+    return false
+  }
+
+  const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  const returnTo = current.startsWith('/oauth/nekocore/') || current.startsWith('/sso/') ? '/' : current
+  try {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/login-entry`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ client: 'web', returnTo: returnTo || '/' }),
+    })
+    const body = await response.json().catch(() => ({}))
+    const url = body?.data?.url
+    if (response.ok && body?.success && typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      window.location.assign(url)
+      return true
+    }
+  } catch {
+    /* Auth 暂时不可用时保留当前未登录状态，稍后再试 */
+  }
+  sessionStorage.removeItem(AUTH_SHARED_REDIRECT_STORAGE_KEY)
+  return false
 }
 
 /** 当前用户的 OAuth access token 是否仍被 Auth 接受。 */
@@ -128,11 +185,14 @@ async function validateSharedSession() {
   if (!token) return false
   try {
     const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/info`, {
+      credentials: 'include',
       cache: 'no-store',
     })
     if (response.status === 401 || response.status === 403) {
       clearLocalSession()
-      return false
+      // 本地共享令牌可能因 Redis 重启或会话轮换失效，但 Auth 浏览器会话
+      // 仍有效；立即重新兑换一次，避免要等到下一轮轮询才恢复登录态。
+      return syncSharedSsoLogin()
     }
     return response.ok
   } catch {
@@ -142,19 +202,42 @@ async function validateSharedSession() {
 
 async function refreshSharedSessionIfVisible() {
   if (document.visibilityState !== 'visible') return
-  if (getToken()) {
+  const token = getToken()
+  if (isSharedSessionToken(token)) {
+    const hint = readAuthSessionHint()
+    if (!hint) {
+      // Auth 清除了父域提示 Cookie，说明共享会话已经退出；不要等到业务
+      // 请求失败后才让顶栏回到未登录状态。
+      clearLocalSession()
+      return
+    }
+    if (localStorage.getItem(AUTH_SESSION_HINT_STORAGE_KEY) !== hint) {
+      await syncSharedSsoLogin()
+      return
+    }
     await validateSharedSession()
-  } else {
+  } else if (!token) {
     await syncSharedSsoLogin()
+  } else {
+    // 旧页面可能还持有 OIDC access token；看到父域登录提示后主动换成
+    // 共享会话令牌，让已有用户也立即进入新的跨子域退出链路。
+    const hint = readAuthSessionHint()
+    if (hint && localStorage.getItem(AUTH_SESSION_HINT_STORAGE_KEY) !== hint) {
+      await syncSharedSsoLogin()
+    } else {
+      await validateSharedSession()
+    }
   }
 }
 
 /** 读取父域共享会话，直接恢复 Web 登录态；不进入 OIDC 授权流程。 */
 async function syncSharedSsoLogin() {
   const previousToken = getToken()
+  const hint = readAuthSessionHint()
   try {
     const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/shared-session`, {
       method: 'POST',
+      credentials: 'include',
       cache: 'no-store',
     })
     const body = await response.json().catch(() => ({}))
@@ -162,6 +245,9 @@ async function syncSharedSsoLogin() {
     const user = body?.data?.user
     if (response.ok && body?.success && typeof token === 'string' && token && user) {
       localStorage.setItem('userToken', token)
+      if (hint) localStorage.setItem(AUTH_SESSION_HINT_STORAGE_KEY, hint)
+      else localStorage.removeItem(AUTH_SESSION_HINT_STORAGE_KEY)
+      sessionStorage.removeItem(AUTH_SHARED_REDIRECT_STORAGE_KEY)
       setUser(user)
       window.dispatchEvent(new StorageEvent('storage', {
         key: 'userToken',
@@ -170,7 +256,14 @@ async function syncSharedSsoLogin() {
       }))
       return true
     }
-    if (response.status === 401 && previousToken) clearLocalSession()
+    if ((response.status === 401 || response.status === 403)
+        && previousToken
+        && isSharedSessionToken(previousToken)) {
+      clearLocalSession()
+    }
+    if (response.status === 401 || response.status === 403) {
+      await redirectToAuthForSharedSession()
+    }
   } catch {
     /* Auth 暂时不可用时保留当前本地登录态 */
   }
@@ -183,15 +276,41 @@ async function syncSharedSsoLogin() {
  * 网络慢最多等 3 秒，拉不到就照常挂载（页面会显示兜底提示）。
  */
 async function bootstrap() {
-  if (getToken()) {
-    await Promise.race([
-      validateSharedSession(),
-      new Promise((resolve) => setTimeout(resolve, 3000)),
-    ])
-  } else {
+  const token = getToken()
+  if (isSharedSessionToken(token)) {
+    const hint = readAuthSessionHint()
+    if (!hint) {
+      clearLocalSession()
+    } else if (localStorage.getItem(AUTH_SESSION_HINT_STORAGE_KEY) !== hint) {
+      await Promise.race([
+        syncSharedSsoLogin(),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ])
+    } else {
+      await Promise.race([
+        validateSharedSession(),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ])
+    }
+  } else if (!token) {
     await syncSharedSsoLogin()
+  } else {
+    const hint = readAuthSessionHint()
+    if (hint && localStorage.getItem(AUTH_SESSION_HINT_STORAGE_KEY) !== hint) {
+      await Promise.race([
+        syncSharedSsoLogin(),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ])
+    } else {
+      await Promise.race([
+        validateSharedSession(),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ])
+    }
   }
   document.addEventListener('visibilitychange', refreshSharedSessionIfVisible)
+  window.addEventListener('focus', refreshSharedSessionIfVisible)
+  window.addEventListener('pageshow', refreshSharedSessionIfVisible)
   window.setInterval(refreshSharedSessionIfVisible, 60_000)
   app.mount('#app')
 }

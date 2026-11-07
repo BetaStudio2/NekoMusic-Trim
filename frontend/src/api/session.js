@@ -12,7 +12,8 @@ async function postLogout(path, token) {
   try {
     const res = await fetch(`${API_CONFIG.BASE_URL}${path}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` }
+      credentials: 'include',
+      headers: { Authorization: `Bearer ${token}` },
     })
     return res.ok
   } catch {
@@ -26,29 +27,28 @@ export function logoutUserSession() {
   return postLogout('/api/user/logout', token)
 }
 
-/** 全局退出：使用标准 OIDC RP-Initiated Logout 退出 Auth 浏览器会话。 */
+/**
+ * 全局退出。
+ *
+ * Web 登录使用 NekoAuth 写入的父域共享会话，不再走 OIDC 的浏览器授权/
+ * 注销跳转。NekoMusic 后端会在吊销本地共享令牌的同时撤销 Auth 会话族，
+ * 并把清理父域 Cookie 的响应转发给浏览器。
+ */
 export async function logoutUserGlobally(tokenOverride = null) {
   if (typeof window === 'undefined') return false
   const token = tokenOverride || localStorage.getItem('userToken')
-  await postLogout('/api/user/logout', token)
-  const idToken = localStorage.getItem('userIdToken')
-  if (!idToken) return false
   try {
-    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/logout-url`, {
+    const res = await fetch(`${API_CONFIG.BASE_URL}/api/user/logout`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken }),
+      // 本地令牌可能已过期，但 Auth 父域共享会话仍存在；此时仍需让后端按
+      // Cookie 撤销 Auth 会话，避免下次打开页面又被无感登录回来。
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
-    const body = await response.json().catch(() => ({}))
-    const url = body?.data?.url
-    if (response.ok && body?.success && typeof url === 'string' && /^https?:\/\//i.test(url)) {
-      window.location.assign(url)
-      return true
-    }
+    return res.ok
   } catch {
-    /* 仅吊销当前 access token */
+    return false
   }
-  return false
 }
 
 /** 吊销当前管理员会话（localStorage.adminToken）。 */

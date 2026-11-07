@@ -1,11 +1,13 @@
 package com.neko.music.handlers;
 
 import com.neko.music.Main;
+import com.neko.music.service.NekoAuthAccountService;
 import com.neko.music.service.RedisTokenStore;
 import com.neko.music.service.SharedWebSessionService;
 import com.neko.music.service.UserAuthService;
 import com.neko.music.util.HttpResourceCache;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -37,19 +39,36 @@ public class UserLogoutHandler extends ApiServlet {
 
         UserAuthService service = userAuthService != null ? userAuthService : Main.getUserAuthService();
         String token = RedisTokenStore.normalizeBearerToken(request.getHeader("Authorization"));
-        if (service == null || token.isEmpty()) {
+        String ssoSession = readCookie(request, "nekoauth_sso_session");
+        if (service == null) {
+            sendErrorResponse(response, HttpServletResponse.SC_SERVICE_UNAVAILABLE, "auth.logout.failed");
+            return;
+        }
+        if (token.isEmpty() && ssoSession.isBlank()) {
             sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED, "auth.login_required");
             return;
         }
 
         try {
+            boolean authSessionRevoked = false;
             SharedWebSessionService sharedSessions = Main.getSharedWebSessionService();
-            if (sharedSessions != null && sharedSessions.isSharedSessionToken(token)) {
+            if (!token.isEmpty() && sharedSessions != null
+                    && sharedSessions.isSharedSessionToken(token)) {
                 for (String cookieHeader : sharedSessions.revoke(token)) {
                     response.addHeader("Set-Cookie", cookieHeader);
+                    authSessionRevoked = true;
                 }
-            } else {
+            } else if (!token.isEmpty()) {
                 service.revokeToken(token);
+            }
+
+            // 共享会话令牌映射即使因 Redis 重启丢失，浏览器仍可能带着 Auth
+            // 父域 Cookie。登出必须以 Auth 会话为准，不能只清掉 Music 本地令牌。
+            NekoAuthAccountService authService = Main.getNekoAuthAccountService();
+            if (!authSessionRevoked && authService != null && !ssoSession.isBlank()) {
+                for (String cookieHeader : authService.logoutSharedSession(ssoSession)) {
+                    response.addHeader("Set-Cookie", cookieHeader);
+                }
             }
         } catch (Exception e) {
             logger.error("用户登出时吊销令牌失败", e);
@@ -58,5 +77,18 @@ public class UserLogoutHandler extends ApiServlet {
         }
 
         sendSuccessResponse(response, "auth.logout.ok");
+    }
+
+    private static String readCookie(HttpServletRequest request, String name) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return "";
+        }
+        for (Cookie cookie : cookies) {
+            if (name.equals(cookie.getName()) && cookie.getValue() != null) {
+                return cookie.getValue();
+            }
+        }
+        return "";
     }
 }

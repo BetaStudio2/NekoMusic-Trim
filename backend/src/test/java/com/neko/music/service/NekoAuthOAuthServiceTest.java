@@ -103,11 +103,23 @@ class NekoAuthOAuthServiceTest {
     }
 
     @Test
-    @DisplayName("SSO 客户端类型只允许 web / android / pc")
+    @DisplayName("SSO 客户端类型只允许 web / android / pc，OIDC 则只允许原生客户端")
     void ssoClientTypeIsValidated() throws Exception {
         assertEquals("web", NekoAuthOAuthService.normalizeClient(null));
         assertEquals("android", NekoAuthOAuthService.normalizeClient(" Android "));
         assertEquals("pc", NekoAuthOAuthService.normalizeClient("PC"));
+        assertEquals("android", NekoAuthOAuthService.normalizeOidcClient("android"));
+        assertEquals("pc", NekoAuthOAuthService.normalizeOidcClient("pc"));
+
+        NekoAuthOAuthService.OAuthLoginException web = assertThrows(
+                NekoAuthOAuthService.OAuthLoginException.class,
+                () -> NekoAuthOAuthService.normalizeOidcClient("web"));
+        assertEquals("web_oidc_disabled", web.code());
+        NekoAuthOAuthService.OAuthLoginException defaultWeb = assertThrows(
+                NekoAuthOAuthService.OAuthLoginException.class,
+                () -> NekoAuthOAuthService.normalizeOidcClient(null));
+        assertEquals("web_oidc_disabled", defaultWeb.code());
+
         NekoAuthOAuthService.OAuthLoginException invalid = assertThrows(
                 NekoAuthOAuthService.OAuthLoginException.class,
                 () -> NekoAuthOAuthService.normalizeClient("webview"));
