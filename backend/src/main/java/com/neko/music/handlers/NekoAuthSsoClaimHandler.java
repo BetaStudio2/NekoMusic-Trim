@@ -52,6 +52,7 @@ public final class NekoAuthSsoClaimHandler extends ApiServlet {
 
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("token", claim.accessToken());
+            data.put("idToken", claim.idToken());
             data.put("returnTo", claim.returnTo());
             data.put("user", userData);
             sendResponse(response, true, "登录成功", data);

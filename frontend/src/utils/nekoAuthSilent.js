@@ -1,5 +1,6 @@
 /** NekoAuth 父域会话提示；仅用于决定是否尝试 prompt=none，不是认证凭据。 */
 export const AUTH_SESSION_HINT_COOKIE = 'nekoauth_session_hint'
+export const AUTH_ID_TOKEN_STORAGE_KEY = 'nekoAuthIdToken'
 
 const SILENT_ATTEMPT_KEY = 'nekoauthSilentHint'
 

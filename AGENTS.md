@@ -134,6 +134,9 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
 - Web 端可使用 NekoAuth 的 `nekoauth_session_hint` 判断是否需要尝试 `prompt=none` 静默授权；该
   Cookie 只能作为登录提示，不得承载或替代访问令牌、刷新令牌，也不得把 Auth 的 HttpOnly 刷新 Cookie
   扩展到父域。
+- Web 退出必须走 NekoAuth RP-Initiated Logout 注销父域主会话，不能只清 `localStorage`；`id_token_hint`
+  只能通过 POST 表单体发送，禁止放进 URL、查询串或浏览器历史。重新登录 Auth 后，子域通过
+  `prompt=none` 自动恢复登录。
 
 ### API 文档脱敏
 

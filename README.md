@@ -93,6 +93,11 @@ token 时会自动发起一次 `prompt=none` 的 OIDC 静默授权。Auth 会话
 展示登录页或手动确认即可回到原页面；会话无效或尚未授权时静默回到游客态。该流程不共享刷新令牌，
 各子域仍通过各自登记的 OAuth 客户端完成授权。
 
+同一父域下的第一方 Web 应用在首次 `prompt=none` 时由 NekoAuth 静默建立同意记录，不再要求先行手动
+确认；普通交互式 OAuth 授权仍保留同意页。NekoMusic Web 退出时会执行 OIDC RP-Initiated Logout：
+先吊销当前 NekoMusic access token，再通过 POST 表单注销 NekoAuth 主会话并清除父域登录提示。
+之后所有子域都无法继续静默恢复登录，直到用户重新登录 NekoAuth。
+
 已有部署升级时，应把 NekoAuth 客户端登记的回调地址与 `oauth.redirect_uri` 一起更新为
 `https://music.nekocore.cn/sso/nekocore/callback`；旧 `/oauth/nekocore/callback` 仍可继续回调，
 但新部署应直接使用规范地址。
@@ -107,7 +112,7 @@ token 时会自动发起一次 `prompt=none` 的 OIDC 静默授权。Auth 会话
 - 头像与 VIP：头像由 NekoAuth 账号中心统一维护，NekoMusic 的后端头像 API 只代理 Auth；VIP 状态和到期时间继续由 NekoMusic 本地维护。
 - 旧客户端兼容：邮箱密码、注册、验证码与找回密码接口只为旧客户端保留，NekoMusic 后端转发给 NekoAuth；新客户端不得再接入这些表单。
 - 扫码登录：手机端确认时用当前有效 NekoAuth token 换取新的长期 token，PC 端仍通过原有一次性 `deliveryKey` 领取，旧扫码接口字段保持不变。
-- 登出：NekoMusic 调用 NekoAuth `/oauth2/revoke` 吊销当前 access token；本地 Redis 不保留用户 token 副本。
+- 登出：NekoMusic 先吊销当前 access token，再通过 NekoAuth `/oauth2/logout` 注销 Auth 浏览器会话；本地 Redis 不保留用户 token 副本。
 - 管理员创建/重置用户：NekoMusic 先校验管理员权限，再调用 NekoAuth 的管理员桥接接口；管理员只调整 VIP 等本地资料时不会改 NekoAuth 密码。
 
 桥接不可用或客户端配置错误时，旧 API 返回既有格式的错误响应；需要等待时保留 NekoAuth 的 `Retry-After` 语义。日志只记录操作类型、状态与用户 ID，不记录密码、验证码或 client secret。

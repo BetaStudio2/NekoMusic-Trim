@@ -125,6 +125,17 @@ class NekoAuthOAuthServiceTest {
         assertEquals("invalid_portal_target", invalid.code());
     }
 
+    @Test
+    @DisplayName("全局登出回跳地址取回调 URI 的站点根")
+    void logoutOriginUsesCallbackOrigin() throws Exception {
+        assertEquals("https://music.nekocore.cn/",
+                NekoAuthOAuthService.originOf(
+                        "https://music.nekocore.cn/oauth/nekocore/callback"));
+        assertEquals("http://localhost:5173/",
+                NekoAuthOAuthService.originOf(
+                        "http://localhost:5173/oauth/nekocore/callback"));
+    }
+
     private static void assertInvalid(String value) {
         NekoAuthOAuthService.OAuthLoginException exception = assertThrows(
                 NekoAuthOAuthService.OAuthLoginException.class,

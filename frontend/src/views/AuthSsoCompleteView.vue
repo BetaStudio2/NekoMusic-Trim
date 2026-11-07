@@ -12,6 +12,7 @@ import NIcon from '@/icons/NIcon.vue'
 import { NButton, NCard, NSpinner } from '@/ui'
 import { AmbientBackdrop, PageShell } from '@/layouts'
 import { setUser } from '@/utils/userStore.js'
+import { AUTH_ID_TOKEN_STORAGE_KEY } from '@/utils/nekoAuthSilent.js'
 
 const status = ref('loading')
 const errorMessage = ref('')
@@ -30,9 +31,11 @@ function safeReturnTo(value) {
   return value
 }
 
-function persistLogin(token, user) {
+function persistLogin(token, idToken, user) {
   const previousToken = localStorage.getItem('userToken')
   localStorage.setItem('userToken', token)
+  if (idToken) localStorage.setItem(AUTH_ID_TOKEN_STORAGE_KEY, idToken)
+  else localStorage.removeItem(AUTH_ID_TOKEN_STORAGE_KEY)
   setUser(user)
   window.dispatchEvent(
     new StorageEvent('storage', {
@@ -56,7 +59,7 @@ async function claimLogin(handoff) {
     if (!response.data?.success || !payload?.token || !payload?.user) {
       throw new Error(response.data?.message || '登录交接失败')
     }
-    persistLogin(payload.token, payload.user)
+    persistLogin(payload.token, payload.idToken || '', payload.user)
     window.location.replace(safeReturnTo(payload.returnTo))
   } catch (error) {
     status.value = 'error'

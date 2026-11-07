@@ -19,7 +19,7 @@ import { NInput, NButton } from '@/ui'
 import PwaInstallButton from '@/components/PwaInstallButton.vue'
 import LocaleSwitcher from '@/components/LocaleSwitcher.vue'
 import { playTrack, playTracks, isCurrentMusic } from '@/composables/usePlaybackBridge'
-import { logoutUserSession } from '@/api/session.js'
+import { logoutUserGlobally } from '@/api/session.js'
 import { readAuthSessionHint, rememberSilentAttempt } from '@/utils/nekoAuthSilent.js'
 import NowPlayingTag from '@/components/NowPlayingTag.vue'
 import { syncUserVipFromPlaylistsApi, USER_VIP_SYNC_EVENT } from '@/utils/userVip.js'
@@ -198,12 +198,10 @@ function goToLogin() {
   openAuthDialog('login')
 }
 
-function logout() {
+async function logout() {
   const previousToken = localStorage.getItem('userToken')
   // 显式退出后不要被同一次 Auth 会话的静默登录立刻拉回；重新登录 Auth 会产生新的提示值。
   rememberSilentAttempt(readAuthSessionHint())
-  // 先让服务端吊销令牌（只清本地无法阻止已泄露令牌继续使用），失败也不阻塞本地登出
-  logoutUserSession()
   localStorage.removeItem('userToken')
   clearUser()
   if (previousToken) {
@@ -211,7 +209,9 @@ function logout() {
       new StorageEvent('storage', { key: 'userToken', oldValue: previousToken, newValue: null })
     )
   }
-  router.push('/')
+  // 全局退出会跳转 NekoAuth 注销主会话；配置不可用时退回仅吊销当前 access token。
+  const redirected = await logoutUserGlobally(previousToken)
+  if (!redirected) router.push('/')
 }
 
 function handleClickOutside(event) {
