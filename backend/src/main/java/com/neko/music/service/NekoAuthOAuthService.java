@@ -178,6 +178,18 @@ public final class NekoAuthOAuthService {
         return issuerUri().toString() + path;
     }
 
+    /** Auth 普通登录页地址；登录完成后直接回跳第一方子域，不进入 OAuth 授权码流程。 */
+    public String webLoginEntryUrl(String returnTo) throws OAuthLoginException {
+        requireEnabled();
+        String safeReturnTo = normalizeReturnTo(returnTo);
+        String redirectUri = requireConfigured(configManager.getOAuthRedirectUri(), "oauth.redirect_uri");
+        validateRedirectUri(redirectUri);
+        String absoluteReturnTo = originOf(redirectUri)
+                + safeReturnTo.substring(1);
+        return issuerUri() + "/login?return_to="
+                + URLEncoder.encode(absoluteReturnTo, StandardCharsets.UTF_8);
+    }
+
     /**
      * 消费 state，用授权码换取 UserInfo，再把短期令牌换成 NekoAuth 长期 token 并封装成一次性 handoff。
      */
@@ -710,6 +722,20 @@ public final class NekoAuthOAuthService {
         }
         if (uri.getRawQuery() != null || uri.getFragment() != null || uri.getRawUserInfo() != null) {
             throw new OAuthLoginException("oauth_not_configured", "回调地址不能包含查询、片段或用户信息");
+        }
+    }
+
+    static String originOf(String value) throws OAuthLoginException {
+        try {
+            URI uri = URI.create(value);
+            String host = uri.getHost();
+            if (host.contains(":")) {
+                host = "[" + host + "]";
+            }
+            return uri.getScheme() + "://" + host
+                    + (uri.getPort() < 0 ? "" : ":" + uri.getPort()) + "/";
+        } catch (IllegalArgumentException exception) {
+            throw new OAuthLoginException("oauth_not_configured", "回调地址格式不正确", exception);
         }
     }
 

@@ -38,10 +38,15 @@ public final class NekoAuthSsoStartHandler extends ApiServlet {
         try {
             String path = request.getServletPath();
             StartRequest startRequest = readStartRequest(request);
-            String url = path.endsWith("/password-reset-url")
-                    ? oauthService.passwordResetUrl()
-                    : oauthService.authorizationUrl(
-                            startRequest.returnTo(), startRequest.client(), startRequest.silent());
+            String url;
+            if (path.endsWith("/password-reset-url")) {
+                url = oauthService.passwordResetUrl();
+            } else if (path.endsWith("/login-entry")) {
+                url = oauthService.webLoginEntryUrl(startRequest.returnTo());
+            } else {
+                url = oauthService.authorizationUrl(
+                        startRequest.returnTo(), startRequest.client(), startRequest.silent());
+            }
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("url", url);
             sendResponse(response, true, "跳转地址已生成", data);

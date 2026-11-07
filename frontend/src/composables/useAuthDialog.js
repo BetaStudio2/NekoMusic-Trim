@@ -23,7 +23,7 @@ export async function openAuthDialog(tab = 'login') {
       ? await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/portal-url?target=register`, {
           cache: 'no-store',
         })
-      : await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/start`, {
+      : await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/login-entry`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ client: 'web', returnTo: returnTo || '/' }),

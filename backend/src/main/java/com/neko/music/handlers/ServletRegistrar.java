@@ -47,6 +47,8 @@ public final class ServletRegistrar {
         context.addServlet(nekoAuthSsoCookieLoginHolder, "/api/user/sso/cookie-login");
         ServletHolder nekoAuthSsoAuthorizeHolder = new ServletHolder(new NekoAuthSsoStartHandler());
         context.addServlet(nekoAuthSsoAuthorizeHolder, "/api/user/sso/start");
+        ServletHolder nekoAuthSsoLoginEntryHolder = new ServletHolder(new NekoAuthSsoStartHandler());
+        context.addServlet(nekoAuthSsoLoginEntryHolder, "/api/user/sso/login-entry");
         ServletHolder nekoAuthSsoPasswordResetHolder = new ServletHolder(new NekoAuthSsoStartHandler());
         context.addServlet(nekoAuthSsoPasswordResetHolder, "/api/user/sso/password-reset-url");
         ServletHolder nekoAuthPortalHolder = new ServletHolder(new NekoAuthPortalHandler());

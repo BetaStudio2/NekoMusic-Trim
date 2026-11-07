@@ -9,7 +9,7 @@ import './design/reset.css'
 import VueToastification from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 import { installBenignPlayAbortGuard } from './utils/benignPlayAbort'
-import { getToken, loadUserInfo, setUser } from './utils/userStore.js'
+import { clearUser, getToken, setUser } from './utils/userStore.js'
 import { initPwa } from './composables/usePwa.js'
 import { installI18n, t } from './i18n'
 import API_CONFIG from './config/apiConfig.js'
@@ -110,8 +110,8 @@ app.use(VueToastification, {
 })
 
 /** Auth 登录后写入父域共享会话 Cookie；子域后端直接兑换登录态，不发生跳转。 */
-async function attemptSharedSsoLogin() {
-  if (getToken()) return false
+async function syncSharedSsoLogin() {
+  const previousToken = getToken()
   try {
     const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/cookie-login`, {
       method: 'POST',
@@ -121,7 +121,6 @@ async function attemptSharedSsoLogin() {
     const token = body?.data?.token
     const user = body?.data?.user
     if (response.ok && body?.success && typeof token === 'string' && token && user) {
-      const previousToken = localStorage.getItem('userToken')
       localStorage.setItem('userToken', token)
       setUser(user)
       window.dispatchEvent(new StorageEvent('storage', {
@@ -131,10 +130,24 @@ async function attemptSharedSsoLogin() {
       }))
       return true
     }
+    if (response.status === 401 && previousToken) {
+      localStorage.removeItem('userToken')
+      clearUser()
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'userToken',
+        oldValue: previousToken,
+        newValue: null,
+      }))
+    }
   } catch {
-    /* 没有共享会话或 Auth 暂时不可用时按游客态加载 */
+    /* Auth 暂时不可用时保留当前本地登录态 */
   }
   return false
+}
+
+async function refreshSharedSsoSessionIfVisible() {
+  if (document.visibilityState !== 'visible' || !getToken()) return
+  await syncSharedSsoLogin()
 }
 
 /**
@@ -143,14 +156,12 @@ async function attemptSharedSsoLogin() {
  * 网络慢最多等 3 秒，拉不到就照常挂载（页面会显示兜底提示）。
  */
 async function bootstrap() {
-  if (getToken()) {
-    await Promise.race([
-      loadUserInfo(),
-      new Promise((resolve) => setTimeout(resolve, 3000)),
-    ])
-  } else {
-    await attemptSharedSsoLogin()
-  }
+  await Promise.race([
+    syncSharedSsoLogin(),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ])
+  document.addEventListener('visibilitychange', refreshSharedSsoSessionIfVisible)
+  window.setInterval(refreshSharedSsoSessionIfVisible, 60_000)
   app.mount('#app')
 }
 
