@@ -18,15 +18,17 @@ export async function openAuthDialog(tab = 'login') {
   isOpen.value = false
   const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
   const returnTo = current.startsWith('/oauth/nekocore/') || current.startsWith('/sso/') ? '/' : current
-  if (tab !== 'register') {
-    window.location.assign(`/sso/nekocore/start?return_to=${encodeURIComponent(returnTo || '/')}`)
-    return
-  }
   try {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/api/user/sso/portal-url?target=register`,
-      { cache: 'no-store' }
-    )
+    const response = tab === 'register'
+      ? await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/portal-url?target=register`, {
+          cache: 'no-store',
+        })
+      : await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client: 'web', returnTo: returnTo || '/' }),
+          cache: 'no-store',
+        })
     const body = await response.json().catch(() => ({}))
     const url = body?.data?.url
     if (response.ok && body?.success && typeof url === 'string' && /^https?:\/\//i.test(url)) {
@@ -36,7 +38,7 @@ export async function openAuthDialog(tab = 'login') {
   } catch {
     /* 失败时回到 Auth 登录入口 */
   }
-  window.location.assign(`/sso/nekocore/start?return_to=${encodeURIComponent(returnTo || '/')}`)
+  redirecting = false
 }
 
 export function closeAuthDialog() {
