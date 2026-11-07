@@ -81,6 +81,7 @@ public class Main {
     private static SourceBanService sourceBanService;
     private static UserAuthService userAuthService;
     private static NekoAuthAccountService nekoAuthAccountService;
+    private static SharedWebSessionService sharedWebSessionService;
     private static NicknameResolver nicknameResolver;
     private static NekoAuthOAuthService nekoAuthOAuthService;
     private static QrLoginService qrLoginService;
@@ -214,9 +215,10 @@ public class Main {
 
         // 初始化用户认证服务
         nekoAuthAccountService = new NekoAuthAccountService(configManager, objectMapper);
+        sharedWebSessionService = new SharedWebSessionService(redisService, nekoAuthAccountService);
         nicknameResolver = new NicknameResolver(databaseManager, nekoAuthAccountService);
         userAuthService = new UserAuthService(
-                databaseManager, nekoAuthAccountService, nicknameResolver);
+                databaseManager, nekoAuthAccountService, nicknameResolver, sharedWebSessionService);
         nekoAuthOAuthService = new NekoAuthOAuthService(
                 configManager, redisService, userAuthService, objectMapper);
         userManagementService = new UserManagementService(
@@ -558,6 +560,10 @@ public class Main {
 
     public static NekoAuthAccountService getNekoAuthAccountService() {
         return nekoAuthAccountService;
+    }
+
+    public static SharedWebSessionService getSharedWebSessionService() {
+        return sharedWebSessionService;
     }
 
     public static NicknameResolver getNicknameResolver() {

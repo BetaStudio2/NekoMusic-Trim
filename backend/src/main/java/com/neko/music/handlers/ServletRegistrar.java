@@ -42,8 +42,13 @@ public final class ServletRegistrar {
         context.addServlet(nekoAuthForgotPasswordHolder, "/oauth/nekocore/forgot-password");
         ServletHolder nekoAuthSsoClaimHolder = new ServletHolder(new NekoAuthSsoClaimHandler());
         context.addServlet(nekoAuthSsoClaimHolder, "/api/user/sso/claim");
+        ServletHolder nekoAuthSharedSessionHolder =
+                new ServletHolder(new NekoAuthSharedSessionLoginHandler());
+        context.addServlet(nekoAuthSharedSessionHolder, "/api/user/sso/shared-session");
         ServletHolder nekoAuthSsoAuthorizeHolder = new ServletHolder(new NekoAuthSsoStartHandler());
         context.addServlet(nekoAuthSsoAuthorizeHolder, "/api/user/sso/start");
+        ServletHolder nekoAuthSsoLoginEntryHolder = new ServletHolder(new NekoAuthSsoStartHandler());
+        context.addServlet(nekoAuthSsoLoginEntryHolder, "/api/user/sso/login-entry");
         ServletHolder nekoAuthSsoPasswordResetHolder = new ServletHolder(new NekoAuthSsoStartHandler());
         context.addServlet(nekoAuthSsoPasswordResetHolder, "/api/user/sso/password-reset-url");
         ServletHolder nekoAuthSsoLogoutHolder = new ServletHolder(new NekoAuthSsoStartHandler());

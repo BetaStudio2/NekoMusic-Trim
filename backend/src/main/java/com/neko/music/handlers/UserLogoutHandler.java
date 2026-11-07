@@ -2,6 +2,7 @@ package com.neko.music.handlers;
 
 import com.neko.music.Main;
 import com.neko.music.service.RedisTokenStore;
+import com.neko.music.service.SharedWebSessionService;
 import com.neko.music.service.UserAuthService;
 import com.neko.music.util.HttpResourceCache;
 import jakarta.servlet.ServletException;
@@ -42,7 +43,14 @@ public class UserLogoutHandler extends ApiServlet {
         }
 
         try {
-            service.revokeToken(token);
+            SharedWebSessionService sharedSessions = Main.getSharedWebSessionService();
+            if (sharedSessions != null && sharedSessions.isSharedSessionToken(token)) {
+                for (String cookieHeader : sharedSessions.revoke(token)) {
+                    response.addHeader("Set-Cookie", cookieHeader);
+                }
+            } else {
+                service.revokeToken(token);
+            }
         } catch (Exception e) {
             logger.error("用户登出时吊销令牌失败", e);
             sendErrorResponse(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "auth.logout.failed");

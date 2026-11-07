@@ -41,6 +41,8 @@ public final class NekoAuthSsoStartHandler extends ApiServlet {
             String url;
             if (path.endsWith("/password-reset-url")) {
                 url = oauthService.passwordResetUrl();
+            } else if (path.endsWith("/login-entry")) {
+                url = oauthService.webLoginEntryUrl(startRequest.returnTo());
             } else if (path.endsWith("/logout-url")) {
                 url = oauthService.logoutUrl(startRequest.idToken());
             } else {

@@ -15,18 +15,27 @@ public class UserAuthService {
     private final DatabaseManager databaseManager;
     private final NekoAuthAccountService nekoAuthAccountService;
     private final NicknameResolver nicknameResolver;
+    private final SharedWebSessionService sharedWebSessionService;
     private static final String INTROSPECTION_SCOPE_PREFIX = "nekoAuthIntrospection:";
 
     public UserAuthService(DatabaseManager databaseManager,
                            NekoAuthAccountService nekoAuthAccountService) {
-        this(databaseManager, nekoAuthAccountService, null);
+        this(databaseManager, nekoAuthAccountService, null, null);
     }
 
     public UserAuthService(DatabaseManager databaseManager,
                            NekoAuthAccountService nekoAuthAccountService,
                            NicknameResolver nicknameResolver) {
+        this(databaseManager, nekoAuthAccountService, nicknameResolver, null);
+    }
+
+    public UserAuthService(DatabaseManager databaseManager,
+                           NekoAuthAccountService nekoAuthAccountService,
+                           NicknameResolver nicknameResolver,
+                           SharedWebSessionService sharedWebSessionService) {
         this.databaseManager = databaseManager;
         this.nekoAuthAccountService = nekoAuthAccountService;
+        this.sharedWebSessionService = sharedWebSessionService;
         this.nicknameResolver = nicknameResolver == null
                 ? new NicknameResolver(databaseManager, nekoAuthAccountService)
                 : nicknameResolver;
@@ -349,6 +358,16 @@ public class UserAuthService {
         // 若只 trim，则所有直接把原始 Authorization 头传进来的处理器（UserFavoriteHandler
         // 等）会带着 "Bearer " 去 introspect，导致「登录成功但受保护接口一律 401」。
         String normalized = RedisTokenStore.normalizeBearerToken(token);
+        if (sharedWebSessionService != null
+                && sharedWebSessionService.isSharedSessionToken(normalized)) {
+            try {
+                return sharedWebSessionService.introspect(normalized);
+            } catch (NekoAuthAccountService.NekoAuthServiceException exception) {
+                logger.warn("NekoAuth 共享会话校验失败: status={} code={}",
+                        exception.status(), exception.code());
+                return Optional.empty();
+            }
+        }
         NekoAuthAccountService.Introspection cached = RequestScope.computeIfAbsent(
                 INTROSPECTION_SCOPE_PREFIX + normalized, () -> {
                     try {

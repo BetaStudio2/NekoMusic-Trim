@@ -175,6 +175,17 @@ public final class NekoAuthOAuthService {
         return issuerUri().toString() + path;
     }
 
+    /** Auth 普通登录页地址；登录完成后直接回跳第一方子域，不进入 OIDC 授权码流程。 */
+    public String webLoginEntryUrl(String returnTo) throws OAuthLoginException {
+        requireEnabled();
+        String safeReturnTo = normalizeReturnTo(returnTo);
+        String redirectUri = requireConfigured(configManager.getOAuthRedirectUri(), "oauth.redirect_uri");
+        validateRedirectUri(redirectUri);
+        String absoluteReturnTo = originOf(redirectUri) + safeReturnTo.substring(1);
+        return issuerUri() + "/login?return_to="
+                + URLEncoder.encode(absoluteReturnTo, StandardCharsets.UTF_8);
+    }
+
     /** 标准 OIDC RP-Initiated Logout 地址。 */
     public String logoutUrl(String idToken) throws OAuthLoginException {
         requireEnabled();
@@ -729,6 +740,23 @@ public final class NekoAuthOAuthService {
             throw new OAuthLoginException("invalid_client_type", "不支持的客户端类型");
         }
         return value;
+    }
+
+    static String originOf(String value) throws OAuthLoginException {
+        try {
+            URI uri = URI.create(value);
+            String host = uri.getHost();
+            if (host == null || host.isBlank()) {
+                throw new IllegalArgumentException("host missing");
+            }
+            if (host.contains(":")) {
+                host = "[" + host + "]";
+            }
+            return uri.getScheme() + "://" + host
+                    + (uri.getPort() < 0 ? "" : ":" + uri.getPort()) + "/";
+        } catch (IllegalArgumentException exception) {
+            throw new OAuthLoginException("oauth_not_configured", "回调地址格式不正确", exception);
+        }
     }
 
     private static boolean isLoopbackHost(String host) {

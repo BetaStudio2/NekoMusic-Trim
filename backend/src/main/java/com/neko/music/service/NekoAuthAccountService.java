@@ -49,6 +49,46 @@ public class NekoAuthAccountService {
                 && !configManager.getOAuthClientSecret().isBlank();
     }
 
+    /** 通过父域共享会话 Cookie 解析 Auth 当前账号。 */
+    public SharedAccount resolveSharedSession(String ssoSession) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(issuerUri() + "/api/auth/shared-session"))
+                .timeout(HTTP_TIMEOUT)
+                .header("Cookie", "nekoauth_sso_session=" + ssoSession)
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<String> response = sendChecked(request, "解析共享登录会话", "/api/auth/shared-session");
+        JsonNode json = parseJson(response.body());
+        JsonNode id = json == null ? null : json.get("id");
+        String email = text(json, "email");
+        if (id == null || !id.canConvertToLong() || id.asLong() <= 0 || email.isBlank()) {
+            throw new NekoAuthServiceException(502, "NEKO_AUTH_BAD_RESPONSE",
+                    "NekoAuth 共享会话响应格式不正确", 0);
+        }
+        return new SharedAccount(
+                id.asLong(),
+                email,
+                text(json, "username"),
+                firstNonBlank(text(json, "nickname"), text(json, "username")),
+                text(json, "role"),
+                json.path("enabled").asBoolean(true),
+                text(json, "avatarUrl"));
+    }
+
+    /** 撤销父域共享会话，并返回需要转发给浏览器的 Set-Cookie。 */
+    public List<String> logoutSharedSession(String ssoSession) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(issuerUri() + "/api/auth/shared-session/logout"))
+                .timeout(HTTP_TIMEOUT)
+                .header("Cookie", "nekoauth_sso_session=" + ssoSession)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<String> response = sendChecked(
+                request, "退出共享登录会话", "/api/auth/shared-session/logout");
+        return response.headers().allValues("Set-Cookie");
+    }
+
     /** 按 NekoAuth 用户 ID 批量读取公开昵称；NekoAuth 是唯一权威源。 */
     public Map<Long, String> lookupNicknames(Collection<Long> authUserIds) {
         if (authUserIds == null || authUserIds.isEmpty()) {
@@ -308,6 +348,10 @@ public class NekoAuthAccountService {
     }
 
     public record AccountSummary(long id, String email, String username, String nickname) {
+    }
+
+    public record SharedAccount(long id, String email, String username, String nickname,
+                                String role, boolean enabled, String avatarUrl) {
     }
 
     public record Introspection(long userId, String email, String nickname, boolean emailVerified,

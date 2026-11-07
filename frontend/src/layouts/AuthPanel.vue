@@ -133,7 +133,7 @@ async function startNekoAuthLogin() {
       ? await axios.get(`${API_CONFIG.BASE_URL}/api/user/sso/portal-url`, {
           params: { target: 'register' },
         })
-      : await axios.post(`${API_CONFIG.BASE_URL}/api/user/sso/start`, {
+      : await axios.post(`${API_CONFIG.BASE_URL}/api/user/sso/login-entry`, {
           client: 'web',
           returnTo: safeReturnTo || '/',
         })

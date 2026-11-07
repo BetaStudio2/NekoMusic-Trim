@@ -9,7 +9,7 @@ import './design/reset.css'
 import VueToastification from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 import { installBenignPlayAbortGuard } from './utils/benignPlayAbort'
-import { clearUser, getToken } from './utils/userStore.js'
+import { clearUser, getToken, setUser } from './utils/userStore.js'
 import { initPwa } from './composables/usePwa.js'
 import { installI18n, t } from './i18n'
 import API_CONFIG from './config/apiConfig.js'
@@ -145,33 +145,34 @@ async function refreshSharedSessionIfVisible() {
   if (getToken()) {
     await validateSharedSession()
   } else {
-    await trySilentLogin()
+    await syncSharedSsoLogin()
   }
 }
 
-/** Auth 登录后留下只读会话提示；子域用标准 OIDC prompt=none 静默换取自己的 token。 */
-async function trySilentLogin() {
-  if (getToken() || !document.cookie.includes('nekoauth_session_hint=')) return false
-  if (window.location.pathname.startsWith('/sso/')
-      || window.location.pathname.startsWith('/oauth/nekocore/')) {
-    return false
-  }
+/** 读取父域共享会话，直接恢复 Web 登录态；不进入 OIDC 授权流程。 */
+async function syncSharedSsoLogin() {
+  const previousToken = getToken()
   try {
-    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
-    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/start`, {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/shared-session`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client: 'web', returnTo: current || '/', silent: true }),
       cache: 'no-store',
     })
     const body = await response.json().catch(() => ({}))
-    const url = body?.data?.url
-    if (response.ok && body?.success && typeof url === 'string' && /^https?:\/\//i.test(url)) {
-      window.location.assign(url)
+    const token = body?.data?.token
+    const user = body?.data?.user
+    if (response.ok && body?.success && typeof token === 'string' && token && user) {
+      localStorage.setItem('userToken', token)
+      setUser(user)
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'userToken',
+        oldValue: previousToken,
+        newValue: token,
+      }))
       return true
     }
+    if (response.status === 401 && previousToken) clearLocalSession()
   } catch {
-    /* Auth 暂时不可用时继续以未登录状态展示 */
+    /* Auth 暂时不可用时保留当前本地登录态 */
   }
   return false
 }
@@ -187,8 +188,8 @@ async function bootstrap() {
       validateSharedSession(),
       new Promise((resolve) => setTimeout(resolve, 3000)),
     ])
-  } else if (await trySilentLogin()) {
-    return
+  } else {
+    await syncSharedSsoLogin()
   }
   document.addEventListener('visibilitychange', refreshSharedSessionIfVisible)
   window.setInterval(refreshSharedSessionIfVisible, 60_000)
