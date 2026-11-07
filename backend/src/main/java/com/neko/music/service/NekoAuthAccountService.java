@@ -60,6 +60,18 @@ public class NekoAuthAccountService {
         return postAccount("/login", body, "登录", true);
     }
 
+    /** 用父域共享 SSO 会话换取当前应用会话，不发生浏览器跳转。 */
+    public Account loginWithSsoSession(String ssoSession) {
+        return postAccount("/sso-session", Map.of("ssoSession", ssoSession), "共享会话登录", true);
+    }
+
+    /** 撤销 Auth 浏览器会话族并返回需要转发给浏览器的清 Cookie 头。 */
+    public List<String> logoutSsoSession(String ssoSession) {
+        HttpResponse<String> response = post(
+                "/sso-session/logout", Map.of("ssoSession", ssoSession), "退出共享会话");
+        return response.headers().allValues("Set-Cookie");
+    }
+
     public void sendRegistrationCode(String email) {
         postNoContent("/register/code", Map.of("email", email), "发送注册验证码");
     }

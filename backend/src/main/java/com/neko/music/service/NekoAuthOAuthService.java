@@ -178,17 +178,6 @@ public final class NekoAuthOAuthService {
         return issuerUri().toString() + path;
     }
 
-    /** 浏览器全局登出所需的公开配置；不包含客户端密钥或用户令牌。 */
-    public LogoutConfig logoutConfig() throws OAuthLoginException {
-        requireEnabled();
-        OidcDiscovery discovery = discovery();
-        String clientId = requireConfigured(configManager.getOAuthClientId(), "oauth.client_id");
-        String redirectUri = requireConfigured(configManager.getOAuthRedirectUri(), "oauth.redirect_uri");
-        validateRedirectUri(redirectUri);
-        return new LogoutConfig(
-                discovery.endSessionEndpoint().toString(), clientId, originOf(redirectUri));
-    }
-
     /**
      * 消费 state，用授权码换取 UserInfo，再把短期令牌换成 NekoAuth 长期 token 并封装成一次性 handoff。
      */
@@ -277,6 +266,29 @@ public final class NekoAuthOAuthService {
         } catch (RuntimeException exception) {
             throw new OAuthLoginException(
                     "handoff_unavailable", "登录交接暂时无法完成，请重新登录", exception);
+        }
+    }
+
+    /**
+     * 使用父域共享 SSO 会话直接登录当前子域，不创建跳转 state、不需要浏览器访问 Auth。
+     */
+    public ClaimResult loginWithSsoSession(String ssoSession) throws OAuthLoginException {
+        if (ssoSession == null || ssoSession.isBlank()) {
+            throw new OAuthLoginException("sso_session_missing", "未找到共享登录会话");
+        }
+        NekoAuthAccountService.Account account;
+        try {
+            account = accountService.loginWithSsoSession(ssoSession);
+        } catch (NekoAuthAccountService.AccountBridgeException exception) {
+            throw new OAuthLoginException(exception.code(), exception.getMessage(), exception);
+        }
+        try {
+            User localUser = userAuthService.findOrLinkNekoAuthUser(
+                    account.id(), account.email(), account.nickname());
+            return new ClaimResult(account.accessToken(), "", "/", localUser);
+        } catch (RuntimeException exception) {
+            logger.warn("共享 SSO 会话关联本地账号失败: authUserId={}", account.id(), exception);
+            throw new OAuthLoginException("account_link_failed", "关联 NekoMusic 账户失败", exception);
         }
     }
 
@@ -442,7 +454,6 @@ public final class NekoAuthOAuthService {
                 parseEndpoint(json, "token_endpoint", issuer),
                 parseEndpoint(json, "userinfo_endpoint", issuer),
                 parseEndpoint(json, "jwks_uri", issuer),
-                parseEndpoint(json, "end_session_endpoint", issuer),
                 now);
         discoveryCache = loaded;
         return loaded;
@@ -702,20 +713,6 @@ public final class NekoAuthOAuthService {
         }
     }
 
-    static String originOf(String value) throws OAuthLoginException {
-        try {
-            URI uri = URI.create(value);
-            String host = uri.getHost();
-            if (host.contains(":")) {
-                host = "[" + host + "]";
-            }
-            return uri.getScheme() + "://" + host
-                    + (uri.getPort() < 0 ? "" : ":" + uri.getPort()) + "/";
-        } catch (IllegalArgumentException exception) {
-            throw new OAuthLoginException("oauth_not_configured", "回调地址格式不正确", exception);
-        }
-    }
-
     /** 只接受站内相对路径，拒绝协议、协议相对地址、反斜杠与控制字符。 */
     static String normalizeReturnTo(String returnTo) throws OAuthLoginException {
         String value = returnTo == null || returnTo.isBlank() ? "/" : returnTo.trim();
@@ -827,8 +824,7 @@ public final class NekoAuthOAuthService {
     }
 
     private record OidcDiscovery(String issuer, URI authorizationEndpoint, URI tokenEndpoint,
-                                 URI userInfoEndpoint, URI jwksUri, URI endSessionEndpoint,
-                                 long fetchedAt) {
+                                 URI userInfoEndpoint, URI jwksUri, long fetchedAt) {
     }
 
     private record JwksCache(URI uri, long fetchedAt, Map<String, PublicKey> keys) {
@@ -847,9 +843,6 @@ public final class NekoAuthOAuthService {
     }
 
     public record ClaimResult(String accessToken, String idToken, String returnTo, User user) {
-    }
-
-    public record LogoutConfig(String endpoint, String clientId, String postLogoutRedirectUri) {
     }
 
     public static final class OAuthLoginException extends Exception {

@@ -1,5 +1,4 @@
 import API_CONFIG from '@/config/apiConfig.js'
-import { AUTH_ID_TOKEN_STORAGE_KEY } from '@/utils/nekoAuthSilent.js'
 
 /**
  * 会话登出：先让服务端吊销当前令牌，再清本地状态。
@@ -27,61 +26,11 @@ export function logoutUserSession() {
   return postLogout('/api/user/logout', token)
 }
 
-/**
- * 全局退出：先吊销 NekoMusic 当前 access token，再用 OIDC RP-Initiated Logout
- * 以 POST 表单注销 NekoAuth 浏览器会话。id_token_hint 放表单体，不进入 URL 或历史记录。
- */
+/** 全局退出：NekoMusic 后端会同时撤销 Auth 的父域共享会话。 */
 export async function logoutUserGlobally(tokenOverride = null) {
   if (typeof window === 'undefined') return false
   const token = tokenOverride || localStorage.getItem('userToken')
-  const idToken = localStorage.getItem(AUTH_ID_TOKEN_STORAGE_KEY) || ''
-  const revoke = postLogout('/api/user/logout', token)
-  let config = null
-  try {
-    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/logout-config`, {
-      cache: 'no-store',
-    })
-    const body = await response.json().catch(() => ({}))
-    if (response.ok && body?.success) config = body.data
-  } catch {
-    /* 配置不可用时仍执行本地 token 吊销 */
-  }
-
-  if (config?.endpoint && config?.clientId && config?.postLogoutRedirectUri) {
-    let endpoint
-    try {
-      endpoint = new URL(String(config.endpoint))
-      if (endpoint.protocol !== 'https:' && endpoint.protocol !== 'http:') throw new Error('invalid')
-    } catch {
-      endpoint = null
-    }
-    if (endpoint) {
-      await revoke
-      localStorage.removeItem(AUTH_ID_TOKEN_STORAGE_KEY)
-      const form = document.createElement('form')
-      form.method = 'POST'
-      form.action = endpoint.toString()
-      form.style.display = 'none'
-      const fields = {
-        client_id: String(config.clientId),
-        post_logout_redirect_uri: String(config.postLogoutRedirectUri),
-        ...(idToken ? { id_token_hint: idToken } : {}),
-      }
-      for (const [name, value] of Object.entries(fields)) {
-        const input = document.createElement('input')
-        input.type = 'hidden'
-        input.name = name
-        input.value = value
-        form.appendChild(input)
-      }
-      document.body.appendChild(form)
-      form.submit()
-      return true
-    }
-  }
-
-  await revoke
-  localStorage.removeItem(AUTH_ID_TOKEN_STORAGE_KEY)
+  await postLogout('/api/user/logout', token)
   return false
 }
 

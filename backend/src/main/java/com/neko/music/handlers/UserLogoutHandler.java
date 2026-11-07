@@ -1,12 +1,14 @@
 package com.neko.music.handlers;
 
 import com.neko.music.Main;
+import com.neko.music.service.NekoAuthAccountService;
 import com.neko.music.service.RedisTokenStore;
 import com.neko.music.service.UserAuthService;
 import com.neko.music.util.HttpResourceCache;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Cookie;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +51,32 @@ public class UserLogoutHandler extends ApiServlet {
             return;
         }
 
+        try {
+            String ssoSession = cookie(
+                    request, NekoAuthSsoCookieLoginHandler.SSO_SESSION_COOKIE);
+            NekoAuthAccountService accountService = Main.getNekoAuthAccountService();
+            if (!ssoSession.isEmpty() && accountService != null) {
+                for (String cookieHeader : accountService.logoutSsoSession(ssoSession)) {
+                    response.addHeader("Set-Cookie", cookieHeader);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("撤销 NekoAuth 共享会话失败，将按本地退出继续: {}", e.getMessage());
+        }
+
         sendSuccessResponse(response, "auth.logout.ok");
+    }
+
+    private static String cookie(HttpServletRequest request, String name) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return "";
+        }
+        for (Cookie cookie : cookies) {
+            if (name.equals(cookie.getName())) {
+                return cookie.getValue() == null ? "" : cookie.getValue();
+            }
+        }
+        return "";
     }
 }

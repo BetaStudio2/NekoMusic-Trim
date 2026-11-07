@@ -88,15 +88,13 @@ Android / PC 调用 `/api/user/sso/start` 时分别传 `client=android`、`clien
 注册、找回密码和账号资料修改统一跳转 NekoAuth：Web 在当前浏览器中打开，Android 使用应用内
 WebView，PC 使用系统浏览器。
 
-Web 端还支持同父域无感登录：若 NekoAuth 已登录并下发 `nekoauth_session_hint`，NekoMusic 在本地没有
-token 时会自动发起一次 `prompt=none` 的 OIDC 静默授权。Auth 会话和既有授权仍有效时，浏览器无需
-展示登录页或手动确认即可回到原页面；会话无效或尚未授权时静默回到游客态。该流程不共享刷新令牌，
-各子域仍通过各自登记的 OAuth 客户端完成授权。
+Web 登录按钮直接进入 NekoAuth 登录页，不再打开 NekoMusic 本地登录弹窗。NekoAuth 登录/刷新后会写入
+父域 HttpOnly `nekoauth_sso_session` 会话句柄；它不是刷新令牌，只允许第一方服务端通过账号桥接接口
+兑换当前应用身份。NekoMusic 页面启动时若本地没有 token，会直接调用同源
+`POST /api/user/sso/cookie-login`，后端读取父域 Cookie 后向 Auth 兑换登录态，全程不发生 OIDC 跳转。
 
-同一父域下的第一方 Web 应用在首次 `prompt=none` 时由 NekoAuth 静默建立同意记录，不再要求先行手动
-确认；普通交互式 OAuth 授权仍保留同意页。NekoMusic Web 退出时会执行 OIDC RP-Initiated Logout：
-先吊销当前 NekoMusic access token，再通过 POST 表单注销 NekoAuth 主会话并清除父域登录提示。
-之后所有子域都无法继续静默恢复登录，直到用户重新登录 NekoAuth。
+NekoMusic Web 退出时，后端同时撤销当前 access token 与 Auth 会话族，并把 Auth 返回的父域清 Cookie
+头转发给浏览器。之后所有子域都无法继续通过共享 Cookie 恢复登录，直到用户重新登录 NekoAuth。
 
 已有部署升级时，应把 NekoAuth 客户端登记的回调地址与 `oauth.redirect_uri` 一起更新为
 `https://music.nekocore.cn/sso/nekocore/callback`；旧 `/oauth/nekocore/callback` 仍可继续回调，
@@ -112,7 +110,7 @@ token 时会自动发起一次 `prompt=none` 的 OIDC 静默授权。Auth 会话
 - 头像与 VIP：头像由 NekoAuth 账号中心统一维护，NekoMusic 的后端头像 API 只代理 Auth；VIP 状态和到期时间继续由 NekoMusic 本地维护。
 - 旧客户端兼容：邮箱密码、注册、验证码与找回密码接口只为旧客户端保留，NekoMusic 后端转发给 NekoAuth；新客户端不得再接入这些表单。
 - 扫码登录：手机端确认时用当前有效 NekoAuth token 换取新的长期 token，PC 端仍通过原有一次性 `deliveryKey` 领取，旧扫码接口字段保持不变。
-- 登出：NekoMusic 先吊销当前 access token，再通过 NekoAuth `/oauth2/logout` 注销 Auth 浏览器会话；本地 Redis 不保留用户 token 副本。
+- 登出：NekoMusic 先吊销当前 access token，再通过 Auth 内部桥接撤销父域共享会话族并清除 Cookie；本地 Redis 不保留用户 token 副本。
 - 管理员创建/重置用户：NekoMusic 先校验管理员权限，再调用 NekoAuth 的管理员桥接接口；管理员只调整 VIP 等本地资料时不会改 NekoAuth 密码。
 
 桥接不可用或客户端配置错误时，旧 API 返回既有格式的错误响应；需要等待时保留 NekoAuth 的 `Retry-After` 语义。日志只记录操作类型、状态与用户 ID，不记录密码、验证码或 client secret。

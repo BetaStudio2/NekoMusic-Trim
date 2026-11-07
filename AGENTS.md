@@ -131,12 +131,11 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
   修改统一打开 NekoAuth 页面。Android 使用应用内 WebView，Web 使用当前浏览器，PC 使用系统浏览器。
 - 用户头像以 NekoAuth 为唯一权威源。NekoMusic 的 `/api/user/avatar/*` 只作兼容代理，后端的
   `/api/user/avatar/upload` 也只转发到 Auth，不得再写本地头像路径或新增本地头像文件。
-- Web 端可使用 NekoAuth 的 `nekoauth_session_hint` 判断是否需要尝试 `prompt=none` 静默授权；该
-  Cookie 只能作为登录提示，不得承载或替代访问令牌、刷新令牌，也不得把 Auth 的 HttpOnly 刷新 Cookie
-  扩展到父域。
-- Web 退出必须走 NekoAuth RP-Initiated Logout 注销父域主会话，不能只清 `localStorage`；`id_token_hint`
-  只能通过 POST 表单体发送，禁止放进 URL、查询串或浏览器历史。重新登录 Auth 后，子域通过
-  `prompt=none` 自动恢复登录。
+- Web 无感登录使用 Auth 写入的父域 HttpOnly `nekoauth_sso_session` 会话句柄，由子域后端通过
+  `account:bridge` 内部接口直接兑换登录态，不得让浏览器跳转 Auth 做静默 OIDC。刷新令牌 Cookie
+  仍保持 host-only，禁止整个刷新令牌扩展到父域。
+- Web 退出必须撤销父域共享会话族并清除 `nekoauth_sso_session` / `nekoauth_session_hint` Cookie；
+  不能只清 `localStorage`，也不得重新引入跳转式全局登出。
 
 ### API 文档脱敏
 

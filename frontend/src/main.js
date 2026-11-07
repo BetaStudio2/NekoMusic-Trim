@@ -9,15 +9,10 @@ import './design/reset.css'
 import VueToastification from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 import { installBenignPlayAbortGuard } from './utils/benignPlayAbort'
-import { getToken, loadUserInfo } from './utils/userStore.js'
+import { getToken, loadUserInfo, setUser } from './utils/userStore.js'
 import { initPwa } from './composables/usePwa.js'
 import { installI18n, t } from './i18n'
 import API_CONFIG from './config/apiConfig.js'
-import {
-  readAuthSessionHint,
-  rememberSilentAttempt,
-  silentAttemptedFor,
-} from './utils/nekoAuthSilent.js'
 
 /**
  * 首屏骨架（index.html 的 #app-boot）在 JS 执行前就已可见，其中文案写死为中文。
@@ -31,8 +26,6 @@ function applyBootSplashLocale() {
 }
 
 const app = createApp(App)
-
-const SILENT_ROUTE_PREFIXES = ['/sso/', '/oauth/nekocore/']
 
 // 前端多语言：注册全局 $t，并按浏览器/用户偏好确定初始语言。
 // 必须早于任何视图创建——顶栏、路由标题都直接读它。
@@ -116,34 +109,30 @@ app.use(VueToastification, {
   rtl: false
 })
 
-/**
- * NekoAuth 登录后会在父域写入不含凭据的会话提示。子域看到提示后只发起一次
- * OIDC prompt=none 静默授权；Auth 会话有效时直接回跳完成登录，会话无效则静默回落到游客态。
- */
-async function attemptSilentSso() {
+/** Auth 登录后写入父域共享会话 Cookie；子域后端直接兑换登录态，不发生跳转。 */
+async function attemptSharedSsoLogin() {
   if (getToken()) return false
-  const path = window.location.pathname
-  if (SILENT_ROUTE_PREFIXES.some((prefix) => path.startsWith(prefix))) return false
-  const hint = readAuthSessionHint()
-  if (!hint || silentAttemptedFor(hint)) return false
-
-  const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`
   try {
-    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/start`, {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/sso/cookie-login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client: 'web', returnTo, silent: true }),
       cache: 'no-store',
     })
     const body = await response.json().catch(() => ({}))
-    const url = body?.data?.url
-    if (response.ok && body?.success && typeof url === 'string' && /^https?:\/\//i.test(url)) {
-      rememberSilentAttempt(hint)
-      window.location.replace(url)
+    const token = body?.data?.token
+    const user = body?.data?.user
+    if (response.ok && body?.success && typeof token === 'string' && token && user) {
+      const previousToken = localStorage.getItem('userToken')
+      localStorage.setItem('userToken', token)
+      setUser(user)
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'userToken',
+        oldValue: previousToken,
+        newValue: token,
+      }))
       return true
     }
   } catch {
-    /* NekoAuth 或网络暂时不可用时按游客态加载 */
+    /* 没有共享会话或 Auth 暂时不可用时按游客态加载 */
   }
   return false
 }
@@ -159,8 +148,8 @@ async function bootstrap() {
       loadUserInfo(),
       new Promise((resolve) => setTimeout(resolve, 3000)),
     ])
-  } else if (await attemptSilentSso()) {
-    return
+  } else {
+    await attemptSharedSsoLogin()
   }
   app.mount('#app')
 }
