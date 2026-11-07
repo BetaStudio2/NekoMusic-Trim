@@ -20,7 +20,7 @@ import PwaInstallButton from '@/components/PwaInstallButton.vue'
 import LocaleSwitcher from '@/components/LocaleSwitcher.vue'
 import { playTrack, playTracks, isCurrentMusic } from '@/composables/usePlaybackBridge'
 import { logoutUserGlobally } from '@/api/session.js'
-import { readAuthSessionHint, rememberSilentAttempt } from '@/utils/nekoAuthSilent.js'
+import { readAuthSessionHint, rememberExplicitLogout } from '@/utils/nekoAuthSilent.js'
 import NowPlayingTag from '@/components/NowPlayingTag.vue'
 import { syncUserVipFromPlaylistsApi, USER_VIP_SYNC_EVENT } from '@/utils/userVip.js'
 import { avatarUrl, useAvatarVersion } from '@/utils/userAvatar.js'
@@ -201,7 +201,7 @@ function goToLogin() {
 async function logout() {
   const previousToken = localStorage.getItem('userToken')
   // 显式退出后不要被同一次 Auth 会话的静默登录立刻拉回；重新登录 Auth 会产生新的提示值。
-  rememberSilentAttempt(readAuthSessionHint())
+  rememberExplicitLogout(readAuthSessionHint())
   localStorage.removeItem('userToken')
   clearUser()
   if (previousToken) {
