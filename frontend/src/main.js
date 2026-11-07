@@ -18,6 +18,7 @@ const SHARED_SESSION_TOKEN_PREFIX = 'nekosso_'
 const AUTH_SESSION_HINT_STORAGE_KEY = 'nekoAuthSessionHint'
 const AUTH_SHARED_REDIRECT_STORAGE_KEY = 'nekoAuthSharedRedirectAt'
 const AUTH_SHARED_REDIRECT_COOLDOWN_MS = 5 * 60_000
+let sharedSessionRefreshInFlight = false
 
 /**
  * 首屏骨架（index.html 的 #app-boot）在 JS 执行前就已可见，其中文案写死为中文。
@@ -202,31 +203,37 @@ async function validateSharedSession() {
 
 async function refreshSharedSessionIfVisible() {
   if (document.visibilityState !== 'visible') return
-  const token = getToken()
-  if (isSharedSessionToken(token)) {
-    const hint = readAuthSessionHint()
-    if (!hint) {
-      // Auth 清除了父域提示 Cookie，说明共享会话已经退出；不要等到业务
-      // 请求失败后才让顶栏回到未登录状态。
-      clearLocalSession()
-      return
-    }
-    if (localStorage.getItem(AUTH_SESSION_HINT_STORAGE_KEY) !== hint) {
-      await syncSharedSsoLogin()
-      return
-    }
-    await validateSharedSession()
-  } else if (!token) {
-    await syncSharedSsoLogin()
-  } else {
-    // 旧页面可能还持有 OIDC access token；看到父域登录提示后主动换成
-    // 共享会话令牌，让已有用户也立即进入新的跨子域退出链路。
-    const hint = readAuthSessionHint()
-    if (hint && localStorage.getItem(AUTH_SESSION_HINT_STORAGE_KEY) !== hint) {
+  if (sharedSessionRefreshInFlight) return
+  sharedSessionRefreshInFlight = true
+  try {
+    const token = getToken()
+    if (isSharedSessionToken(token)) {
+      const hint = readAuthSessionHint()
+      if (!hint) {
+        // Auth 清除了父域提示 Cookie，说明共享会话已经退出；不要等到业务
+        // 请求失败后才让顶栏回到未登录状态。
+        clearLocalSession()
+        return
+      }
+      if (localStorage.getItem(AUTH_SESSION_HINT_STORAGE_KEY) !== hint) {
+        await syncSharedSsoLogin()
+        return
+      }
+      await validateSharedSession()
+    } else if (!token) {
       await syncSharedSsoLogin()
     } else {
-      await validateSharedSession()
+      // 旧页面可能还持有 OIDC access token；看到父域登录提示后主动换成
+      // 共享会话令牌，让已有用户也立即进入新的跨子域退出链路。
+      const hint = readAuthSessionHint()
+      if (hint && localStorage.getItem(AUTH_SESSION_HINT_STORAGE_KEY) !== hint) {
+        await syncSharedSsoLogin()
+      } else {
+        await validateSharedSession()
+      }
     }
+  } finally {
+    sharedSessionRefreshInFlight = false
   }
 }
 

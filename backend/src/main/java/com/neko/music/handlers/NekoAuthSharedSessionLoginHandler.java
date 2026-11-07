@@ -2,7 +2,6 @@ package com.neko.music.handlers;
 
 import com.neko.music.Main;
 import com.neko.music.model.User;
-import com.neko.music.service.AuthAbuseLimiter;
 import com.neko.music.service.NekoAuthAccountService;
 import com.neko.music.service.SharedWebSessionService;
 import com.neko.music.service.UserAuthService;
@@ -24,9 +23,6 @@ public final class NekoAuthSharedSessionLoginHandler extends ApiServlet {
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
         response.setHeader("Cache-Control", HttpResourceCache.CACHE_CONTROL_NO_STORE);
-        if (enforceAuthAbuseLimit(request, response, AuthAbuseLimiter.Scope.LOGIN)) {
-            return;
-        }
         String ssoSession = cookie(request, SSO_COOKIE);
         if (ssoSession.isEmpty()) {
             sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED, "未找到共享登录会话");
