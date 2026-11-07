@@ -27,7 +27,7 @@ docker compose logs -f neko-music
 curl -fsS http://127.0.0.1:65535/version
 ```
 
-音乐文件、封面、声纹索引、待审核上传和客户端发布包分别持久化在 `backend/Music/`、`backend/user_upload/` 与 `backend/releases/`。旧部署的 `backend/avatars/` 只用于升级迁移，迁移完成后不再需要；头像统一由 NekoAuth 保存。复用已有部署的数据时，可在 `backend/.env` 设置 `NEKO_DATA_DIR=/原后端运行目录`；配置文件为 `backend/config.yml`（只含 MySQL 引导信息，密码等敏感项请勿提交到 Git）；运行时配置存
+音乐文件、封面、声纹索引、待审核上传和客户端发布包分别持久化在 `backend/Music/`、`backend/user_upload/` 与 `backend/releases/`。头像统一由 NekoAuth 保存。复用已有部署的数据时，可在 `backend/.env` 设置 `NEKO_DATA_DIR=/原后端运行目录`；配置文件为 `backend/config.yml`（只含 MySQL 引导信息，密码等敏感项请勿提交到 Git）；运行时配置存
 主库 `system_settings` 表，同样不要外泄。升级代码后执行
 `NEKO_WEB_VERSION="$(git describe --tags --always)" docker compose build --pull && docker compose up -d`。
 
@@ -106,13 +106,6 @@ WebView，PC 使用系统浏览器。
 - 管理员创建/重置用户：NekoMusic 先校验管理员权限，再调用 NekoAuth 的管理员桥接接口；管理员只调整 VIP 等本地资料时不会改 NekoAuth 密码。
 
 桥接不可用或客户端配置错误时，旧 API 返回既有格式的错误响应；需要等待时保留 NekoAuth 的 `Retry-After` 语义。日志只记录操作类型、状态与用户 ID，不记录密码、验证码或 client secret。
-
-### 头像迁移
-
-升级后会后台扫描 `users.avatar` 中仍绑定 `auth_user_id` 的旧头像文件，逐个上传到 NekoAuth，并重新下载
-Auth 头像做 SHA-256 字节校验。只有内容完全一致时才清空本地 `avatar` 字段并删除旧文件；失败项保留原数据，
-下次启动继续重试。迁移过程不重新编码图片，PNG/JPEG/GIF/WebP 原始字节保持不变。
-
 
 ## 本地前端开发
 

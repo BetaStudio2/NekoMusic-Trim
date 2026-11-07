@@ -131,8 +131,6 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
   修改统一打开 NekoAuth 页面。Android 使用应用内 WebView，Web 使用当前浏览器，PC 使用系统浏览器。
 - 用户头像以 NekoAuth 为唯一权威源。NekoMusic 的 `/api/user/avatar/*` 只作兼容代理，后端的
   `/api/user/avatar/upload` 也只转发到 Auth，不得再写本地头像路径或新增本地头像文件。
-- 旧 `users.avatar` 只用于一次性迁移；迁移必须按原始字节上传，并通过重新读取 Auth 头像做哈希校验，
-  校验一致后才能清空本地路径并删除旧文件。迁移失败必须保留原数据以便重试。
 
 ### API 文档脱敏
 

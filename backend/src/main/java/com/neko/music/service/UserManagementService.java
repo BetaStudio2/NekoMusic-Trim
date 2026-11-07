@@ -176,7 +176,7 @@ public final class UserManagementService {
         }
     }
 
-    /** 头像上传只写 NekoAuth；本地 users.avatar 仅用于旧数据迁移。 */
+    /** 头像上传只写 NekoAuth。 */
     public void uploadUserAvatar(int userId, java.nio.file.Path avatarFile)
             throws UserManagementException {
         if (nekoAuthAccountService == null) {

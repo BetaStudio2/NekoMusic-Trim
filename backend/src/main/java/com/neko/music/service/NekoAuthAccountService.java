@@ -89,7 +89,7 @@ public class NekoAuthAccountService {
         postNoContent("/nickname", body, "修改昵称");
     }
 
-    /** 将本地已有头像迁移到 NekoAuth；调用方负责在成功后清理本地文件。 */
+    /** 将头像文件上传到 NekoAuth。 */
     public void uploadAvatar(long authUserId, Path avatarFile) {
         if (authUserId <= 0) {
             throw new AccountBridgeException(400, "INVALID_AUTH_USER_ID", "NekoAuth 用户 ID 无效", 0);
@@ -123,35 +123,6 @@ public class NekoAuthAccountService {
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
                 .build();
         sendChecked(request, "上传头像", "/avatar");
-    }
-
-    /** 从 NekoAuth 读取头像原始字节，供迁移后做无损校验。 */
-    public byte[] fetchAvatar(long authUserId) {
-        if (authUserId <= 0) {
-            throw new AccountBridgeException(400, "INVALID_AUTH_USER_ID", "NekoAuth 用户 ID 无效", 0);
-        }
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(issuerUri() + "/avatars/" + authUserId))
-                .timeout(HTTP_TIMEOUT)
-                .header("Accept", "image/*")
-                .GET()
-                .build();
-        HttpResponse<byte[]> response;
-        try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-        } catch (IOException exception) {
-            throw new AccountBridgeException(503, "NEKO_AUTH_UNAVAILABLE",
-                    "暂时无法连接 NekoAuth", 0);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new AccountBridgeException(503, "NEKO_AUTH_UNAVAILABLE",
-                    "读取 NekoAuth 头像被中断", 0);
-        }
-        if (!HttpTransport.isSuccess(response.statusCode())) {
-            throw new AccountBridgeException(response.statusCode(), "AVATAR_FETCH_FAILED",
-                    "NekoAuth 头像读取失败", 0);
-        }
-        return response.body();
     }
 
     /** 按 NekoAuth 用户 ID 批量读取当前昵称；NekoAuth 是唯一权威源。 */
