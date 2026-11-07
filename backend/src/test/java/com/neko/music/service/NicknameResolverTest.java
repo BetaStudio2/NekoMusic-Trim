@@ -15,8 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NicknameResolverTest {
 
     @Test
-    void resolveByAuthIdsSplitsRequestsAtTheBridgeLimit() {
-        RecordingAuthBridge auth = new RecordingAuthBridge();
+    void resolveByAuthIdsSplitsRequestsAtTheBatchLimit() {
+        RecordingAuthClient auth = new RecordingAuthClient();
         NicknameResolver resolver = new NicknameResolver(null, auth);
         List<Long> ids = LongStream.rangeClosed(1, 401).boxed().toList();
 
@@ -36,16 +36,16 @@ class NicknameResolverTest {
     }
 
     @Test
-    void resolveByAuthIdsDegradesToEmptyMapWhenBridgeFails() {
-        NicknameResolver resolver = new NicknameResolver(null, new FailingAuthBridge());
+    void resolveByAuthIdsDegradesToEmptyMapWhenAuthFails() {
+        NicknameResolver resolver = new NicknameResolver(null, new FailingAuthClient());
 
         assertTrue(resolver.resolveByAuthIds(List.of(1L, 2L)).isEmpty());
     }
 
-    private static class RecordingAuthBridge extends NekoAuthAccountService {
+    private static class RecordingAuthClient extends NekoAuthAccountService {
         private final List<Integer> batchSizes = new ArrayList<>();
 
-        RecordingAuthBridge() {
+        RecordingAuthClient() {
             super(null, null);
         }
 
@@ -61,14 +61,14 @@ class NicknameResolverTest {
         }
     }
 
-    private static final class FailingAuthBridge extends NekoAuthAccountService {
-        FailingAuthBridge() {
+    private static final class FailingAuthClient extends NekoAuthAccountService {
+        FailingAuthClient() {
             super(null, null);
         }
 
         @Override
         public Map<Long, String> lookupNicknames(Collection<Long> authUserIds) {
-            throw new AccountBridgeException(503, "NEKO_AUTH_UNAVAILABLE", "NekoAuth 暂不可用", 0);
+            throw new NekoAuthServiceException(503, "NEKO_AUTH_UNAVAILABLE", "NekoAuth 暂不可用", 0);
         }
     }
 }

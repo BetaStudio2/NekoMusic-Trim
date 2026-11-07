@@ -62,7 +62,7 @@ public final class NicknameResolver {
             int to = Math.min(ids.size(), from + MAX_AUTH_LOOKUP_BATCH);
             try {
                 result.putAll(nekoAuthAccountService.lookupNicknames(ids.subList(from, to)));
-            } catch (NekoAuthAccountService.AccountBridgeException e) {
+            } catch (NekoAuthAccountService.NekoAuthServiceException e) {
                 logger.warn("从 NekoAuth 解析昵称失败: status={} code={}", e.status(), e.code());
                 return Map.of();
             }
@@ -137,7 +137,7 @@ public final class NicknameResolver {
         if (nekoAuthAccountService != null) {
             try {
                 return searchLocalUsers(nekoAuthAccountService.searchAccounts(normalized));
-            } catch (NekoAuthAccountService.AccountBridgeException e) {
+            } catch (NekoAuthAccountService.NekoAuthServiceException e) {
                 logger.warn("通过 NekoAuth 搜索用户失败，降级为本地邮箱搜索: status={} code={}",
                         e.status(), e.code());
             }

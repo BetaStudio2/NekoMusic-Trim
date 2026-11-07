@@ -99,7 +99,7 @@ public class UserAuthService {
         }
     }
 
-    public boolean usesNekoAuthBridge() {
+    public boolean usesNekoAuth() {
         return nekoAuthAccountService != null;
     }
 
@@ -237,9 +237,9 @@ public class UserAuthService {
         logger.debug("用户 {} 的会话由 NekoAuth tokenVersion 统一失效", userId);
     }
 
-    private NekoAuthAccountService requireBridge() {
+    private NekoAuthAccountService requireAuthService() {
         if (nekoAuthAccountService == null) {
-            throw new NekoAuthAccountService.AccountBridgeException(
+            throw new NekoAuthAccountService.NekoAuthServiceException(
                     503, "NEKO_AUTH_NOT_CONFIGURED", "未配置 NekoAuth 登录服务", 0);
         }
         return nekoAuthAccountService;
@@ -330,10 +330,10 @@ public class UserAuthService {
     /** 在 NekoAuth 吊销用户令牌。 */
     public boolean revokeToken(String token) {
         try {
-            requireBridge().revoke(token);
+            requireAuthService().revoke(token);
             logger.info("NekoAuth 用户令牌已注销");
             return true;
-        } catch (NekoAuthAccountService.AccountBridgeException exception) {
+        } catch (NekoAuthAccountService.NekoAuthServiceException exception) {
             logger.warn("NekoAuth 用户令牌注销失败: status={} code={}",
                     exception.status(), exception.code());
             return false;
@@ -353,7 +353,7 @@ public class UserAuthService {
                 INTROSPECTION_SCOPE_PREFIX + normalized, () -> {
                     try {
                         return nekoAuthAccountService.introspect(normalized).orElse(null);
-                    } catch (NekoAuthAccountService.AccountBridgeException exception) {
+                    } catch (NekoAuthAccountService.NekoAuthServiceException exception) {
                         logger.warn("NekoAuth 令牌校验失败: status={} code={}",
                                 exception.status(), exception.code());
                         return null;

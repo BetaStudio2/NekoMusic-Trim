@@ -87,7 +87,7 @@ public class NekoAuthAccountService {
         }
         long authUserId = subjectId(json.get("sub"));
         if (authUserId <= 0) {
-            throw new AccountBridgeException(502, "NEKO_AUTH_BAD_RESPONSE",
+            throw new NekoAuthServiceException(502, "NEKO_AUTH_BAD_RESPONSE",
                     "NekoAuth introspection 缺少有效用户标识", 0);
         }
         return Optional.of(new Introspection(
@@ -135,7 +135,7 @@ public class NekoAuthAccountService {
     private List<AccountSummary> parseSummaries(HttpResponse<String> response) {
         JsonNode json = parseJson(response.body());
         if (json == null || !json.isArray()) {
-            throw new AccountBridgeException(502, "NEKO_AUTH_BAD_RESPONSE",
+            throw new NekoAuthServiceException(502, "NEKO_AUTH_BAD_RESPONSE",
                     "NekoAuth 返回的账号摘要格式不正确", 0);
         }
         List<AccountSummary> accounts = new ArrayList<>();
@@ -159,7 +159,7 @@ public class NekoAuthAccountService {
         try {
             requestBody = objectMapper.writeValueAsString(payload);
         } catch (IOException exception) {
-            throw new AccountBridgeException(500, "NEKO_AUTH_REQUEST_ENCODE_FAILED",
+            throw new NekoAuthServiceException(500, "NEKO_AUTH_REQUEST_ENCODE_FAILED",
                     "无法构造 NekoAuth 请求", 0);
         }
         HttpRequest request = HttpRequest.newBuilder()
@@ -194,7 +194,7 @@ public class NekoAuthAccountService {
             response = HttpTransport.sendString(httpClient, request, "NekoAuth 请求被中断");
         } catch (IOException exception) {
             logger.warn("NekoAuth 请求失败: operation={} path={}", operation, path);
-            throw new AccountBridgeException(503, "NEKO_AUTH_UNAVAILABLE",
+            throw new NekoAuthServiceException(503, "NEKO_AUTH_UNAVAILABLE",
                     "暂时无法连接 NekoAuth", 0);
         }
 
@@ -219,7 +219,7 @@ public class NekoAuthAccountService {
             }
             logger.warn("NekoAuth 请求失败: operation={} status={} code={}",
                     operation, response.statusCode(), code);
-            throw new AccountBridgeException(
+            throw new NekoAuthServiceException(
                     response.statusCode(), code, message, retryAfterSeconds(response), fields);
         }
         return response;
@@ -234,13 +234,13 @@ public class NekoAuthAccountService {
         try {
             uri = URI.create(value);
         } catch (IllegalArgumentException exception) {
-            throw new AccountBridgeException(503, "NEKO_AUTH_NOT_CONFIGURED",
+            throw new NekoAuthServiceException(503, "NEKO_AUTH_NOT_CONFIGURED",
                     "NekoAuth 根地址格式不正确", 0);
         }
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
         if (uri.getHost() == null || (!scheme.equals("https") && !scheme.equals("http"))
                 || uri.getRawQuery() != null || uri.getFragment() != null || uri.getRawUserInfo() != null) {
-            throw new AccountBridgeException(503, "NEKO_AUTH_NOT_CONFIGURED",
+            throw new NekoAuthServiceException(503, "NEKO_AUTH_NOT_CONFIGURED",
                     "NekoAuth 根地址格式不正确", 0);
         }
         return URI.create(value);
@@ -248,7 +248,7 @@ public class NekoAuthAccountService {
 
     private String requireConfigured(String value, String key) {
         if (value == null || value.isBlank()) {
-            throw new AccountBridgeException(503, "NEKO_AUTH_NOT_CONFIGURED",
+            throw new NekoAuthServiceException(503, "NEKO_AUTH_NOT_CONFIGURED",
                     "缺少 NekoAuth 配置：" + key, 0);
         }
         return value.trim();
@@ -314,17 +314,17 @@ public class NekoAuthAccountService {
                                 String role, String scope) {
     }
 
-    public static final class AccountBridgeException extends RuntimeException {
+    public static final class NekoAuthServiceException extends RuntimeException {
         private final int status;
         private final String code;
         private final long retryAfterSeconds;
         private final Map<String, String> fields;
 
-        public AccountBridgeException(int status, String code, String message, long retryAfterSeconds) {
+        public NekoAuthServiceException(int status, String code, String message, long retryAfterSeconds) {
             this(status, code, message, retryAfterSeconds, Map.of());
         }
 
-        public AccountBridgeException(int status, String code, String message, long retryAfterSeconds,
+        public NekoAuthServiceException(int status, String code, String message, long retryAfterSeconds,
                                       Map<String, String> fields) {
             super(message);
             this.status = status;
