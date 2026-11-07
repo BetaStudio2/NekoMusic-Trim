@@ -113,6 +113,11 @@
       </div>
     </div>
 
+    <div v-else-if="profileLoading" class="profile profile--loading">
+      <NSpinner :size="28" />
+      <p class="profile__hint">{{ $t('common.loading') }}</p>
+    </div>
+
     <div v-else class="profile profile--loading">
       <p class="profile__hint">{{ $t('profile.loadFailedHint') }}</p>
       <NButton variant="primary" icon="refresh-cw" @click="reloadUserInfo">{{ $t('profile.reload') }}</NButton>
@@ -126,7 +131,7 @@ import API_CONFIG from '@/config/apiConfig.js'
 import { useToast } from '@/composables/useToast'
 import { t, locale } from '@/i18n'
 import NIcon from '@/icons/NIcon.vue'
-import { NButton } from '@/ui'
+import { NButton, NSpinner } from '@/ui'
 import { PageShell, AmbientBackdrop } from '@/layouts'
 import { formatVipExpiresAt, syncUserVipFromPlaylistsApi, USER_VIP_SYNC_EVENT } from '@/utils/userVip.js'
 import { avatarUrl, useAvatarVersion } from '@/utils/userAvatar.js'
@@ -150,36 +155,50 @@ const avatarVersion = useAvatarVersion()
 
 // 检查用户是否登录（用响应式 token，弹窗里登录后能立刻更新）
 const isLoggedIn = computed(() => !!authToken.value)
+const profileLoading = ref(false)
 
 const bumpUserFromStorage = () => {
   vipSyncTick.value++
 }
 
-// 未登录：弹登录窗（登录成功后 watch 会重新读取用户信息）
-if (!isLoggedIn.value || !user.value) {
-  openAuthDialog('login');
-}
-
 watch(authToken, (token) => {
   if (token) {
     bumpUserFromStorage()
+    loadUserInfo().then(bumpUserFromStorage)
     syncUserVipFromPlaylistsApi().then(bumpUserFromStorage)
   }
 })
 
 onMounted(async () => {
   window.addEventListener(USER_VIP_SYNC_EVENT, bumpUserFromStorage)
+  if (!isLoggedIn.value) {
+    // 只有确实没有本地 Token 才打开登录入口。不能因为资料尚未加载就跳
+    // Auth，否则“Token 有效但 user 暂为空”会被误判并形成登录回跳循环。
+    openAuthDialog('login')
+    return
+  }
   // 昵称等资料不落盘：进页面时用 Token 拉一次最新值
-  await loadUserInfo({ force: true })
-  bumpUserFromStorage()
-  await syncUserVipFromPlaylistsApi()
-  bumpUserFromStorage()
+  profileLoading.value = true
+  try {
+    await loadUserInfo({ force: true })
+    bumpUserFromStorage()
+    await syncUserVipFromPlaylistsApi()
+    bumpUserFromStorage()
+  } finally {
+    profileLoading.value = false
+  }
 })
 
 /** 资料没拉到时手动重试 */
 async function reloadUserInfo() {
-  await loadUserInfo({ force: true })
-  bumpUserFromStorage()
+  if (profileLoading.value) return
+  profileLoading.value = true
+  try {
+    await loadUserInfo({ force: true })
+    bumpUserFromStorage()
+  } finally {
+    profileLoading.value = false
+  }
 }
 
 onUnmounted(() => {

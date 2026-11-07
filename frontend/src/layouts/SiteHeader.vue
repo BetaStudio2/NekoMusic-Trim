@@ -62,7 +62,7 @@ function handleStorageChange(event) {
   if (event.key === 'userToken') {
     // 登录 / 登出 / 换账号：资料只在内存里，Token 变了就重新拉一次
     initializeUserState()
-    loadUserInfo({ force: true })
+    loadUserInfo()
     // 连接跟着身份走：登出即断开，换账号重连（未登录时下面的回调不会触发）
     syncNotificationStream()
     if (!isLoggedIn.value) unreadCount.value = 0
@@ -223,6 +223,10 @@ onMounted(async () => {
   window.addEventListener('storage', handleStorageChange)
   window.addEventListener(USER_VIP_SYNC_EVENT, initializeUserState)
   document.addEventListener('click', handleClickOutside)
+  // 刷新页面时 Token 仍在 localStorage，但用户资料只存在内存；必须先补拉，
+  // 否则顶栏会短暂或长期显示为“已登录但没有头像、昵称”。
+  await loadUserInfo()
+  initializeUserState()
   await syncUserVipFromPlaylistsApi()
   initializeUserState()
   notificationSubscription = subscribeNotifications({
@@ -304,7 +308,7 @@ onUnmounted(() => {
         </NButton>
         <!-- 可安装时出现；已安装/不支持时组件自身不渲染 -->
         <PwaInstallButton />
-        <template v-if="isLoggedIn">
+        <template v-if="isLoggedIn && user">
           <RouterLink to="/account" class="site-header__user" :title="$t('nav.account')">
             <img :src="userAvatar" :alt="$t('nav.avatarAlt')" class="site-header__avatar" @error="handleAvatarError" />
             <span class="site-header__nickname">{{ nickname }}</span>
@@ -334,6 +338,11 @@ onUnmounted(() => {
           <NButton size="sm" variant="ghost" icon="heart" to="/favorites" :title="$t('nav.myFavorites')" />
           <NButton size="sm" variant="danger" icon="logout" @click="logout">{{ $t('nav.logout') }}</NButton>
         </template>
+
+        <span v-else-if="isLoggedIn" class="site-header__user-skeleton" aria-hidden="true">
+          <span class="site-header__user-skeleton-avatar"></span>
+          <span class="site-header__user-skeleton-name"></span>
+        </span>
 
         <NButton v-else variant="primary" icon="login" @click="goToLogin">{{ $t('nav.login') }}</NButton>
       </div>
@@ -521,6 +530,50 @@ onUnmounted(() => {
   background: var(--n-surface-soft);
   transition: border-color var(--n-duration-fast) var(--n-ease), background var(--n-duration-fast) var(--n-ease);
 }
+
+.site-header__user-skeleton {
+  display: flex;
+  align-items: center;
+  gap: var(--n-space-2);
+  min-width: 148px;
+  height: 36px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--n-line);
+  border-radius: var(--n-radius-control);
+  background: var(--n-surface-soft);
+}
+
+.site-header__user-skeleton-avatar,
+.site-header__user-skeleton-name {
+  display: block;
+  background: var(--n-surface-hover);
+  animation: site-header-skeleton-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.site-header__user-skeleton-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--n-radius-xs);
+  flex: none;
+}
+
+.site-header__user-skeleton-name {
+  width: 78px;
+  height: 10px;
+  border-radius: var(--n-radius-pill);
+}
+
+@keyframes site-header-skeleton-pulse {
+  from { opacity: 0.45; }
+  to { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-header__user-skeleton-avatar,
+  .site-header__user-skeleton-name {
+    animation: none;
+  }
+}
 @media (hover: hover) {
   .site-header__user:hover {
     border-color: var(--n-line-strong);
@@ -612,6 +665,16 @@ onUnmounted(() => {
   /* 触摸目标抬到 32px（视觉仍是 28px 的圆角方块观感） */
   .site-header__user {
     padding: 2px;
+  }
+
+  .site-header__user-skeleton {
+    min-width: 0;
+    height: 32px;
+    padding: 2px;
+  }
+
+  .site-header__user-skeleton-name {
+    display: none;
   }
 }
 </style>

@@ -18,6 +18,9 @@ export const USER_INFO_CHANGED_EVENT = 'neko-user-info-changed'
 export const user = ref(null)
 
 let loaded = false
+let loadedToken = null
+let loadInFlight = null
+let loadInFlightToken = null
 
 /** 已登录时返回持久化的 Token，未登录返回 null */
 export function getToken() {
@@ -48,6 +51,7 @@ export function setUser(next) {
   const previous = user.value ? JSON.stringify(user.value) : null
   user.value = next || null
   loaded = !!next
+  loadedToken = next ? getToken() : null
   notify(previous)
 }
 
@@ -64,6 +68,7 @@ export function clearUser() {
   const previous = user.value ? JSON.stringify(user.value) : null
   user.value = null
   loaded = false
+  loadedToken = null
   notify(previous)
 }
 
@@ -78,18 +83,43 @@ export async function loadUserInfo({ force = false } = {}) {
     clearUser()
     return null
   }
-  if (loaded && !force) return user.value
-  try {
-    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/info`, {
-      method: 'GET',
-      headers: { Authorization: token }
-    })
-    const data = await response.json().catch(() => ({}))
-    if (response.ok && data?.success && data?.data?.user) {
-      setUser(data.data.user)
+  // 首屏、顶栏和账号页会同时请求资料；合并成一次请求，避免重复触发
+  // NekoAuth 共享会话校验与 IP 限流。
+  if (loadInFlight) {
+    if (loadInFlightToken === token) return loadInFlight
+    try {
+      await loadInFlight
+    } catch {
+      /* 旧请求失败不影响新 Token 的加载 */
     }
-  } catch {
-    /* 网络异常：保留内存中已有资料 */
+    if (getToken() !== token) return null
   }
-  return user.value
+  if (loaded && loadedToken === token && !force) return user.value
+
+  loadInFlight = (async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/info`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Authorization: token }
+      })
+      const data = await response.json().catch(() => ({}))
+      if (getToken() === token && response.ok && data?.success && data?.data?.user) {
+        setUser(data.data.user)
+      }
+    } catch {
+      /* 网络异常：保留内存中已有资料 */
+    }
+    return user.value
+  })()
+  loadInFlightToken = token
+
+  try {
+    return await loadInFlight
+  } finally {
+    if (loadInFlightToken === token) {
+      loadInFlight = null
+      loadInFlightToken = null
+    }
+  }
 }

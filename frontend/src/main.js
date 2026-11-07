@@ -195,6 +195,12 @@ async function validateSharedSession() {
       // 仍有效；立即重新兑换一次，避免要等到下一轮轮询才恢复登录态。
       return syncSharedSsoLogin()
     }
+    const body = await response.json().catch(() => ({}))
+    if (response.ok && body?.success && body?.data?.user) {
+      // 只校验状态码会让“Token 已恢复、资料仍为空”的页面进入半登录态，
+      // 账号页会把它误判为未登录并反复跳 Auth。这里必须同时恢复内存资料。
+      setUser(body.data.user)
+    }
     return response.ok
   } catch {
     return true
