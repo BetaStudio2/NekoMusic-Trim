@@ -24,6 +24,7 @@ import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee10.servlet.FilterHolder;
 import org.eclipse.jetty.server.handler.gzip.GzipHandler;
 import com.neko.music.filter.CacheControlFilter;
 import com.neko.music.filter.RequestAuditFilter;
@@ -361,7 +362,8 @@ public class Main {
         context.addFilter(RequestLocaleFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
 
         // 通用安全加固：禁用 TRACE/TRACK、补安全响应头、隐藏版本（最先注册，作用于全部响应）
-        context.addFilter(SecurityHeadersFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
+        context.addFilter(new FilterHolder(new SecurityHeadersFilter(configManager)),
+                "/*", EnumSet.allOf(DispatcherType.class));
 
         // IP 限流需在嵌入式 Jetty 中显式注册（@WebFilter 不会生效）
         context.addFilter(IPRateLimitFilter.class, "/*", EnumSet.allOf(DispatcherType.class));

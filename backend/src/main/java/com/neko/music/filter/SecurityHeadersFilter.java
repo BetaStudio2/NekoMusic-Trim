@@ -1,5 +1,6 @@
 package com.neko.music.filter;
 
+import com.neko.music.config.ConfigManager;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -9,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
+import java.net.URI;
 
 /**
  * 通用安全加固过滤器（最外层，先于限流注册）。
@@ -26,6 +28,7 @@ import java.io.IOException;
 public class SecurityHeadersFilter implements Filter {
 
     private static final String ALLOWED_METHODS = "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS";
+    private final String contentSecurityPolicy;
 
     /**
      * 全站内容安全策略：静态资源、页面、API、SSE、报错页一视同仁。
@@ -58,13 +61,25 @@ public class SecurityHeadersFilter implements Filter {
             "form-action 'self'",
             "frame-ancestors 'self'");
 
+    public SecurityHeadersFilter() {
+        this("");
+    }
+
+    public SecurityHeadersFilter(ConfigManager configManager) {
+        this(configManager == null ? "" : configManager.getOAuthIssuer());
+    }
+
+    SecurityHeadersFilter(String authIssuer) {
+        this.contentSecurityPolicy = buildContentSecurityPolicy(authIssuer);
+    }
+
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
         if (request instanceof HttpServletRequest httpRequest
                 && response instanceof HttpServletResponse httpResponse) {
             // 先铺安全头：下面提前返回的 405 也必须带上（「所有响应都有 CSP」）
-            applySecurityHeaders(httpResponse);
+            applySecurityHeaders(httpResponse, contentSecurityPolicy);
 
             String method = httpRequest.getMethod();
             if ("TRACE".equalsIgnoreCase(method) || "TRACK".equalsIgnoreCase(method)) {
@@ -79,7 +94,43 @@ public class SecurityHeadersFilter implements Filter {
 
     /** 写入全站统一的安全响应头（CSP + 常见加固头 + 隐藏服务端版本）。 */
     static void applySecurityHeaders(HttpServletResponse response) {
-        response.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+        applySecurityHeaders(response, CONTENT_SECURITY_POLICY);
+    }
+
+    static String buildContentSecurityPolicy(String authIssuer) {
+        String origin = originOf(authIssuer);
+        if (origin == null) {
+            return CONTENT_SECURITY_POLICY;
+        }
+        return CONTENT_SECURITY_POLICY.replace(
+                "form-action 'self'", "form-action 'self' " + origin);
+    }
+
+    private static String originOf(String issuer) {
+        if (issuer == null || issuer.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(issuer.trim());
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+            if (uri.getHost() == null || (!"https".equals(scheme) && !"http".equals(scheme))
+                    || uri.getRawUserInfo() != null || uri.getRawQuery() != null
+                    || uri.getFragment() != null) {
+                return null;
+            }
+            String host = uri.getHost();
+            if (host.contains(":")) {
+                host = "[" + host + "]";
+            }
+            return scheme + "://" + host
+                    + (uri.getPort() < 0 ? "" : ":" + uri.getPort());
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private static void applySecurityHeaders(HttpServletResponse response, String policy) {
+        response.setHeader("Content-Security-Policy", policy);
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
         response.setHeader("X-Frame-Options", "SAMEORIGIN");

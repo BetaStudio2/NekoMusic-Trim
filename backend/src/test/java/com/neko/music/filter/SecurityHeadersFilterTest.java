@@ -55,6 +55,17 @@ class SecurityHeadersFilterTest {
     }
 
     @Test
+    @DisplayName("只向已配置的 Auth issuer 放行跨域登出表单")
+    void authIssuerIsAddedToFormAction() {
+        assertEquals(SecurityHeadersFilter.CONTENT_SECURITY_POLICY.replace(
+                        "form-action 'self'",
+                        "form-action 'self' https://auth.nekocore.cn"),
+                SecurityHeadersFilter.buildContentSecurityPolicy("https://auth.nekocore.cn"));
+        assertEquals(SecurityHeadersFilter.CONTENT_SECURITY_POLICY,
+                SecurityHeadersFilter.buildContentSecurityPolicy("javascript:alert(1)"));
+    }
+
+    @Test
     @DisplayName("TRACE：405 + Allow + no-store，且仍然带 CSP")
     void traceIsRejectedWithHardeningHeaders() throws Exception {
         Outcome outcome = run("TRACE");
