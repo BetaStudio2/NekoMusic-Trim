@@ -50,7 +50,7 @@ curl -fsS http://127.0.0.1:65535/version
 - 头像以 NekoAuth 为唯一权威源：上传、替换、默认头像和公开读取都由 NekoAuth 处理；NekoMusic 的原头像 API 保留为兼容入口，由后端从 NekoAuth 获取并返回。`vip_expires_at` 继续由 NekoMusic 本地维护。
 - 用户密码、注册验证码、找回密码验证码、账号启用状态、用户 access token 的签发、校验与吊销全部由 NekoAuth 处理；NekoMusic 的 Redis 不再保存任何 `user_token` 键。
 
-原有 `/api/user/login`、`/api/user/register`、`/api/user/send-verification`、`/api/user/send-reset-code`、`/api/user/reset-password`、改密和管理员用户管理接口保持原路径、请求体和响应结构不变。NekoMusic 后端在内部转发到 NekoAuth，旧客户端不需要改接 OAuth，也不需要接触客户端密钥；登录响应里的 `token` 字段仍在原位置，但内容已改为 NekoAuth access token。Web、Android 与 PC 新版本都使用 NekoAuth OIDC 单点登录；邮箱密码接口继续保留给旧客户端兼容。
+旧邮箱密码注册、登录、验证码、找回密码与改密接口已下线。Web、Android 与 PC 必须通过 NekoAuth 登录页或扫码登录取得 NekoAuth access token；旧客户端需要升级。
 
 首次登录或注册成功后，NekoMusic 会按 `auth_user_id` 查找本地资料；不存在时自动创建，只在本地保留邮箱映射和 VIP，不写入昵称或头像。若本地已有同邮箱资料但尚未绑定，会在首次认证时补绑；同一邮箱已绑定其他 NekoAuth 用户时拒绝登录，避免账号串绑。
 
@@ -113,12 +113,12 @@ Web 会周期校验共享会话；Android 与 PC 回到前台时会重新请求 
 - 注册：新客户端不再提供邮箱、密码或验证码表单，统一打开 NekoAuth 注册页；Android 使用应用内 WebView，Web 与 PC 使用浏览器。
 - 账号资料与安全：昵称、邮箱、密码、邮箱验证和登录设备统一在 NekoAuth 账号中心修改；NekoMusic 资料页只展示本地业务资料并提供账号中心入口。
 - 头像与 VIP：头像由 NekoAuth 账号中心统一维护，NekoMusic 的后端头像 API 只代理 Auth；VIP 状态和到期时间继续由 NekoMusic 本地维护。
-- 旧客户端兼容：邮箱密码、注册、验证码与找回密码接口只为旧客户端保留，NekoMusic 后端转发给 NekoAuth；新客户端不得再接入这些表单。
+- 旧客户端迁移：邮箱密码、注册、验证码、找回密码与改密接口已经删除，旧客户端必须升级到 NekoAuth 登录页/扫码登录。
 - 扫码登录：手机端确认时用当前有效 NekoAuth token 换取新的长期 token，PC 端仍通过原有一次性 `deliveryKey` 领取，旧扫码接口字段保持不变。
 - 登出：NekoMusic 先吊销当前 access token，再通过 Auth 内部桥接撤销父域共享会话族并清除 Cookie；本地 Redis 不保留用户 token 副本。
 - 管理员创建/重置用户：NekoMusic 先校验管理员权限，再调用 NekoAuth 的管理员桥接接口；管理员只调整 VIP 等本地资料时不会改 NekoAuth 密码。
 
-桥接不可用或客户端配置错误时，旧 API 返回既有格式的错误响应；需要等待时保留 NekoAuth 的 `Retry-After` 语义。日志只记录操作类型、状态与用户 ID，不记录密码、验证码或 client secret。
+桥接不可用或客户端配置错误时，SSO、扫码与账号管理接口返回既有格式的错误响应；需要等待时保留 NekoAuth 的 `Retry-After` 语义。日志只记录操作类型、状态与用户 ID，不记录密码、验证码或 client secret。
 
 ## 本地前端开发
 

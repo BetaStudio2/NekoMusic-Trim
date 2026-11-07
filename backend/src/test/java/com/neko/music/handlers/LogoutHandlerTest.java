@@ -30,7 +30,7 @@ class LogoutHandlerTest {
         boolean revokeResult = true;
 
         StubUserAuthService() {
-            super(null, null, null, null, null, null);
+            super(null, null);
         }
 
         @Override

@@ -122,37 +122,6 @@ public final class UserManagementService {
         }
     }
 
-    public void changeUserPassword(int userId, String oldPassword, String newPassword)
-            throws UserManagementException {
-        if (trim(oldPassword).isEmpty()) {
-            throw UserManagementException.validation("auth.password_change.old_required");
-        }
-        if (trim(newPassword).isEmpty()) {
-            throw UserManagementException.validation("auth.password_reset.new_required");
-        }
-        if (newPassword.length() < PASSWORD_MIN_LENGTH) {
-            throw UserManagementException.validation("auth.password_change.new_too_short");
-        }
-        if (oldPassword.equals(newPassword)) {
-            throw UserManagementException.validation("auth.password_change.same_as_old");
-        }
-
-        if (nekoAuthAccountService == null) {
-            throw UserManagementException.internal("auth.service_unavailable", null);
-        }
-        try {
-            UserProfile profile = store.findUserProfile(userId)
-                    .orElseThrow(() -> UserManagementException.notFound("user.not_exists"));
-            nekoAuthAccountService.changePassword(profile.email(), oldPassword, newPassword);
-            revokeUserSessions(userId);
-            logger.info("用户 {} 通过 NekoAuth 修改密码成功，旧会话由 Auth tokenVersion 失效", userId);
-        } catch (SQLException e) {
-            throw databaseFailure("auth.password_change.failed", e);
-        } catch (NekoAuthAccountService.AccountBridgeException e) {
-            throw bridgeFailure(e, "auth.password_change.failed");
-        }
-    }
-
     public String changeUserNickname(int userId, String nickname) throws UserManagementException {
         String normalizedNickname = trim(nickname);
         String validationError = NicknameValidator.validate(normalizedNickname);

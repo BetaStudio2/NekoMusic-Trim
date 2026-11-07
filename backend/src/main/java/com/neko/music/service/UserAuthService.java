@@ -1,6 +1,5 @@
 package com.neko.music.service;
 
-import com.neko.music.config.ConfigManager;
 import com.neko.music.database.DatabaseManager;
 import com.neko.music.model.User;
 import com.neko.music.util.DbTimeUtil;
@@ -10,108 +9,27 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class UserAuthService {
     private static final Logger logger = LoggerFactory.getLogger(UserAuthService.class);
     private final DatabaseManager databaseManager;
-    private final ConfigManager configManager;
-    private final EmailService emailService;
-    private final RedisService redisService;
-    private final RedisTokenStore tokenStore;
-    private final VerificationCodeRateLimitService verificationCodeRateLimitService;
     private final NekoAuthAccountService nekoAuthAccountService;
     private final NicknameResolver nicknameResolver;
     private static final String INTROSPECTION_SCOPE_PREFIX = "nekoAuthIntrospection:";
 
-    /**
-     * 验证码异步发信线程：密码重置必须让「已注册 / 未注册」的响应耗时不可区分，
-     * 因此发信放到后台线程，调用方立即返回统一响应。单线程足够——真正的串行瓶颈在 SMTP。
-     */
-    private static final ExecutorService ASYNC_CODE_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
-        Thread thread = new Thread(r, "verification-code-async");
-        thread.setDaemon(true);
-        return thread;
-    });
-    
-    private static final String VERIFICATION_CODE_PREFIX = "verification_code:";
-    private static final String VERIFICATION_CODE_ATTEMPT_PREFIX = "verification_code_attempts:";
-    private static final String VERIFICATION_PURPOSE_REGISTER = "register";
-    private static final String VERIFICATION_PURPOSE_PASSWORD_RESET = "password_reset";
-    private static final int VERIFICATION_CODE_EXPIRY = 300; // 5分钟过期
-    private static final int VERIFICATION_CODE_MAX_ATTEMPTS = 5;
-
-    public UserAuthService(DatabaseManager databaseManager, ConfigManager configManager,
-                           EmailService emailService, RedisService redisService,
-                           RedisTokenStore tokenStore,
-                           VerificationCodeRateLimitService verificationCodeRateLimitService) {
-        this(databaseManager, configManager, emailService, redisService, tokenStore,
-                verificationCodeRateLimitService, null);
-    }
-
-    public UserAuthService(DatabaseManager databaseManager, ConfigManager configManager,
-                           EmailService emailService, RedisService redisService,
-                           RedisTokenStore tokenStore,
-                           VerificationCodeRateLimitService verificationCodeRateLimitService,
+    public UserAuthService(DatabaseManager databaseManager,
                            NekoAuthAccountService nekoAuthAccountService) {
-        this(databaseManager, configManager, emailService, redisService, tokenStore,
-                verificationCodeRateLimitService, nekoAuthAccountService,
-                new NicknameResolver(databaseManager, nekoAuthAccountService));
+        this(databaseManager, nekoAuthAccountService, null);
     }
 
-    public UserAuthService(DatabaseManager databaseManager, ConfigManager configManager,
-                           EmailService emailService, RedisService redisService,
-                           RedisTokenStore tokenStore,
-                           VerificationCodeRateLimitService verificationCodeRateLimitService,
+    public UserAuthService(DatabaseManager databaseManager,
                            NekoAuthAccountService nekoAuthAccountService,
                            NicknameResolver nicknameResolver) {
         this.databaseManager = databaseManager;
-        this.configManager = configManager;
-        this.emailService = emailService;
-        this.redisService = redisService;
-        this.tokenStore = tokenStore;
-        this.verificationCodeRateLimitService = verificationCodeRateLimitService;
         this.nekoAuthAccountService = nekoAuthAccountService;
         this.nicknameResolver = nicknameResolver == null
                 ? new NicknameResolver(databaseManager, nekoAuthAccountService)
                 : nicknameResolver;
-    }
-
-    /**
-     * 用户登录（仅支持邮箱登录）。
-     *
-     * <p>密码校验完全交给 NekoAuth；本地 users 表不保存密码。</p>
-     */
-    public Optional<LoginSession> authenticate(String email, String password) {
-        logger.info("用户登录尝试: {}", email);
-
-        try {
-            NekoAuthAccountService.Account account = requireBridge().login(email, password);
-            User user = findOrLinkNekoAuthUser(account.id(), account.email(), account.nickname());
-            logger.info("NekoAuth 用户登录成功: authUserId={} localUserId={}",
-                    account.id(), user.id());
-            return Optional.of(new LoginSession(user, account.accessToken()));
-        } catch (NekoAuthAccountService.AccountBridgeException exception) {
-            if (exception.invalidCredentials()) {
-                logger.warn("NekoAuth 用户登录失败: {}", email);
-                return Optional.empty();
-            }
-            throw exception;
-        }
-    }
-
-    /**
-     * 通过 NekoAuth 注册账号，再在 NekoMusic 创建或关联本地资料。
-     * 昵称由 NekoAuth 保存，本地资料不保存昵称。
-     */
-    public boolean registerUserWithCode(String nickname, String password, String email,
-                                        String verificationCode) {
-        NekoAuthAccountService.Account account =
-                requireBridge().register(email, password, verificationCode, nickname);
-        findOrLinkNekoAuthUser(account.id(), account.email(), account.nickname());
-        logger.info("NekoAuth 注册成功并已关联本地资料: authUserId={}", account.id());
-        return true;
     }
 
     /**
@@ -311,299 +229,6 @@ public class UserAuthService {
     }
 
     /**
-     * 发送注册验证码；同邮箱有发信冷却。
-     */
-    public SendVerificationCodeResult sendVerificationCode(String email, String nickname) {
-        if (nekoAuthAccountService != null) {
-            try {
-                nekoAuthAccountService.sendRegistrationCode(email);
-                return SendVerificationCodeResult.ok();
-            } catch (NekoAuthAccountService.AccountBridgeException exception) {
-                if (exception.rateLimited()) {
-                    return SendVerificationCodeResult.cooldown(exception.retryAfterSeconds());
-                }
-                throw exception;
-            }
-        }
-        return sendVerificationCode(email, nickname, VERIFICATION_PURPOSE_REGISTER);
-    }
-
-    /**
-     * 发送密码重置验证码；与注册验证码隔离，避免跨流程复用。
-     */
-    public SendVerificationCodeResult sendResetPasswordCode(String email, String nickname) {
-        return sendVerificationCode(email, nickname, VERIFICATION_PURPOSE_PASSWORD_RESET);
-    }
-
-    private SendVerificationCodeResult sendVerificationCode(String email, String nickname, String purpose) {
-        var cooldown = verificationCodeRateLimitService.tryAcquireSendSlot(email);
-        if (cooldown.isPresent()) {
-            return SendVerificationCodeResult.cooldown(cooldown.get());
-        }
-        return deliverVerificationCode(email, nickname, purpose);
-    }
-
-    /**
-     * 重置密码验证码：统一限流通过后**异步**发信，调用方立即返回。
-     *
-     * <p>为什么异步：密码重置接口必须对「邮箱是否注册」给出完全一致的响应。同步发信时，已注册
-     * 邮箱要多走一次 SMTP（可达数百毫秒到数秒），未注册邮箱只查一次库，响应时间差本身就是
-     * 账号存在性信号。放到后台线程后两条分支的耗时都只剩「一次查询」，失败只记日志
-     * （对外文案本就统一）。</p>
-     */
-    public void sendResetPasswordCodeAsync(String email, String nickname) {
-        if (nekoAuthAccountService != null) {
-            ASYNC_CODE_EXECUTOR.execute(() -> {
-                try {
-                    nekoAuthAccountService.sendPasswordResetCode(email);
-                } catch (RuntimeException e) {
-                    logger.warn("提交 NekoAuth 找回密码验证码失败: {}", email);
-                }
-            });
-            return;
-        }
-        ASYNC_CODE_EXECUTOR.execute(() -> {
-            try {
-                deliverVerificationCode(email, nickname, VERIFICATION_PURPOSE_PASSWORD_RESET);
-            } catch (RuntimeException e) {
-                logger.error("异步发送重置密码验证码失败: {}", email, e);
-            }
-        });
-    }
-
-    /**
-     * 重置密码发码的统一限流：来源 IP 与邮箱各占一个槽位，两者都必须在「邮箱是否注册」之前完成，
-     * 否则 {@code 429} 会变成账号存在性信号。
-     *
-     * @return empty 表示放行；非 empty 为需等待的秒数
-     */
-    public Optional<Long> acquireResetCodeSlot(String email, String clientIp) {
-        Optional<Long> byIp = verificationCodeRateLimitService.tryAcquireIpSlot(clientIp);
-        if (byIp.isPresent()) {
-            return byIp;
-        }
-        return verificationCodeRateLimitService.tryAcquireSendSlot(email);
-    }
-
-    /**
-     * 注册发码的来源 IP 限流：只占 IP 维度一个槽位。
-     *
-     * <p>邮箱级冷却（{@link #sendVerificationCode}）只拦「同邮箱重复发码」，挡不住换收件人批量发码；
-     * 因此发码入口还必须按来源 IP 封顶。邮箱槽位仍由发信逻辑内部占用，此处不重复占用，否则会把
-     * 同一次发信的邮箱冷却误判成超限。</p>
-     *
-     * @return empty 表示放行；非 empty 为需等待的秒数
-     */
-    public Optional<Long> acquireVerificationIpSlot(String clientIp) {
-        return verificationCodeRateLimitService.tryAcquireIpSlot(clientIp);
-    }
-
-    /** 生成验证码 → 发信 → 落 Redis；冷却槽位由调用方（同步 / 异步两条路径）负责。 */
-    private SendVerificationCodeResult deliverVerificationCode(String email, String nickname, String purpose) {
-        logger.info("发送验证码至: {}", email);
-
-        String verificationCode = emailService.generateVerificationCode();
-
-        boolean emailSent = emailService.sendVerificationCode(email, nickname, verificationCode);
-
-        if (emailSent) {
-            String key = verificationCodeKey(purpose, email);
-            redisService.setWithExpiry(key, verificationCode, VERIFICATION_CODE_EXPIRY);
-            redisService.del(verificationCodeAttemptKey(purpose, email));
-            logger.info("验证码已生成并存储到Redis: {}, purpose={}", email, purpose);
-            return SendVerificationCodeResult.ok();
-        }
-
-        verificationCodeRateLimitService.releaseSendSlot(email);
-        logger.error("发送验证码邮件失败: {}", email);
-        return SendVerificationCodeResult.sendFailed();
-    }
-    
-    /**
-     * 检查邮箱是否在白名单中
-     */
-    public boolean isWhitelistedEmail(String email) {
-        if (nekoAuthAccountService != null) {
-            return true;
-        }
-        String emailWhitelist = configManager.getEmailWhitelist();
-        
-        if (emailWhitelist == null || emailWhitelist.trim().isEmpty()) {
-            return true;
-        }
-        
-        String emailDomain = email.substring(email.lastIndexOf("@") + 1).toLowerCase().trim();
-        String[] whitelist = emailWhitelist.split(",");
-        
-        for (String whitelistedDomain : whitelist) {
-            if (emailDomain.equals(whitelistedDomain.trim())) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-
-    /**
-     * 验证注册验证码，并对同一邮箱短时间内的错误尝试次数封顶。
-     *
-     * <p>注册验证码是 6 位纯数字、有效期 5 分钟，若不做尝试次数限制，配合「无限速发码」可被穷举
-     * （10^6 量级）。这里复用与密码重置一致的 {@link #VERIFICATION_CODE_MAX_ATTEMPTS} 策略：
-     * 同一邮箱累计错误到上限即删除验证码，须重新发码才能继续。</p>
-     */
-    public boolean verifyCode(String email, String code) {
-        return verifyCode(email, code, VERIFICATION_PURPOSE_REGISTER, true);
-    }
-
-    /**
-     * 验证密码重置验证码，并限制同一邮箱短时间内的错误尝试次数。
-     */
-    public boolean verifyResetPasswordCode(String email, String code) {
-        return verifyCode(email, code, VERIFICATION_PURPOSE_PASSWORD_RESET, true);
-    }
-
-    private boolean verifyCode(String email, String code, String purpose, boolean limitAttempts) {
-        if (email == null || code == null) {
-            return false;
-        }
-
-        if (limitAttempts && isVerificationAttemptBlocked(purpose, email)) {
-            logger.warn("验证码错误次数过多，暂时拒绝验证: {}, purpose={}", email, purpose);
-            return false;
-        }
-
-        String key = verificationCodeKey(purpose, email);
-        String storedCode = redisService.get(key);
-        
-        if (storedCode == null) {
-            if (limitAttempts) {
-                recordFailedVerificationAttempt(purpose, email);
-            }
-            logger.warn("未找到邮箱对应的验证码: {}, purpose={}", email, purpose);
-            return false;
-        }
-        
-        if (storedCode.equals(code)) {
-            redisService.del(key);
-            redisService.del(verificationCodeAttemptKey(purpose, email));
-            logger.info("验证码验证成功: {}, purpose={}", email, purpose);
-            return true;
-        } else {
-            if (limitAttempts) {
-                long attempts = recordFailedVerificationAttempt(purpose, email);
-                if (attempts >= VERIFICATION_CODE_MAX_ATTEMPTS) {
-                    redisService.del(key);
-                    logger.warn("验证码错误次数达到上限，已删除验证码: {}, purpose={}", email, purpose);
-                }
-            }
-            logger.warn("验证码不匹配: {}, purpose={}", email, purpose);
-            return false;
-        }
-    }
-
-    private String verificationCodeKey(String purpose, String email) {
-        return VERIFICATION_CODE_PREFIX + purpose + ":" + normalizeEmail(email);
-    }
-
-    private String verificationCodeAttemptKey(String purpose, String email) {
-        return VERIFICATION_CODE_ATTEMPT_PREFIX + purpose + ":" + normalizeEmail(email);
-    }
-
-    private static String normalizeEmail(String email) {
-        return email == null ? "" : email.trim().toLowerCase();
-    }
-
-    private boolean isVerificationAttemptBlocked(String purpose, String email) {
-        String attempts = redisService.get(verificationCodeAttemptKey(purpose, email));
-        if (attempts == null || attempts.isBlank()) {
-            return false;
-        }
-        try {
-            return Integer.parseInt(attempts) >= VERIFICATION_CODE_MAX_ATTEMPTS;
-        } catch (NumberFormatException e) {
-            redisService.del(verificationCodeAttemptKey(purpose, email));
-            return false;
-        }
-    }
-
-    private long recordFailedVerificationAttempt(String purpose, String email) {
-        String key = verificationCodeAttemptKey(purpose, email);
-        Object result = redisService.eval(
-                "local count = redis.call('INCR', KEYS[1]) " +
-                        "if count == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) end " +
-                        "return count",
-                new String[]{key},
-                new String[]{String.valueOf(VERIFICATION_CODE_EXPIRY)}
-        );
-        if (result instanceof Number) {
-            return ((Number) result).longValue();
-        }
-        return 0;
-    }
-
-    private boolean emailExists(String email) {
-        return emailExistsWithLog(email, "检查邮箱存在性失败:");
-    }
-
-    /**
-     * 根据邮箱检查用户是否存在（公开方法，用于密码重置）
-     */
-    public boolean userExistsByEmail(String email) {
-        return emailExistsWithLog(email, "检查用户邮箱失败:");
-    }
-
-    /**
-     * 查询邮箱是否存在；失败日志前缀由调用方传入以保持各自原有文案。
-     */
-    private boolean emailExistsWithLog(String email, String errorLogPrefix) {
-        String sql = "SELECT COUNT(*) FROM users WHERE email = ?";
-
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, email);
-
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                return rs.getInt(1) > 0;
-            }
-        } catch (SQLException e) {
-            logger.error(errorLogPrefix + " {}", e.getMessage(), e);
-        }
-
-        return false;
-    }
-
-    /**
-     * 通过 NekoAuth 验证邮箱验证码并重置密码；成功后撤销 NekoMusic 本地会话。
-     */
-    public boolean resetPasswordWithCode(String email, String code, String newPassword) {
-        requireBridge().resetPassword(email, code, newPassword);
-        findUserIdByEmail(email).ifPresent(this::revokeAllTokensForUser);
-        logger.info("NekoAuth 密码重置成功，已撤销本地会话: {}", email);
-        return true;
-    }
-
-    public Optional<Integer> findUserIdByEmail(String email) {
-        if (email == null || email.isBlank()) {
-            return Optional.empty();
-        }
-        String sql = "SELECT id FROM users WHERE email = ? LIMIT 1";
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, email.trim());
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return Optional.of(rs.getInt("id"));
-                }
-            }
-        } catch (SQLException e) {
-            logger.error("按邮箱查询用户 ID 失败: {}", e.getMessage(), e);
-        }
-        return Optional.empty();
-    }
-
-    /**
      * 注销某用户全部会话（改密、重置密码后须重新登录）。
      */
     public void revokeAllTokensForUser(int userId) {
@@ -740,9 +365,6 @@ public class UserAuthService {
                     }
                 });
         return Optional.ofNullable(cached);
-    }
-
-    public record LoginSession(User user, String accessToken) {
     }
 
 }

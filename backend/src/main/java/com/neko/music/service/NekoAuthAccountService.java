@@ -53,13 +53,6 @@ public class NekoAuthAccountService {
                 && !configManager.getOAuthClientSecret().isBlank();
     }
 
-    public Account login(String email, String password) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("email", email);
-        body.put("password", password);
-        return postAccount("/login", body, "登录", true);
-    }
-
     /** 用父域共享 SSO 会话换取当前应用会话，不发生浏览器跳转。 */
     public Account loginWithSsoSession(String ssoSession) {
         return postAccount("/sso-session", Map.of("ssoSession", ssoSession), "共享会话登录", true);
@@ -70,19 +63,6 @@ public class NekoAuthAccountService {
         HttpResponse<String> response = post(
                 "/sso-session/logout", Map.of("ssoSession", ssoSession), "退出共享会话");
         return response.headers().allValues("Set-Cookie");
-    }
-
-    public void sendRegistrationCode(String email) {
-        postNoContent("/register/code", Map.of("email", email), "发送注册验证码");
-    }
-
-    public Account register(String email, String password, String verificationCode, String nickname) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("nickname", nickname);
-        body.put("email", email);
-        body.put("password", password);
-        body.put("verificationCode", verificationCode);
-        return postAccount("/register", body, "注册", true);
     }
 
     public Account adminCreate(String email, String password, String nickname) {
@@ -161,26 +141,6 @@ public class NekoAuthAccountService {
     public List<AccountSummary> searchAccounts(String query) {
         HttpResponse<String> response = post("/search", Map.of("query", query), "搜索账号");
         return parseSummaries(response, "搜索账号");
-    }
-
-    public void sendPasswordResetCode(String email) {
-        postNoContent("/password/reset-code", Map.of("email", email), "发送找回密码验证码");
-    }
-
-    public void resetPassword(String email, String code, String newPassword) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("email", email);
-        body.put("code", code);
-        body.put("newPassword", newPassword);
-        postNoContent("/password/reset", body, "重置密码");
-    }
-
-    public void changePassword(String email, String currentPassword, String newPassword) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("email", email);
-        body.put("currentPassword", currentPassword);
-        body.put("newPassword", newPassword);
-        postNoContent("/password/change", body, "修改密码");
     }
 
     public void adminResetPassword(String email, String newPassword) {

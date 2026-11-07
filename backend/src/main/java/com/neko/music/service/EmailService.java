@@ -16,7 +16,6 @@ import javax.mail.util.ByteArrayDataSource;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -31,9 +30,7 @@ import java.util.function.BooleanSupplier;
 
 public class EmailService {
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
-    private static final SecureRandom secureRandom = new SecureRandom();
     private final ConfigManager configManager;
-    private final String emailTemplate;
     private final String reviewTemplate;
     private final String reviewApprovedTemplate;
     private final String videoRenderCompleteTemplate;
@@ -67,8 +64,6 @@ public class EmailService {
 
     public EmailService(ConfigManager configManager) {
         this.configManager = configManager;
-        this.emailTemplate = loadTemplate("email.html",
-                "无法加载邮件模板 email.html", "加载邮件模板失败", getDefaultEmailTemplate());
         this.reviewTemplate = loadTemplate("Review.html",
                 "无法加载审核邮件模板 Review.html", "加载审核邮件模板失败", getDefaultReviewTemplate());
         this.reviewApprovedTemplate = loadTemplate("ReviewApproved.html",
@@ -133,30 +128,6 @@ public class EmailService {
                 + "<p><a href=\"{{downloadUrl}}\">前往下载 MP4</a></p>"
                 + "<p>生成时间：{{completedAt}}</p>"
                 + "</body></html>";
-    }
-
-    /**
-     * 默认邮件模板
-     */
-    private String getDefaultEmailTemplate() {
-        return "<!DOCTYPE html>" +
-               "<html><head><meta charset='UTF-8'><title>验证码</title></head>" +
-               "<body>" +
-               "<h2>您好，</h2>" +
-               "<p>感谢您注册 NekoMusic！</p>" +
-               "<p>您的验证码是：<strong>{{verificationCode}}</strong></p>" +
-               "<p>此验证码将在5分钟内有效，请尽快使用。</p>" +
-               "</body></html>";
-    }
-
-    /**
-     * 发送验证码邮件
-     */
-    public boolean sendVerificationCode(String toEmail, String nickname, String verificationCode) {
-        String subject = "NekoMusic - 验证码";
-        String content = emailTemplate.replace("{{verificationCode}}", verificationCode);
-
-        return sendEmail(toEmail, subject, content);
     }
 
     /**
@@ -461,14 +432,4 @@ public class EmailService {
         }
     }
 
-    /**
-     * 生成随机验证码
-     */
-    public String generateVerificationCode() {
-        StringBuilder code = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            code.append(secureRandom.nextInt(10));
-        }
-        return code.toString();
-    }
 }

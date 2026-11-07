@@ -15,8 +15,8 @@ import java.util.Optional;
  *
  * <p>计数落在 Redis 的固定窗口里，因此**多实例部署下也共享同一份额度**——这一点很关键：若只用
  * 进程内计数，请求被负载均衡分到 N 个实例上时，实际额度会被放大到 N 倍，等于没有限流。
- * Redis 不可用时放行（只记 WARN），与既有 {@link IPRateLimitService} /
- * {@link VerificationCodeRateLimitService} 一致：限流不可用不应把登录整条链路打死。</p>
+ * Redis 不可用时放行（只记 WARN），与 {@link IPRateLimitService} 一致：
+ * 限流不可用不应把登录整条链路打死。</p>
  *
  * <p>阈值是类常量，不新增配置项。</p>
  */

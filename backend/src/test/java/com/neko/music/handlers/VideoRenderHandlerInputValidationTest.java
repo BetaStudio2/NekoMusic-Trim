@@ -40,7 +40,7 @@ class VideoRenderHandlerInputValidationTest {
     /** 只认令牌为「已登录」，其余逻辑一律不碰。 */
     private static final class StubUserAuthService extends UserAuthService {
         StubUserAuthService() {
-            super(null, null, null, null, null, null);
+            super(null, null);
         }
 
         @Override

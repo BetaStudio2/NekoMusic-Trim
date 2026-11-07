@@ -32,45 +32,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class UserProfileHandlersTest {
 
     @Test
-    void passwordChangeRejectsWrongOldPasswordWithoutRevokingSessions() throws Exception {
-        FakeStore store = new FakeStore();
-        RecordingRevoker revoker = new RecordingRevoker();
-        UserPasswordChangeHandler handler = new UserPasswordChangeHandler(
-                new UserManagementService(store, revoker, new RejectingAuthBridge()), request -> 7);
-        CapturingResponse capture = new CapturingResponse();
-
-        handler.doPost(request("{\"oldPassword\":\"wrong-pass\",\"newPassword\":\"new-pass\"}"),
-                responseProxy(capture));
-
-        assertEquals(400, capture.status);
-        assertEquals("private, no-store", capture.headers.get("Cache-Control"));
-        assertTrue(capture.body().contains("\"error\""));
-        assertTrue(capture.body().contains("原密码错误") || capture.body().contains("old_wrong"));
-        assertTrue(revoker.users.isEmpty());
-    }
-
-    @Test
-    void passwordChangeDelegatesToNekoAuthAndRevokesSessions() throws Exception {
-        FakeStore store = new FakeStore();
-        RecordingRevoker revoker = new RecordingRevoker();
-        RecordingAuthBridge authBridge = new RecordingAuthBridge();
-        UserPasswordChangeHandler handler = new UserPasswordChangeHandler(
-                new UserManagementService(store, revoker, authBridge), request -> 7);
-        CapturingResponse capture = new CapturingResponse();
-
-        handler.doPost(request("{\"oldPassword\":\"old-pass\",\"newPassword\":\"new-pass\"}"),
-                responseProxy(capture));
-
-        assertEquals(200, capture.status);
-        assertEquals("private, no-store", capture.headers.get("Cache-Control"));
-        assertTrue(capture.body().contains("\"success\":true"));
-        assertEquals(List.of(7), revoker.users);
-        assertEquals("listener@example.com", authBridge.email);
-        assertEquals("old-pass", authBridge.currentPassword);
-        assertEquals("new-pass", authBridge.newPassword);
-    }
-
-    @Test
     void nicknameChangeReturnsSavedNicknameAndDisablesCaching() throws Exception {
         FakeStore store = new FakeStore();
         RecordingAuthBridge authBridge = new RecordingAuthBridge();
@@ -269,9 +230,6 @@ class UserProfileHandlersTest {
     }
 
     private static class RecordingAuthBridge extends NekoAuthAccountService {
-        private String email;
-        private String currentPassword;
-        private String newPassword;
         private String nicknameEmail;
         private String nickname;
 
@@ -280,24 +238,9 @@ class UserProfileHandlersTest {
         }
 
         @Override
-        public void changePassword(String email, String currentPassword, String newPassword) {
-            this.email = email;
-            this.currentPassword = currentPassword;
-            this.newPassword = newPassword;
-        }
-
-        @Override
         public void updateNickname(String email, String nickname) {
             this.nicknameEmail = email;
             this.nickname = nickname;
-        }
-    }
-
-    private static final class RejectingAuthBridge extends RecordingAuthBridge {
-        @Override
-        public void changePassword(String email, String currentPassword, String newPassword) {
-            throw new NekoAuthAccountService.AccountBridgeException(
-                    401, "INVALID_CREDENTIALS", "当前密码错误", 0);
         }
     }
 

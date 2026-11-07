@@ -147,36 +147,6 @@ class UserManagementServiceTest {
     }
 
     @Test
-    void ownPasswordChangeRejectsWrongOldPasswordAndSamePassword() throws Exception {
-        FakeStore store = new FakeStore();
-        RecordingRevoker revoker = new RecordingRevoker();
-        UserManagementService service = new UserManagementService(store, revoker, new RejectingAuthBridge());
-
-        UserManagementException wrong = assertThrows(UserManagementException.class,
-                () -> service.changeUserPassword(7, "wrong-pass", "new-pass"));
-        assertEquals("auth.password_change.old_wrong", wrong.messageKey());
-        assertTrue(revoker.users.isEmpty());
-
-        UserManagementException same = assertThrows(UserManagementException.class,
-                () -> service.changeUserPassword(7, "old-pass", "old-pass"));
-        assertEquals("auth.password_change.same_as_old", same.messageKey());
-        assertTrue(revoker.users.isEmpty());
-    }
-
-    @Test
-    void ownPasswordChangeHashesAndRevokesSessions() throws Exception {
-        FakeStore store = new FakeStore();
-        RecordingRevoker revoker = new RecordingRevoker();
-        RecordingAuthBridge authBridge = new RecordingAuthBridge();
-        UserManagementService service = new UserManagementService(store, revoker, authBridge);
-
-        service.changeUserPassword(7, "old-pass", "new-pass");
-
-        assertEquals(List.of(7), revoker.users);
-        assertEquals(List.of("listener@example.com:old-pass:new-pass"), authBridge.changes);
-    }
-
-    @Test
     void ownNicknameChangeTrimsAndValidates() throws Exception {
         FakeStore store = new FakeStore();
         RecordingAuthBridge authBridge = new RecordingAuthBridge();
@@ -195,16 +165,12 @@ class UserManagementServiceTest {
     @Test
     void missingUserKeepsLegacySelfServiceFailures() {
         UserManagementService service = new UserManagementService(
-                new FakeStore(), new RecordingRevoker(), new RejectingAuthBridge());
+                new FakeStore(), new RecordingRevoker(), new RecordingAuthBridge());
 
         UserManagementException profile = assertThrows(UserManagementException.class,
                 () -> service.getUserProfile(99));
         assertEquals(UserManagementException.Kind.NOT_FOUND, profile.kind());
         assertEquals("user.not_exists", profile.messageKey());
-
-        UserManagementException password = assertThrows(UserManagementException.class,
-                () -> service.changeUserPassword(99, "old-pass", "new-pass"));
-        assertEquals("user.not_exists", password.messageKey());
 
         UserManagementException nickname = assertThrows(UserManagementException.class,
                 () -> service.changeUserNickname(99, "listener"));
@@ -273,17 +239,11 @@ class UserManagementServiceTest {
     }
 
     private static class RecordingAuthBridge extends NekoAuthAccountService {
-        private final List<String> changes = new ArrayList<>();
         private final List<String> adminResets = new ArrayList<>();
         private final List<String> nicknameChanges = new ArrayList<>();
 
         RecordingAuthBridge() {
             super(null, null);
-        }
-
-        @Override
-        public void changePassword(String email, String currentPassword, String newPassword) {
-            changes.add(email + ":" + currentPassword + ":" + newPassword);
         }
 
         @Override
@@ -294,14 +254,6 @@ class UserManagementServiceTest {
         @Override
         public void updateNickname(String email, String nickname) {
             nicknameChanges.add(email + ":" + nickname);
-        }
-    }
-
-    private static final class RejectingAuthBridge extends RecordingAuthBridge {
-        @Override
-        public void changePassword(String email, String currentPassword, String newPassword) {
-            throw new NekoAuthAccountService.AccountBridgeException(
-                    401, "INVALID_CREDENTIALS", "当前密码错误", 0);
         }
     }
 

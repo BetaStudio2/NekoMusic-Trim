@@ -91,7 +91,7 @@ class UserQrLoginHandlerTest {
 
     private static final class StubUserAuthService extends UserAuthService {
         StubUserAuthService() {
-            super(null, null, null, null, null, null);
+            super(null, null);
         }
 
         @Override

@@ -201,35 +201,15 @@ public final class ServletRegistrar {
         ServletHolder latestMusicHolder = new ServletHolder(new LatestMusicHandler());
         context.addServlet(latestMusicHolder, "/api/music/latest");
 
-        // 注册用户登录API处理器
-        ServletHolder userLoginHolder = new ServletHolder(new UserLoginHandler());
-        context.addServlet(userLoginHolder, "/api/user/login");
-        
         // 注册扫码登录API处理器（PC 生成二维码，手机端 NekoMusic App 扫码确认）
         ServletHolder userQrLoginHolder = new ServletHolder(new UserQrLoginHandler());
         context.addServlet(userQrLoginHolder, "/api/user/qrlogin/*");
-
-        // 注册用户注册API处理器
-        ServletHolder userRegisterHolder = new ServletHolder(new UserRegisterHandler());
-        context.addServlet(userRegisterHolder, "/api/user/register");
 
         ServletHolder sliderCaptchaHolder = new ServletHolder(new SliderCaptchaHandler());
         context.addServlet(sliderCaptchaHolder, "/api/captcha/slider");
 
         ServletHolder sliderCaptchaVerifyHolder = new ServletHolder(new SliderCaptchaVerifyHandler());
         context.addServlet(sliderCaptchaVerifyHolder, "/api/captcha/slider/verify");
-        
-        // 注册发送验证码API处理器
-        ServletHolder sendVerificationHolder = new ServletHolder(new SendVerificationHandler());
-        context.addServlet(sendVerificationHolder, "/api/user/send-verification");
-        
-        // 注册发送重置密码验证码API处理器
-        ServletHolder sendResetPasswordCodeHolder = new ServletHolder(new SendResetPasswordCodeHandler());
-        context.addServlet(sendResetPasswordCodeHolder, "/api/user/send-reset-code");
-        
-        // 注册重置密码API处理器
-        ServletHolder resetPasswordHolder = new ServletHolder(new ResetPasswordHandler());
-        context.addServlet(resetPasswordHolder, "/api/user/reset-password");
         
         // 注册用户头像上传API处理器（更具体的路径先注册）
         ServletHolder userAvatarUploadHolder = new ServletHolder(new UserAvatarUploadHandler());
@@ -241,10 +221,6 @@ public final class ServletRegistrar {
         ServletHolder userAvatarHolder = new ServletHolder(new UserAvatarHandler());
         context.addServlet(userAvatarHolder, "/api/user/avatar/*");
         
-        // 注册用户修改密码API处理器
-        ServletHolder userPasswordChangeHolder = new ServletHolder(new UserPasswordChangeHandler());
-        context.addServlet(userPasswordChangeHolder, "/api/user/password/change");
-
         // 注册用户登出API处理器（服务端吊销当前 user token）
         ServletHolder userLogoutHolder = new ServletHolder(new UserLogoutHandler());
         context.addServlet(userLogoutHolder, "/api/user/logout");

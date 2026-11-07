@@ -76,7 +76,6 @@ public class Main {
     private static AdminAuthService adminAuthService;
     private static UserManagementService userManagementService;
     private static AdminLoginThrottleService adminLoginThrottleService;
-    private static UserLoginThrottleService userLoginThrottleService;
     private static AuthAbuseLimiter authAbuseLimiter;
     private static ExternalFillQuotaService externalFillQuotaService;
     private static SourceBanService sourceBanService;
@@ -205,8 +204,6 @@ public class Main {
         adminAuthService = new AdminAuthService(adminDatabaseManager, tokenStore);
         adminLoginThrottleService =
                 new AdminLoginThrottleService(new AdminLoginThrottleService.RedisStore(redisService));
-        userLoginThrottleService =
-                new UserLoginThrottleService(new UserLoginThrottleService.RedisStore(redisService));
         authAbuseLimiter = new AuthAbuseLimiter(new AuthAbuseLimiter.RedisStore(redisService));
         // 外站补全来源配额（复用认证限流的 Redis 固定窗口实现，阈值是类常量）
         externalFillQuotaService =
@@ -215,15 +212,11 @@ public class Main {
         // 初始化邮件服务
         emailService = new EmailService(configManager);
 
-        VerificationCodeRateLimitService verificationCodeRateLimitService =
-                new VerificationCodeRateLimitService(configManager, redisService);
-
         // 初始化用户认证服务
         nekoAuthAccountService = new NekoAuthAccountService(configManager, objectMapper);
         nicknameResolver = new NicknameResolver(databaseManager, nekoAuthAccountService);
         userAuthService = new UserAuthService(
-                databaseManager, configManager, emailService, redisService, tokenStore,
-                verificationCodeRateLimitService, nekoAuthAccountService, nicknameResolver);
+                databaseManager, nekoAuthAccountService, nicknameResolver);
         nekoAuthOAuthService = new NekoAuthOAuthService(
                 configManager, redisService, userAuthService, nekoAuthAccountService, objectMapper);
         userManagementService = new UserManagementService(
@@ -545,10 +538,6 @@ public class Main {
 
     public static AdminLoginThrottleService getAdminLoginThrottleService() {
         return adminLoginThrottleService;
-    }
-
-    public static UserLoginThrottleService getUserLoginThrottleService() {
-        return userLoginThrottleService;
     }
 
     public static AuthAbuseLimiter getAuthAbuseLimiter() {
