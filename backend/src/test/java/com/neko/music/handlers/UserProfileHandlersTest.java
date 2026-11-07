@@ -197,7 +197,6 @@ class UserProfileHandlersTest {
     private static final class FakeStore implements UserAccountStore {
         private String nickname = "listener";
         private Timestamp vipExpiresAt;
-        private String avatarPath;
 
         @Override
         public List<AdminAccount> listAdmins() {
@@ -246,11 +245,6 @@ class UserProfileHandlersTest {
         }
 
         @Override
-        public Optional<String> findUserAvatar(int id) {
-            return id == 7 ? Optional.ofNullable(avatarPath) : Optional.empty();
-        }
-
-        @Override
         public boolean userEmailExists(String email) {
             return false;
         }
@@ -266,16 +260,6 @@ class UserProfileHandlersTest {
             }
             this.vipExpiresAt = vipExpiresAt;
             return true;
-        }
-
-        @Override
-        public AvatarUpdateResult updateUserAvatar(int id, String avatarPath) {
-            if (id != 7) {
-                return AvatarUpdateResult.notFound();
-            }
-            String previous = this.avatarPath;
-            this.avatarPath = avatarPath;
-            return AvatarUpdateResult.updated(previous);
         }
 
         @Override

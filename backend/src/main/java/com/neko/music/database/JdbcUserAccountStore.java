@@ -214,11 +214,6 @@ public final class JdbcUserAccountStore implements UserAccountStore {
     }
 
     @Override
-    public Optional<String> findUserAvatar(int id) throws SQLException {
-        return findUserColumn("SELECT avatar FROM users WHERE id = ?", id);
-    }
-
-    @Override
     public boolean userEmailExists(String email) throws SQLException {
         return exists("SELECT 1 FROM users WHERE email = ? LIMIT 1", email);
     }
@@ -275,44 +270,6 @@ public final class JdbcUserAccountStore implements UserAccountStore {
             }
             stmt.setInt(2, id);
             return stmt.executeUpdate() > 0;
-        }
-    }
-
-    @Override
-    public AvatarUpdateResult updateUserAvatar(int id, String avatarPath) throws SQLException {
-        try (Connection conn = databaseManager.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                String previousAvatarPath;
-                try (PreparedStatement lock = conn.prepareStatement(
-                        "SELECT avatar FROM users WHERE id = ? FOR UPDATE")) {
-                    lock.setInt(1, id);
-                    try (ResultSet rs = lock.executeQuery()) {
-                        if (!rs.next()) {
-                            conn.rollback();
-                            return AvatarUpdateResult.notFound();
-                        }
-                        previousAvatarPath = rs.getString("avatar");
-                    }
-                }
-
-                try (PreparedStatement update = conn.prepareStatement(
-                        "UPDATE users SET avatar = ? WHERE id = ?")) {
-                    update.setString(1, avatarPath);
-                    update.setInt(2, id);
-                    if (update.executeUpdate() == 0) {
-                        conn.rollback();
-                        return AvatarUpdateResult.notFound();
-                    }
-                }
-                conn.commit();
-                return AvatarUpdateResult.updated(previousAvatarPath);
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(true);
-            }
         }
     }
 

@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -22,6 +23,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * NekoAuth 服务端账号与令牌桥接客户端。
@@ -84,6 +87,71 @@ public class NekoAuthAccountService {
         body.put("email", email);
         body.put("nickname", nickname);
         postNoContent("/nickname", body, "修改昵称");
+    }
+
+    /** 将本地已有头像迁移到 NekoAuth；调用方负责在成功后清理本地文件。 */
+    public void uploadAvatar(long authUserId, Path avatarFile) {
+        if (authUserId <= 0) {
+            throw new AccountBridgeException(400, "INVALID_AUTH_USER_ID", "NekoAuth 用户 ID 无效", 0);
+        }
+        byte[] bytes;
+        try {
+            bytes = Files.readAllBytes(avatarFile);
+        } catch (IOException exception) {
+            throw new AccountBridgeException(400, "AVATAR_READ_FAILED", "无法读取本地头像", 0);
+        }
+        if (bytes.length == 0) {
+            throw new AccountBridgeException(400, "AVATAR_REQUIRED", "头像文件为空", 0);
+        }
+        String boundary = "----NekoMusicAvatar" + randomToken();
+        String fileName = sanitizeMultipartName(avatarFile.getFileName().toString());
+        ByteArrayOutputStream body = new ByteArrayOutputStream(bytes.length + 512);
+        try {
+            write(body, "--" + boundary + "\r\n");
+            write(body, "Content-Disposition: form-data; name=\"authUserId\"\r\n\r\n");
+            write(body, Long.toString(authUserId) + "\r\n");
+            write(body, "--" + boundary + "\r\n");
+            write(body, "Content-Disposition: form-data; name=\"avatar\"; filename=\"" + fileName + "\"\r\n");
+            write(body, "Content-Type: " + avatarContentType(fileName) + "\r\n\r\n");
+            body.write(bytes);
+            write(body, "\r\n--" + boundary + "--\r\n");
+        } catch (IOException exception) {
+            throw new AccountBridgeException(500, "AVATAR_ENCODE_FAILED", "无法构造头像上传请求", 0);
+        }
+        HttpRequest request = requestBuilder("/api/internal/accounts/avatar")
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
+                .build();
+        sendChecked(request, "上传头像", "/avatar");
+    }
+
+    /** 从 NekoAuth 读取头像原始字节，供迁移后做无损校验。 */
+    public byte[] fetchAvatar(long authUserId) {
+        if (authUserId <= 0) {
+            throw new AccountBridgeException(400, "INVALID_AUTH_USER_ID", "NekoAuth 用户 ID 无效", 0);
+        }
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(issuerUri() + "/avatars/" + authUserId))
+                .timeout(HTTP_TIMEOUT)
+                .header("Accept", "image/*")
+                .GET()
+                .build();
+        HttpResponse<byte[]> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        } catch (IOException exception) {
+            throw new AccountBridgeException(503, "NEKO_AUTH_UNAVAILABLE",
+                    "暂时无法连接 NekoAuth", 0);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AccountBridgeException(503, "NEKO_AUTH_UNAVAILABLE",
+                    "读取 NekoAuth 头像被中断", 0);
+        }
+        if (!HttpTransport.isSuccess(response.statusCode())) {
+            throw new AccountBridgeException(response.statusCode(), "AVATAR_FETCH_FAILED",
+                    "NekoAuth 头像读取失败", 0);
+        }
+        return response.body();
     }
 
     /** 按 NekoAuth 用户 ID 批量读取当前昵称；NekoAuth 是唯一权威源。 */
@@ -411,6 +479,35 @@ public class NekoAuthAccountService {
         // RFC 7617：用户名与密钥原样拼接后 Base64，不做 URL 编解码。
         String encoded = clientId + ":" + clientSecret;
         return "Basic " + Base64.getEncoder().encodeToString(encoded.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void write(ByteArrayOutputStream output, String value) throws IOException {
+        output.write(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String randomToken() {
+        byte[] bytes = new byte[18];
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        random.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private static String sanitizeMultipartName(String value) {
+        if (value == null || value.isBlank()) {
+            return "avatar.png";
+        }
+        String sanitized = value.replace("\\", "_").replace("\"", "_")
+                .replace("\r", "_").replace("\n", "_");
+        return sanitized.length() <= 120 ? sanitized : sanitized.substring(sanitized.length() - 120);
+    }
+
+    private static String avatarContentType(String fileName) {
+        String lower = fileName.toLowerCase(java.util.Locale.ROOT);
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".gif")) return "image/gif";
+        if (lower.endsWith(".webp")) return "image/webp";
+        if (lower.endsWith(".bmp")) return "image/bmp";
+        return "image/png";
     }
 
     private static String encodeForm(Map<String, String> values) {

@@ -33,10 +33,6 @@ import java.util.Set;
  */
 public final class UserManagementService {
 
-    /** 头像替换成功后的结果：旧路径交给 HTTP 层在数据库提交后再清理。 */
-    public record AvatarChange(String previousAvatarPath) {
-    }
-
     private static final Logger logger = LoggerFactory.getLogger(UserManagementService.class);
     private static final int HASH_ITERATIONS = 10;
     private static final int HASH_MEMORY_KIB = 65536;
@@ -126,15 +122,6 @@ public final class UserManagementService {
         }
     }
 
-    /** 头像读取失败时由调用方降级到默认头像；这里仍保留异常类型，避免静默吞掉数据库故障。 */
-    public Optional<String> findUserAvatar(int userId) throws UserManagementException {
-        try {
-            return store.findUserAvatar(userId);
-        } catch (SQLException e) {
-            throw databaseFailure("common.internal_error", e);
-        }
-    }
-
     public void changeUserPassword(int userId, String oldPassword, String newPassword)
             throws UserManagementException {
         if (trim(oldPassword).isEmpty()) {
@@ -189,21 +176,25 @@ public final class UserManagementService {
         }
     }
 
-    public AvatarChange changeUserAvatar(int userId, String avatarPath) throws UserManagementException {
-        String normalizedPath = trim(avatarPath);
-        if (normalizedPath.isEmpty()) {
-            throw UserManagementException.validation("user.avatar.no_file");
+    /** 头像上传只写 NekoAuth；本地 users.avatar 仅用于旧数据迁移。 */
+    public void uploadUserAvatar(int userId, java.nio.file.Path avatarFile)
+            throws UserManagementException {
+        if (nekoAuthAccountService == null) {
+            throw UserManagementException.internal("auth.service_unavailable", null);
         }
-
         try {
-            UserAccountStore.AvatarUpdateResult result = store.updateUserAvatar(userId, normalizedPath);
-            if (!result.updated()) {
-                throw UserManagementException.internal("user.avatar.db_update_failed", null);
+            UserProfile profile = store.findUserProfile(userId)
+                    .orElseThrow(() -> UserManagementException.notFound("user.not_exists"));
+            if (profile.authUserId() == null || profile.authUserId() <= 0) {
+                throw UserManagementException.internal("auth.account_not_linked", null);
             }
-            logger.info("用户 {} 更新头像路径: {}", userId, normalizedPath);
-            return new AvatarChange(result.previousAvatarPath());
+            nekoAuthAccountService.uploadAvatar(profile.authUserId(), avatarFile);
+            logger.info("用户 {} 已通过 NekoAuth 更新头像: authUserId={}",
+                    userId, profile.authUserId());
         } catch (SQLException e) {
-            throw databaseFailure("user.avatar.db_update_failed", e);
+            throw databaseFailure("user.avatar.upload_failed", e);
+        } catch (NekoAuthAccountService.AccountBridgeException e) {
+            throw bridgeFailure(e, "user.avatar.upload_failed");
         }
     }
 

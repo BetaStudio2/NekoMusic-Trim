@@ -245,11 +245,6 @@ class UserManagementHandlersTest {
         }
 
         @Override
-        public Optional<String> findUserAvatar(int id) {
-            return Optional.empty();
-        }
-
-        @Override
         public boolean userEmailExists(String email) {
             return users.stream().anyMatch(u -> u.email().equals(email));
         }
@@ -262,13 +257,6 @@ class UserManagementHandlersTest {
         @Override
         public boolean updateUserVip(int id, Timestamp vipExpiresAt) {
             return findUser(id).isPresent();
-        }
-
-        @Override
-        public AvatarUpdateResult updateUserAvatar(int id, String avatarPath) {
-            return findUser(id).isPresent()
-                    ? AvatarUpdateResult.updated(null)
-                    : AvatarUpdateResult.notFound();
         }
 
         @Override

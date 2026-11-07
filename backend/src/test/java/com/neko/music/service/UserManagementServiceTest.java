@@ -193,20 +193,6 @@ class UserManagementServiceTest {
     }
 
     @Test
-    void ownAvatarChangeReturnsPreviousPathForPostCommitCleanup() throws Exception {
-        FakeStore store = new FakeStore();
-        store.avatarPath = "avatars/old.png";
-        UserManagementService service = new UserManagementService(store, new RecordingRevoker());
-
-        assertEquals(Optional.of("avatars/old.png"), service.findUserAvatar(7));
-
-        UserManagementService.AvatarChange change = service.changeUserAvatar(7, "avatars/new.png");
-
-        assertEquals("avatars/old.png", change.previousAvatarPath());
-        assertEquals("avatars/new.png", store.avatarPath);
-    }
-
-    @Test
     void missingUserKeepsLegacySelfServiceFailures() {
         UserManagementService service = new UserManagementService(
                 new FakeStore(), new RecordingRevoker(), new RejectingAuthBridge());
@@ -224,9 +210,6 @@ class UserManagementServiceTest {
                 () -> service.changeUserNickname(99, "listener"));
         assertEquals("user.not_exists", nickname.messageKey());
 
-        UserManagementException avatar = assertThrows(UserManagementException.class,
-                () -> service.changeUserAvatar(99, "avatars/new.png"));
-        assertEquals("user.avatar.db_update_failed", avatar.messageKey());
     }
 
     @Test
@@ -328,7 +311,6 @@ class UserManagementServiceTest {
         private String createdAdminHash;
         private String adminPasswordHash = "old";
         private Timestamp vip;
-        private String avatarPath;
         private String nickname = "listener";
         private boolean userEmailTaken;
         private AdminDeletionResult adminDeletionResult = AdminDeletionResult.DELETED;
@@ -396,11 +378,6 @@ class UserManagementServiceTest {
         }
 
         @Override
-        public Optional<String> findUserAvatar(int id) {
-            return id == 7 ? Optional.ofNullable(avatarPath) : Optional.empty();
-        }
-
-        @Override
         public boolean userEmailExists(String email) {
             return userEmailTaken;
         }
@@ -422,16 +399,6 @@ class UserManagementServiceTest {
             }
             vip = vipExpiresAt;
             return true;
-        }
-
-        @Override
-        public AvatarUpdateResult updateUserAvatar(int id, String avatarPath) {
-            if (id != 7) {
-                return AvatarUpdateResult.notFound();
-            }
-            String previous = this.avatarPath;
-            this.avatarPath = avatarPath;
-            return AvatarUpdateResult.updated(previous);
         }
 
         @Override

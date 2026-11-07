@@ -241,6 +241,7 @@ public class Main {
                 },
                 nekoAuthAccountService,
                 nicknameResolver);
+        new NekoAuthAvatarMigrationService(databaseManager, nekoAuthAccountService).migrateAsync();
 
         // 扫码登录会话（Redis 短 TTL，PC 轮询取 token）
         qrLoginService = new QrLoginService(redisService, objectMapper);

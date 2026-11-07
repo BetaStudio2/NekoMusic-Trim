@@ -15,7 +15,7 @@
 cd backend
 cp src/main/resources/config.yml config.yml
 # 编辑 config.yml：只需填写 MySQL 连接信息（连库前无法从库里读配置）
-mkdir -p Music/music Music/covers releases avatars user_upload
+mkdir -p Music/music Music/covers releases user_upload
 NEKO_WEB_VERSION="$(git describe --tags --always)" docker compose build --pull
 docker compose up -d
 docker compose logs -f neko-music
@@ -27,7 +27,7 @@ docker compose logs -f neko-music
 curl -fsS http://127.0.0.1:65535/version
 ```
 
-音乐文件、封面、声纹索引、头像、待审核上传和客户端发布包分别持久化在 `backend/Music/`、`backend/avatars/`、`backend/user_upload/` 与 `backend/releases/`。复用已有部署的数据时，可在 `backend/.env` 设置 `NEKO_DATA_DIR=/原后端运行目录`；配置文件为 `backend/config.yml`（只含 MySQL 引导信息，密码等敏感项请勿提交到 Git）；运行时配置存
+音乐文件、封面、声纹索引、待审核上传和客户端发布包分别持久化在 `backend/Music/`、`backend/user_upload/` 与 `backend/releases/`。旧部署的 `backend/avatars/` 只用于升级迁移，迁移完成后不再需要；头像统一由 NekoAuth 保存。复用已有部署的数据时，可在 `backend/.env` 设置 `NEKO_DATA_DIR=/原后端运行目录`；配置文件为 `backend/config.yml`（只含 MySQL 引导信息，密码等敏感项请勿提交到 Git）；运行时配置存
 主库 `system_settings` 表，同样不要外泄。升级代码后执行
 `NEKO_WEB_VERSION="$(git describe --tags --always)" docker compose build --pull && docker compose up -d`。
 
@@ -47,12 +47,12 @@ curl -fsS http://127.0.0.1:65535/version
 - `email` 是 NekoAuth 返回的邮箱快照，用于旧 API 响应、后台展示、邮件通知和首次关联补偿；它不是密码或登录凭据。
 - 邮箱验证状态由 NekoAuth 管理，不作为 NekoMusic 登录门槛；NekoMusic 按 `sub` 关联本地业务资料。
 - `nickname` 以 NekoAuth 为唯一权威源。NekoMusic 的 MySQL 不保存昵称列；评论、通知、歌单、用户搜索和后台展示都通过 NekoAuth 的内部账号查询接口实时解析，避免出现过期副本。
-- `avatar`、`vip_expires_at` 继续由 NekoMusic 本地维护。
+- 头像以 NekoAuth 为唯一权威源：上传、替换、默认头像和公开读取都由 NekoAuth 处理；NekoMusic 的原头像 API 保留为兼容入口，由后端从 NekoAuth 获取并返回。`vip_expires_at` 继续由 NekoMusic 本地维护。
 - 用户密码、注册验证码、找回密码验证码、账号启用状态、用户 access token 的签发、校验与吊销全部由 NekoAuth 处理；NekoMusic 的 Redis 不再保存任何 `user_token` 键。
 
 原有 `/api/user/login`、`/api/user/register`、`/api/user/send-verification`、`/api/user/send-reset-code`、`/api/user/reset-password`、改密和管理员用户管理接口保持原路径、请求体和响应结构不变。NekoMusic 后端在内部转发到 NekoAuth，旧客户端不需要改接 OAuth，也不需要接触客户端密钥；登录响应里的 `token` 字段仍在原位置，但内容已改为 NekoAuth access token。Web、Android 与 PC 新版本都使用 NekoAuth OIDC 单点登录；邮箱密码接口继续保留给旧客户端兼容。
 
-首次登录或注册成功后，NekoMusic 会按 `auth_user_id` 查找本地资料；不存在时自动创建，只在本地保留邮箱映射、头像和 VIP，不写入昵称。若本地已有同邮箱资料但尚未绑定，会在首次认证时补绑；同一邮箱已绑定其他 NekoAuth 用户时拒绝登录，避免账号串绑。
+首次登录或注册成功后，NekoMusic 会按 `auth_user_id` 查找本地资料；不存在时自动创建，只在本地保留邮箱映射和 VIP，不写入昵称或头像。若本地已有同邮箱资料但尚未绑定，会在首次认证时补绑；同一邮箱已绑定其他 NekoAuth 用户时拒绝登录，避免账号串绑。
 
 ### 配置
 
@@ -99,13 +99,19 @@ WebView，PC 使用系统浏览器。
 - 登录：Web、Android 与 PC 新版本统一使用 NekoAuth OIDC 单点登录；成功后只保存 NekoAuth 签发的 access token，并用 `sub` 关联本地业务资料。
 - 注册：新客户端不再提供邮箱、密码或验证码表单，统一打开 NekoAuth 注册页；Android 使用应用内 WebView，Web 与 PC 使用浏览器。
 - 账号资料与安全：昵称、邮箱、密码、邮箱验证和登录设备统一在 NekoAuth 账号中心修改；NekoMusic 资料页只展示本地业务资料并提供账号中心入口。
-- 头像与 VIP：头像、VIP 状态和到期时间继续由 NekoMusic 本地维护。
+- 头像与 VIP：头像由 NekoAuth 账号中心统一维护，NekoMusic 的后端头像 API 只代理 Auth；VIP 状态和到期时间继续由 NekoMusic 本地维护。
 - 旧客户端兼容：邮箱密码、注册、验证码与找回密码接口只为旧客户端保留，NekoMusic 后端转发给 NekoAuth；新客户端不得再接入这些表单。
 - 扫码登录：手机端确认时用当前有效 NekoAuth token 换取新的长期 token，PC 端仍通过原有一次性 `deliveryKey` 领取，旧扫码接口字段保持不变。
 - 登出：NekoMusic 调用 NekoAuth `/oauth2/revoke` 吊销当前 access token；本地 Redis 不保留用户 token 副本。
 - 管理员创建/重置用户：NekoMusic 先校验管理员权限，再调用 NekoAuth 的管理员桥接接口；管理员只调整 VIP 等本地资料时不会改 NekoAuth 密码。
 
 桥接不可用或客户端配置错误时，旧 API 返回既有格式的错误响应；需要等待时保留 NekoAuth 的 `Retry-After` 语义。日志只记录操作类型、状态与用户 ID，不记录密码、验证码或 client secret。
+
+### 头像迁移
+
+升级后会后台扫描 `users.avatar` 中仍绑定 `auth_user_id` 的旧头像文件，逐个上传到 NekoAuth，并重新下载
+Auth 头像做 SHA-256 字节校验。只有内容完全一致时才清空本地 `avatar` 字段并删除旧文件；失败项保留原数据，
+下次启动继续重试。迁移过程不重新编码图片，PNG/JPEG/GIF/WebP 原始字节保持不变。
 
 
 ## 本地前端开发

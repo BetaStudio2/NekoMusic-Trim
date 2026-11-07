@@ -20,16 +20,6 @@ public interface UserAccountStore {
         LAST_SUPER_ADMIN
     }
 
-    record AvatarUpdateResult(boolean updated, String previousAvatarPath) {
-        public static AvatarUpdateResult updated(String previousAvatarPath) {
-            return new AvatarUpdateResult(true, previousAvatarPath);
-        }
-
-        public static AvatarUpdateResult notFound() {
-            return new AvatarUpdateResult(false, null);
-        }
-    }
-
     List<AdminAccount> listAdmins() throws SQLException;
 
     Optional<AdminAccount> findAdmin(int id) throws SQLException;
@@ -49,8 +39,6 @@ public interface UserAccountStore {
 
     Optional<UserProfile> findUserProfile(int id) throws SQLException;
 
-    Optional<String> findUserAvatar(int id) throws SQLException;
-
     boolean userEmailExists(String email) throws SQLException;
 
     default Optional<Long> findUserAuthIdByEmail(String email) throws SQLException {
@@ -63,8 +51,6 @@ public interface UserAccountStore {
     void createUser(String email) throws SQLException;
 
     boolean updateUserVip(int id, Timestamp vipExpiresAt) throws SQLException;
-
-    AvatarUpdateResult updateUserAvatar(int id, String avatarPath) throws SQLException;
 
     boolean deleteUser(int id) throws SQLException;
 }

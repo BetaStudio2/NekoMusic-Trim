@@ -129,6 +129,10 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
 - NekoAuth 客户端密钥只能保存在服务端，不得下发到浏览器、Android 或 PC 客户端。
 - Web、Android 与 PC 新界面不得再提供邮箱密码、注册验证码或原生改密/改昵称表单；注册与账号资料
   修改统一打开 NekoAuth 页面。Android 使用应用内 WebView，Web 使用当前浏览器，PC 使用系统浏览器。
+- 用户头像以 NekoAuth 为唯一权威源。NekoMusic 的 `/api/user/avatar/*` 只作兼容代理，后端的
+  `/api/user/avatar/upload` 也只转发到 Auth，不得再写本地头像路径或新增本地头像文件。
+- 旧 `users.avatar` 只用于一次性迁移；迁移必须按原始字节上传，并通过重新读取 Auth 头像做哈希校验，
+  校验一致后才能清空本地路径并删除旧文件。迁移失败必须保留原数据以便重试。
 
 ### API 文档脱敏
 
@@ -176,8 +180,8 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
 | 类别 | 响应头 | 说明 |
 | --- | --- | --- |
 | 动态 API、登录、注册、个人数据、后台 | `private, no-store` | 不缓存，每次回源 |
-| `/api/user/avatar/default`（内嵌默认头像） | `public, max-age=15552000, immutable` | 内容恒定；与封面用的是同一张内嵌图，策略保持一致 |
-| `/api/user/avatar/{id}`（用户头像、含暂无头像） | `private, max-age=0, must-revalidate` | 允许浏览器留副本但逐次再校验：换图立刻生效，重复浏览只走 304 |
+| `/api/user/avatar/default`（代理 Auth 默认头像） | 透传 Auth 的长期公共缓存头 | NekoMusic 不再保存默认头像资源 |
+| `/api/user/avatar/{id}`（代理 Auth 用户头像） | 透传 Auth 的公共再校验缓存头 | NekoMusic 不再读取本地头像路径 |
 | `/api/music/file/{id}`（音质解析跳转） | `private, no-store` | 每次重新解析 |
 | 后台审核预览 `/api/user/upload/preview`（音频 / 封面 / 歌词） | `private, max-age=15552000, must-revalidate` | 六个月，且只允许浏览器私有缓存（待审核文件 + 管理员 token，不能被 CDN 免鉴权分发） |
 | `/api/music/latest`、`/api/music/ranking` | `public, max-age=1800` | 半小时 |

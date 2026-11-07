@@ -16,7 +16,7 @@
           <input
             id="avatar-upload"
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/gif,image/webp,image/bmp"
             class="profile__file"
             :disabled="avatarUploading"
             @change="handleAvatarUpload"
@@ -261,7 +261,7 @@ const handleAvatarUpload = async (event) => {
     input.value = ''
   }
 
-  if (!file.type || !file.type.startsWith('image/')) {
+  if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp'].includes(file.type)) {
     toast.error(t('profile.pickImage'))
     resetInput()
     return
