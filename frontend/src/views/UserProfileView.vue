@@ -66,25 +66,7 @@
 
         <div class="info">
           <span class="info__label">{{ $t('auth.nickname') }}</span>
-          <div class="info__value">
-            <template v-if="!editingNickname">
-              <span class="info__text">{{ user.nickname }}</span>
-              <NButton size="sm" variant="secondary" icon="pencil" @click="startEditNickname">{{ $t('profile.modify') }}</NButton>
-            </template>
-            <template v-else>
-              <NInput
-                ref="nicknameInputEl"
-                v-model="nicknameInput"
-                class="info__edit"
-                maxlength="32"
-                :placeholder="$t('profile.nicknamePlaceholder')"
-                @keyup.enter="saveNickname"
-                @keyup.esc="cancelEditNickname"
-              />
-              <NButton size="sm" variant="primary" :loading="savingNickname" @click="saveNickname">{{ $t('playlists.save') }}</NButton>
-              <NButton size="sm" variant="ghost" :disabled="savingNickname" @click="cancelEditNickname">{{ $t('common.cancel') }}</NButton>
-            </template>
-          </div>
+          <span class="info__text">{{ user.nickname }}</span>
         </div>
 
         <div class="info">
@@ -102,31 +84,39 @@
           <span class="info__text">{{ formatVipExpiresAt(user.vipExpiresAt) }}</span>
         </div>
 
-        <div class="info info--last">
+        <div class="info">
           <span class="info__label">{{ $t('profile.registeredAt') }}</span>
           <span class="info__text">{{ formatDate(user.createdAt) }}</span>
+        </div>
+
+        <div class="info info--last">
+          <span class="info__label">{{ $t('profile.accountManagement') }}</span>
+          <div class="info__value">
+            <span class="info__text">{{ $t('profile.accountManagedBy') }}</span>
+            <NButton
+              size="sm"
+              variant="secondary"
+              icon="user-cog"
+              :loading="accountCenterLoading"
+              @click="openNekoAuthAccountCenter"
+            >
+              {{ $t('profile.openAccountCenter') }}
+            </NButton>
+          </div>
         </div>
       </div>
 
       <!-- 安全设置 -->
       <div v-else class="panel">
         <h2 class="panel__title">{{ $t('profile.securityTitle') }}</h2>
-
-        <div class="field">
-          <label class="field__label" for="cur-pwd">{{ $t('profile.currentPassword') }}</label>
-          <NInput id="cur-pwd" v-model="currentPassword" type="password" icon="lock" :placeholder="$t('profile.currentPasswordPlaceholder')" />
-        </div>
-        <div class="field">
-          <label class="field__label" for="new-pwd">{{ $t('profile.newPassword') }}</label>
-          <NInput id="new-pwd" v-model="newPassword" type="password" icon="key" :placeholder="$t('profile.newPasswordPlaceholder')" />
-        </div>
-        <div class="field">
-          <label class="field__label" for="cfm-pwd">{{ $t('profile.confirmNewPassword') }}</label>
-          <NInput id="cfm-pwd" v-model="confirmNewPassword" type="password" icon="key" :placeholder="$t('profile.confirmNewPasswordPlaceholder')" />
-        </div>
-
-        <NButton variant="primary" icon="shield-check" :loading="changePasswordLoading" @click="changePassword">
-          {{ $t('profile.changePassword') }}
+        <p class="panel__desc">{{ $t('profile.securityManagedBy') }}</p>
+        <NButton
+          variant="primary"
+          icon="shield-check"
+          :loading="accountCenterLoading"
+          @click="openNekoAuthAccountCenter"
+        >
+          {{ $t('profile.openAccountCenter') }}
         </NButton>
       </div>
     </div>
@@ -139,18 +129,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import API_CONFIG from '@/config/apiConfig.js'
 import { useToast } from '@/composables/useToast'
 import { t, locale } from '@/i18n'
 import NIcon from '@/icons/NIcon.vue'
-import { NButton, NCard, NInput, NModal, NSpinner } from '@/ui'
+import { NButton } from '@/ui'
 import { PageShell, AmbientBackdrop } from '@/layouts'
 import { formatVipExpiresAt, syncUserVipFromPlaylistsApi, USER_VIP_SYNC_EVENT } from '@/utils/userVip.js'
 import { avatarUrl, useAvatarVersion, bumpAvatarVersion } from '@/utils/userAvatar.js'
 import { openAuthDialog } from '@/composables/useAuthDialog'
 import { useAuth } from '@/composables/useAuth'
-import { getUser, patchUser, loadUserInfo } from '@/utils/userStore.js'
+import { getUser, loadUserInfo } from '@/utils/userStore.js'
 
 const toast = useToast()
 
@@ -211,16 +201,7 @@ const userAvatar = computed(() => {
 })
 
 const activeTab = ref('profile')
-const currentPassword = ref('')
-const newPassword = ref('')
-const confirmNewPassword = ref('')
-const changePasswordLoading = ref(false)
-
-// 昵称修改
-const editingNickname = ref(false)
-const nicknameInput = ref('')
-const nicknameInputEl = ref(null)
-const savingNickname = ref(false)
+const accountCenterLoading = ref(false)
 
 const tabs = computed(() => [
   { key: 'profile', label: t('profile.infoTitle') },
@@ -243,72 +224,25 @@ const changeTab = (tabKey) => {
   activeTab.value = tabKey
 }
 
-// 开始修改昵称
-const startEditNickname = async () => {
-  nicknameInput.value = user.value?.nickname || ''
-  editingNickname.value = true
-  await nextTick()
-  nicknameInputEl.value?.focus()
-  nicknameInputEl.value?.select?.()
-}
-
-// 取消修改昵称
-const cancelEditNickname = () => {
-  editingNickname.value = false
-  nicknameInput.value = ''
-}
-
-// 保存昵称
-const saveNickname = async () => {
-  const nickname = nicknameInput.value.trim()
-
-  if (!nickname) {
-    toast.error(t('profile.nicknameEmpty'))
-    return
-  }
-  if (nickname.length > 32) {
-    toast.error(t('profile.nicknameLength'))
-    return
-  }
-  if (nickname === user.value?.nickname) {
-    toast.info(t('profile.nicknameUnchanged'))
-    cancelEditNickname()
-    return
-  }
-
-  const token = localStorage.getItem('userToken')
-  if (!token) {
-    toast.error(t('profile.sessionExpired'))
-    return
-  }
-
-  savingNickname.value = true
+// 昵称、邮箱、密码与登录设备统一由 NekoAuth 账号中心维护。
+const openNekoAuthAccountCenter = async () => {
+  if (accountCenterLoading.value) return
+  accountCenterLoading.value = true
   try {
-    const response = await fetch(`${API_CONFIG.BASE_URL}/api/user/nickname/change`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ nickname })
-    })
-
+    const response = await fetch(
+      `${API_CONFIG.BASE_URL}/api/user/sso/portal-url?target=account`
+    )
     const data = await response.json().catch(() => ({}))
-    if (response.ok && data.success) {
-      const savedNickname = data.data?.nickname || nickname
-      // 只更新内存中的用户资料（不落盘），并广播一次让导航栏等组件刷新昵称
-      patchUser({ nickname: savedNickname })
-      bumpUserFromStorage()
-      toast.success(data.message || t('profile.nicknameSuccess'))
-      cancelEditNickname()
-    } else {
-      toast.error(data.message || t('profile.nicknameFailed'))
+    const url = data?.data?.url
+    if (!response.ok || !data.success || typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+      throw new Error(data.message || t('profile.accountCenterFailed'))
     }
+    window.location.assign(url)
   } catch (error) {
-    console.error('修改昵称失败:', error)
-    toast.error(t('profile.nicknameFailedRetry'))
+    console.error('打开 NekoAuth 账号中心失败:', error)
+    toast.error(error.message || t('profile.accountCenterFailed'))
   } finally {
-    savingNickname.value = false
+    accountCenterLoading.value = false
   }
 }
 
@@ -379,35 +313,6 @@ const handleAvatarError = (event) => {
   event.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150"><rect width="150" height="150" fill="%236a5acd"/><text x="75" y="95" font-family="Arial" font-size="24" fill="white" text-anchor="middle">U</text></svg>';
 }
 
-// 修改密码
-const changePassword = async () => {
-  if (!currentPassword.value || !newPassword.value || !confirmNewPassword.value) {
-    toast.error(t('profile.fillAllPasswords'));
-    return;
-  }
-  
-  if (newPassword.value !== confirmNewPassword.value) {
-    toast.error(t('profile.passwordMismatch'));
-    return;
-  }
-  
-  if (newPassword.value.length < 6) {
-    toast.error(t('profile.passwordTooShort6'));
-    return;
-  }
-  
-  changePasswordLoading.value = true;
-  try {
-    // 这里可以实现修改密码的API调用
-    
-    toast.info(t('profile.passwordNotImplemented'));
-  } catch (error) {
-    console.error('修改密码失败:', error);
-    toast.error(t('profile.passwordChangeFailed'));
-  } finally {
-    changePasswordLoading.value = false;
-  }
-}
 </script>
 
 <style scoped>
@@ -600,6 +505,13 @@ const changePassword = async () => {
   letter-spacing: -0.01em;
 }
 
+.panel__desc {
+  max-width: 62ch;
+  margin: 0 0 var(--n-space-5);
+  color: var(--n-text-muted);
+  line-height: 1.75;
+}
+
 /* ==================== 信息行 ==================== */
 .info {
   display: flex;
@@ -635,24 +547,6 @@ const changePassword = async () => {
   overflow-wrap: anywhere;
 }
 
-.info__edit {
-  flex: 1;
-  min-width: 0;
-}
-
-/* ==================== 表单字段 ==================== */
-.field {
-  margin-bottom: var(--n-space-4);
-}
-
-.field__label {
-  display: block;
-  margin-bottom: var(--n-space-2);
-  color: var(--n-text-muted);
-  font-size: var(--n-text-xs);
-  font-weight: var(--n-weight-medium);
-}
-
 @media (max-width: 560px) {
   .profile__head {
     flex-direction: column;
@@ -675,6 +569,7 @@ const changePassword = async () => {
 
   .info__value {
     width: 100%;
+    flex-wrap: wrap;
   }
 }
 </style>

@@ -14,14 +14,13 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 浏览器跳转端点：{@code /sso/nekocore/start}、{@code /oauth/nekocore/callback}
+ * 浏览器跳转端点：{@code /sso/nekocore/start}、{@code /sso/nekocore/callback}
  * 与 {@code /sso/nekocore/forgot-password}。
  *
  * <p>这是 OAuth 浏览器导航，不是 JSON API；回调使用一次性 state 做请求关联与 CSRF 校验。
  * 保证。回调只跳转到前端完成页并携带一次性 handoff，不把 Token 放进 URL。</p>
  *
- * <p>{@code /oauth/*} 是 NekoAuth 的保留命名空间，生产反向代理会优先把它转给账号中心。
- * NekoMusic 自己的发起页与找回密码页因此放在 {@code /sso/*}；旧路径仅作为兼容别名保留。</p>
+ * <p>规范入口全部位于 {@code /sso/nekocore/*}；旧 {@code /oauth/nekocore/*} 路径仅作为兼容别名保留。</p>
  */
 public final class NekoAuthOAuthHandler extends ApiServlet {
 
@@ -81,9 +80,17 @@ public final class NekoAuthOAuthHandler extends ApiServlet {
         }
         try {
             NekoAuthOAuthService.LoginResult result = oauthService.complete(
-                    request.getParameter("code"), request.getParameter("state"));
-            response.sendRedirect("/sso/complete?handoff="
-                    + URLEncoder.encode(result.handoff(), StandardCharsets.UTF_8));
+                    request.getParameter("code"), request.getParameter("state"),
+                    request.getParameter("iss"));
+            String handoff = URLEncoder.encode(result.handoff(), StandardCharsets.UTF_8);
+            String location;
+            if ("android".equals(result.client()) || "pc".equals(result.client())) {
+                location = "nekomusic://sso/complete?handoff=" + handoff;
+            } else {
+                location = "/sso/complete?handoff=" + handoff;
+            }
+            response.setStatus(HttpServletResponse.SC_FOUND);
+            response.setHeader("Location", location);
         } catch (NekoAuthOAuthService.OAuthLoginException exception) {
             logger.warn("NekoAuth 登录回调失败: code={} message={}", exception.code(), exception.getMessage());
             sendError(response, exception.code(), exception.getMessage());
@@ -118,7 +125,8 @@ public final class NekoAuthOAuthHandler extends ApiServlet {
         return switch (code) {
             case "oauth_disabled", "oauth_not_configured", "oauth_unavailable" -> HttpServletResponse.SC_SERVICE_UNAVAILABLE;
             case "access_denied", "account_not_linked", "email_mismatch" -> HttpServletResponse.SC_FORBIDDEN;
-            case "token_exchange_failed", "userinfo_failed" -> HttpServletResponse.SC_BAD_GATEWAY;
+            case "token_exchange_failed", "userinfo_failed", "id_token_invalid" ->
+                    HttpServletResponse.SC_BAD_GATEWAY;
             case "token_issue_failed" -> HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
             default -> HttpServletResponse.SC_BAD_REQUEST;
         };

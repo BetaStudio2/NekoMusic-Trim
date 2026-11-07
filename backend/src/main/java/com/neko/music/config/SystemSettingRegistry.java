@@ -65,8 +65,8 @@ public final class SystemSettingRegistry {
             secret("oauth.client_secret", Group.AUTH, "客户端密钥",
                     "机密客户端密钥，只写不读；泄露后请在 NekoAuth 后台轮换"),
             text("oauth.redirect_uri", Group.AUTH, "回调地址",
-                    "https://music.nekocore.cn/oauth/nekocore/callback",
-                    "必须与 NekoAuth 应用中登记的回调地址完全一致；本地联调可填 http://localhost:65535/oauth/nekocore/callback"),
+                    "https://music.nekocore.cn/sso/nekocore/callback",
+                    "必须与 NekoAuth 应用中登记的回调地址完全一致；本地联调可填 http://localhost:65535/sso/nekocore/callback"),
             text("oauth.scopes", Group.AUTH, "授权范围", "openid profile email roles",
                     "空格分隔；接入 NekoMusic 至少需要 openid profile email，建议保留 roles 以便后续权限映射"),
 

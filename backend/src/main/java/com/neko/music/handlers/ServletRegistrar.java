@@ -28,6 +28,8 @@ public final class ServletRegistrar {
         // /sso 是 NekoMusic 自有命名空间；旧 /oauth/nekocore/* 入口仅作兼容别名。
         ServletHolder nekoAuthSsoStartHolder = new ServletHolder(new NekoAuthOAuthHandler());
         context.addServlet(nekoAuthSsoStartHolder, "/sso/nekocore/start");
+        ServletHolder nekoAuthSsoCallbackHolder = new ServletHolder(new NekoAuthOAuthHandler());
+        context.addServlet(nekoAuthSsoCallbackHolder, "/sso/nekocore/callback");
         ServletHolder nekoAuthSsoForgotPasswordHolder = new ServletHolder(new NekoAuthOAuthHandler());
         context.addServlet(nekoAuthSsoForgotPasswordHolder, "/sso/nekocore/forgot-password");
 
@@ -44,6 +46,8 @@ public final class ServletRegistrar {
         context.addServlet(nekoAuthSsoAuthorizeHolder, "/api/user/sso/start");
         ServletHolder nekoAuthSsoPasswordResetHolder = new ServletHolder(new NekoAuthSsoStartHandler());
         context.addServlet(nekoAuthSsoPasswordResetHolder, "/api/user/sso/password-reset-url");
+        ServletHolder nekoAuthPortalHolder = new ServletHolder(new NekoAuthPortalHandler());
+        context.addServlet(nekoAuthPortalHolder, "/api/user/sso/portal-url");
         
         // 注册搜索音乐API处理器
         ServletHolder searchHolder = new ServletHolder(new MusicSearchHandler());

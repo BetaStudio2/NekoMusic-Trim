@@ -60,7 +60,7 @@
             </p>
             <p class="auth__error" role="alert">{{ loginError || '\u00A0' }}</p>
             <NButton variant="primary" size="lg" block :loading="loginLoading" @click="startNekoAuthLogin">
-              {{ activeTab === 'login' ? '前往 NekoAuth 登录' : '前往 NekoAuth 登录 / 注册' }}
+              {{ activeTab === 'login' ? '前往 NekoAuth 登录' : '前往 NekoAuth 注册' }}
             </NButton>
             <p class="auth__sso-hint">
               没有账号时，可在 NekoAuth 登录页直接注册；完成授权后会自动回到当前页面。
@@ -129,9 +129,14 @@ async function startNekoAuthLogin() {
   const current = window.location.pathname + window.location.search + window.location.hash
   const safeReturnTo = current.startsWith('/oauth/nekocore/') || current.startsWith('/sso/') ? '/' : current
   try {
-    const response = await axios.post(`${API_CONFIG.BASE_URL}/api/user/sso/start`, {
-      returnTo: safeReturnTo || '/',
-    })
+    const response = activeTab.value === 'register'
+      ? await axios.get(`${API_CONFIG.BASE_URL}/api/user/sso/portal-url`, {
+          params: { target: 'register' },
+        })
+      : await axios.post(`${API_CONFIG.BASE_URL}/api/user/sso/start`, {
+          client: 'web',
+          returnTo: safeReturnTo || '/',
+        })
     const url = response.data?.data?.url
     if (!response.data?.success || typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
       throw new Error(response.data?.message || t('auth.loginFailed'))

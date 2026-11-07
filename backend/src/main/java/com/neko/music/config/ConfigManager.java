@@ -49,7 +49,7 @@ public class ConfigManager {
     private String oauthIssuer = "https://auth.nekocore.cn";
     private String oauthClientId = "";
     private String oauthClientSecret = "";
-    private String oauthRedirectUri = "https://music.nekocore.cn/oauth/nekocore/callback";
+    private String oauthRedirectUri = "https://music.nekocore.cn/sso/nekocore/callback";
     private String oauthScopes = "openid profile email roles";
     
     // Msg配置

@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -58,6 +60,69 @@ class NekoAuthOAuthServiceTest {
         assertInvalid("/\\evil.example/");
         assertInvalid("/ok\nLocation: https://evil.example/");
         assertInvalid("/" + "a".repeat(513));
+    }
+
+    @Test
+    @DisplayName("PKCE S256 与 RFC 7636 测试向量一致")
+    void pkceChallengeMatchesRfcVector() {
+        assertEquals("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+                NekoAuthOAuthService.pkceChallenge(
+                        "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"));
+    }
+
+    @Test
+    @DisplayName("OIDC 端点必须与 issuer 同源且使用安全协议")
+    void oidcEndpointsMustBeSameOriginAndSecure() throws Exception {
+        JsonNode sameOrigin = OBJECT_MAPPER.readTree("""
+                {"authorization_endpoint":"https://auth.example.com/oauth2/authorize"}
+                """);
+        assertEquals(URI.create("https://auth.example.com/oauth2/authorize"),
+                NekoAuthOAuthService.parseEndpoint(
+                        sameOrigin, "authorization_endpoint",
+                        URI.create("https://auth.example.com")));
+
+        JsonNode crossOrigin = OBJECT_MAPPER.readTree("""
+                {"authorization_endpoint":"https://evil.example/oauth2/authorize"}
+                """);
+        NekoAuthOAuthService.OAuthLoginException mismatch = assertThrows(
+                NekoAuthOAuthService.OAuthLoginException.class,
+                () -> NekoAuthOAuthService.parseEndpoint(
+                        crossOrigin, "authorization_endpoint",
+                        URI.create("https://auth.example.com")));
+        assertEquals("oauth_unavailable", mismatch.code());
+
+        JsonNode insecure = OBJECT_MAPPER.readTree("""
+                {"authorization_endpoint":"http://auth.example.com/oauth2/authorize"}
+                """);
+        NekoAuthOAuthService.OAuthLoginException http = assertThrows(
+                NekoAuthOAuthService.OAuthLoginException.class,
+                () -> NekoAuthOAuthService.parseEndpoint(
+                        insecure, "authorization_endpoint",
+                        URI.create("http://auth.example.com")));
+        assertEquals("oauth_unavailable", http.code());
+    }
+
+    @Test
+    @DisplayName("SSO 客户端类型只允许 web / android / pc")
+    void ssoClientTypeIsValidated() throws Exception {
+        assertEquals("web", NekoAuthOAuthService.normalizeClient(null));
+        assertEquals("android", NekoAuthOAuthService.normalizeClient(" Android "));
+        assertEquals("pc", NekoAuthOAuthService.normalizeClient("PC"));
+        NekoAuthOAuthService.OAuthLoginException invalid = assertThrows(
+                NekoAuthOAuthService.OAuthLoginException.class,
+                () -> NekoAuthOAuthService.normalizeClient("webview"));
+        assertEquals("invalid_client_type", invalid.code());
+    }
+
+    @Test
+    @DisplayName("账号页面目标只允许 account / register / forgot-password")
+    void accountPortalTargetIsValidated() {
+        NekoAuthOAuthService service = new NekoAuthOAuthService(
+                null, null, null, null, OBJECT_MAPPER);
+        NekoAuthOAuthService.OAuthLoginException invalid = assertThrows(
+                NekoAuthOAuthService.OAuthLoginException.class,
+                () -> service.portalUrl("admin"));
+        assertEquals("invalid_portal_target", invalid.code());
     }
 
     private static void assertInvalid(String value) {

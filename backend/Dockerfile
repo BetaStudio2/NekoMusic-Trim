@@ -93,7 +93,7 @@ ENV JAVA_HOME=/opt/java \
 # JVM 参数说明（改动前先读）：
 #   MaxGCPauseMillis 是 G1 的**停顿目标**，不是上限。取 100 等于告诉 G1「100ms 可以接受」，
 #   于是它会一路把年轻代养大、直到单次停顿贴近该值——访问日志里那些原本该 <5ms 的接口
-#   （challenge / nonce / favorites 等）零散出现 100~106ms，就是卡在这条线上。
+#   （favorites / userinfo / media 等）零散出现 100~106ms，就是卡在这条线上。
 #   降到 25 会让 G1 缩小年轻代、用更频繁但更短的停顿替代。
 #   UseStringDeduplication 在每次年轻代回收里多扫一遍存活字符串，对以文件响应为主、堆里
 #   字符串周转量不大的服务只增加停顿时间，不省内存，故去掉。

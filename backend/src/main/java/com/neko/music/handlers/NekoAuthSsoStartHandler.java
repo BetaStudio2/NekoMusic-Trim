@@ -37,9 +37,10 @@ public final class NekoAuthSsoStartHandler extends ApiServlet {
 
         try {
             String path = request.getServletPath();
+            StartRequest startRequest = readStartRequest(request);
             String url = path.endsWith("/password-reset-url")
                     ? oauthService.passwordResetUrl()
-                    : oauthService.authorizationUrl(readReturnTo(request));
+                    : oauthService.authorizationUrl(startRequest.returnTo(), startRequest.client());
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("url", url);
             sendResponse(response, true, "跳转地址已生成", data);
@@ -52,26 +53,32 @@ public final class NekoAuthSsoStartHandler extends ApiServlet {
         }
     }
 
-    private String readReturnTo(HttpServletRequest request) throws IOException {
+    private StartRequest readStartRequest(HttpServletRequest request) throws IOException {
         String raw = readBody(request);
         if (raw == null || raw.isBlank()) {
-            return "/";
+            return new StartRequest("/", "web");
         }
         JsonNode body;
         try {
             body = MAPPER.readTree(raw);
         } catch (IOException exception) {
-            return "/";
+            return new StartRequest("/", "web");
         }
         String returnTo = body == null ? "" : body.path("returnTo").asText("");
-        return returnTo.isBlank() ? "/" : returnTo;
+        String client = body == null ? "" : body.path("client").asText("");
+        return new StartRequest(
+                returnTo.isBlank() ? "/" : returnTo,
+                client.isBlank() ? "web" : client);
     }
 
     private static int responseStatusFor(String code) {
         return switch (code) {
             case "oauth_disabled", "oauth_not_configured", "oauth_unavailable" -> HttpServletResponse.SC_SERVICE_UNAVAILABLE;
-            case "invalid_return_to" -> HttpServletResponse.SC_BAD_REQUEST;
+            case "invalid_return_to", "invalid_client_type" -> HttpServletResponse.SC_BAD_REQUEST;
             default -> HttpServletResponse.SC_BAD_REQUEST;
         };
+    }
+
+    private record StartRequest(String returnTo, String client) {
     }
 }

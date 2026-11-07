@@ -274,7 +274,7 @@ const router = useRouter()
 // 从localStorage获取当前播放的音乐信息
 const currentMusic = ref(JSON.parse(localStorage.getItem('currentPlayingMusic')) || null)
 const audioPlayer = ref(null)
-// 播放地址由签发接口一次性 challenge 换取，不再直接拼 /api/music/file/{id}
+// 播放地址由媒体解析接口返回，音频元素只消费最终地址。
 const audioSrc = ref('')
 const isPlaying = ref(false)
 const currentTime = ref(0)
