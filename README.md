@@ -95,6 +95,8 @@ Web 登录按钮直接进入 NekoAuth 登录页，不再打开 NekoMusic 本地�
 
 NekoMusic Web 退出时，后端同时撤销当前 access token 与 Auth 会话族，并把 Auth 返回的父域清 Cookie
 头转发给浏览器。之后所有子域都无法继续通过共享 Cookie 恢复登录，直到用户重新登录 NekoAuth。
+已有 Auth 会话是在该机制上线前创建时，浏览器还没有 `nekoauth_sso_session`；刷新一次 Auth 页面或
+重新登录后会补发该 Cookie，此后子域访问无需再跳转。
 
 已有部署升级时，应把 NekoAuth 客户端登记的回调地址与 `oauth.redirect_uri` 一起更新为
 `https://music.nekocore.cn/sso/nekocore/callback`；旧 `/oauth/nekocore/callback` 仍可继续回调，
