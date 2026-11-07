@@ -12,6 +12,9 @@ import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
@@ -66,7 +69,7 @@ public class SliderCaptchaService {
     public record DragSample(long elapsedMs, int offsetX) {
     }
 
-    public Map<String, Object> createChallengePayload(String userAgent, String nekoClient) {
+    public Map<String, Object> createChallengePayload(String userAgent) {
         pruneExpired();
         int puzzleY = 12 + random.nextInt(Math.max(1, BG_HEIGHT - PUZZLE_H - 24));
         int margin = 64;
@@ -92,7 +95,7 @@ public class SliderCaptchaService {
         challenges.put(token, new StoredChallenge(
                 secretX,
                 now + CHALLENGE_TTL_MS,
-                ReplayNonceService.sourceHash(userAgent, nekoClient)));
+                sourceHash(userAgent)));
 
         return Map.of(
                 "captchaToken", token,
@@ -113,7 +116,7 @@ public class SliderCaptchaService {
      */
     public Optional<String> verifySlideAndIssuePass(String token, int clientOffsetX,
                                                      List<DragSample> trace,
-                                                     String userAgent, String nekoClient) {
+                                                     String userAgent) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
@@ -125,7 +128,7 @@ public class SliderCaptchaService {
         if (System.currentTimeMillis() > ch.expiresAtMs) {
             return Optional.empty();
         }
-        if (!ch.sourceHash.equals(ReplayNonceService.sourceHash(userAgent, nekoClient))
+        if (!ch.sourceHash.equals(sourceHash(userAgent))
                 || !isHumanLikeTrace(trace, clientOffsetX)) {
             return Optional.empty();
         }
@@ -141,7 +144,7 @@ public class SliderCaptchaService {
     }
 
     /** 发送验证码前消费 passToken；重复或过期返回 false */
-    public boolean consumePassToken(String passToken, String userAgent, String nekoClient) {
+    public boolean consumePassToken(String passToken, String userAgent) {
         if (passToken == null || passToken.isBlank()) {
             return false;
         }
@@ -149,7 +152,20 @@ public class SliderCaptchaService {
         StoredPass pass = passTokens.remove(passToken.trim());
         return pass != null
                 && System.currentTimeMillis() <= pass.expiresAtMs()
-                && pass.sourceHash().equals(ReplayNonceService.sourceHash(userAgent, nekoClient));
+                && pass.sourceHash().equals(sourceHash(userAgent));
+    }
+
+    /** 把滑块挑战绑定到稳定的客户端形态，避免挑战被换端复用。 */
+    private static String sourceHash(String userAgent) {
+        String ua = userAgent == null ? "" : userAgent.trim();
+        String value = "ua:" + ua.length() + ":" + ua;
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest).substring(0, 16);
+        } catch (NoSuchAlgorithmException e) {
+            return Integer.toHexString(value.hashCode());
+        }
     }
 
     private static boolean isHumanLikeTrace(List<DragSample> trace, int finalOffsetX) {

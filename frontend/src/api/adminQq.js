@@ -4,7 +4,7 @@ import API_CONFIG from '@/config/apiConfig.js'
  * 后台「外站补全」的 QQ 音乐扫码登录。
  *
  * 后端与 QQ 音乐交互并保存登录 Cookie（写入 system_settings），前端只负责展示二维码与轮询状态。
- * 属后台管理接口，凭管理员令牌访问；防重放 nonce 由全局 fetch 补丁自动附加。
+ * 属后台管理接口，凭管理员令牌访问。
  */
 
 function adminAuthHeader() {

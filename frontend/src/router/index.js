@@ -33,7 +33,6 @@ const adminGuard = (to) => {
         if (to.path.startsWith('/admin/music') || to.path.startsWith('/admin/lyrics')) return '/admin'
         if (to.path.startsWith('/admin/vip-pricing')) return '/admin'
         if (to.path.startsWith('/admin/releases')) return '/admin'
-        if (to.path.startsWith('/admin/clients')) return '/admin'
         if (to.path.startsWith('/admin/settings')) return '/admin'
         // 操作日志仅管理员及以上；审核员可看「安全」页里的访问日志（安全分析需要）
         if (to.path.startsWith('/admin/logs')) return '/admin'
@@ -285,8 +284,8 @@ const router = createRouter({
           beforeEnter: adminGuard,
           meta: {
             title: '安全 - Neko歌姬计划',
-            description: '访问日志与安全分析：访问量、来源、客户端指纹与 PoW 难度。',
-            keywords: '安全,访问日志,访问量,安全分析,爬虫,PoW,管理后台'
+            description: '访问日志与安全分析：访问量、来源与威胁判定。',
+            keywords: '安全,访问日志,访问量,安全分析,管理后台'
           }
         },
         {
@@ -353,17 +352,6 @@ const router = createRouter({
             title: '客户端更新 - Neko歌姬计划',
             description: '管理客户端版本号与安装包上传。',
             keywords: '客户端,更新,安装包,管理'
-          }
-        },
-        {
-          path: 'clients',
-          name: 'admin-clients',
-          component: () => import('@/views/admin/AdminClientsView.vue'),
-          beforeEnter: adminGuard,
-          meta: {
-            title: '客户端接入 - Neko歌姬计划',
-            description: '管理第三方客户端应用凭据与安装实例。',
-            keywords: '客户端,接入,凭据,实例,管理'
           }
         },
         {

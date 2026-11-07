@@ -37,7 +37,7 @@ function toQuery(params) {
 
 /**
  * 访问日志分页检索。
- * @param {{page?:number,size?:number,ip?:string,path?:string,clientType?:string,clientId?:string,clientInstanceId?:string,status?:number,powStatus?:string,threatLevel?:string,from?:number,to?:number,keyword?:string}} params
+ * @param {{page?:number,size?:number,ip?:string,path?:string,status?:number,threatLevel?:string,from?:number,to?:number,keyword?:string}} params
  * @returns {Promise<{total:number,page:number,size:number,items:Array<object>}>}
  */
 export async function fetchAccessLogs(params) {

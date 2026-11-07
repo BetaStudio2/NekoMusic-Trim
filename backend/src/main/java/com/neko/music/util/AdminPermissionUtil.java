@@ -70,10 +70,6 @@ public class AdminPermissionUtil {
         SETTINGS_VIEW,
         SETTINGS_EDIT,
 
-        // 第三方客户端 / 实例凭据管理（管理员及以上；审核员不可见）
-        CLIENT_VIEW,
-        CLIENT_EDIT,
-
         // 日志相关：访问日志用于安全分析，除普通用户外的角色都可查看；
         // 操作日志涉及后台管理动作，仅管理员及以上可查看
         ACCESS_LOG_VIEW,

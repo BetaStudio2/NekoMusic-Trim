@@ -62,8 +62,6 @@ const hasPermission = (permission) => {
       'user_delete',
       'stats_view',
       'release_manage',
-      'client_view',
-      'client_edit',
       'settings_view',
       'access_log_view',
       'operation_log_view',
@@ -90,7 +88,7 @@ const navGroups = computed(() => {
   // 首页 = 统计分析：只看业务数据趋势
   const overview = [{ to: '/admin', icon: 'chart', label: '统计分析' }]
 
-  // 安全 = 访问日志（访问量、来源、客户端指纹、PoW 难度），单独成组放在「概览」下方
+  // 安全 = 访问日志（访问量与来源），单独成组放在「概览」下方
   const security = []
   if (hasPermission('access_log_view')) {
     security.push({ to: '/admin/security', icon: 'shield-check', label: '安全' })
@@ -114,9 +112,6 @@ const navGroups = computed(() => {
   }
   if (hasPermission('release_manage')) {
     ops.push({ to: '/admin/releases', icon: 'package', label: '客户端更新' })
-  }
-  if (hasPermission('client_view')) {
-    ops.push({ to: '/admin/clients', icon: 'key', label: '客户端接入' })
   }
   if (hasPermission('settings_view')) {
     ops.push({ to: '/admin/settings', icon: 'settings', label: '系统设置' })

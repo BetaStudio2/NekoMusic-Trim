@@ -9,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -27,14 +26,12 @@ class ConfigManagerOverrideTest {
         Map<String, String> overrides = new LinkedHashMap<>();
         overrides.put("port", "12345");
         overrides.put("video_render.worker_threads", "7");
-        overrides.put("network.crawler_protection_enabled", "false");
         overrides.put("smtp.host", "smtp.example.com");
 
         config.applyOverrides(overrides);
 
         assertEquals(12345, config.getPort());
         assertEquals(7, config.getVideoRenderWorkerThreads());
-        assertFalse(config.isCrawlerProtectionEnabled());
         assertEquals("smtp.example.com", config.getSmtpHost());
     }
 

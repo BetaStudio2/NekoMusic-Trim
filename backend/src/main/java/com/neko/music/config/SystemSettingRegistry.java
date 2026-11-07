@@ -102,13 +102,6 @@ public final class SystemSettingRegistry {
                     "auto=自适应 CDN 头；也可填具体头名（如 X-Real-IP）；填 direct 只信 socket 对端，最严格"),
             list("network.extra_client_ip_headers", Group.NETWORK, "额外客户端 IP 头", "",
                     "仅 auto 模式生效，每行一个头名；用于内置清单之外的新 CDN"),
-            flag("network.crawler_protection_enabled", Group.NETWORK, "防爬拦截", true,
-                    "拦截 UA 明确为爬虫/无头浏览器/命令行工具的请求访问 JSON 接口"),
-            flag("network.browser_integrity_enabled", Group.NETWORK, "浏览器完整性校验", true,
-                    "在关键词黑名单之上拦截 UA 结构不自洽的未知爬虫与扫描器"),
-            list("network.allow_client_user_agents", Group.NETWORK, "客户端放行名单", "",
-                    "每行一个 UA 子串（至少 6 字符），用于登记第三方客户端；优先于黑名单判定"),
-
             // ---------- 消息通知 ----------
             text("Msg.url", Group.NOTIFY, "Hook 地址", "127.0.0.1:8080", "系统通知与告警的消息推送地址，留空表示不推送"),
             secret("Msg.token", Group.NOTIFY, "Hook Token", "消息推送接口的鉴权 Token"),

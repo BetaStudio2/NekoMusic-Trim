@@ -39,7 +39,6 @@ class RequestAuditFilterTest {
         assertRule("POST", "/api/admin/netease/logout", "外站补全", "退出网易云登录");
         assertRule("POST", "/api/admin/qq/qr/key", "外站补全", "申请 QQ 音乐扫码登录");
         assertRule("POST", "/api/admin/qq/logout", "外站补全", "退出 QQ 音乐登录");
-        assertRule("DELETE", "/api/admin/replay-marks", "防重放标记", "清除来源标记");
         assertRule("POST", "/api/admin/login", "管理员登录", "登录");
         assertRule("POST", "/api/admin/logout", "管理员登录", "登出");
     }

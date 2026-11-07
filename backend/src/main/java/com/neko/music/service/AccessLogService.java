@@ -47,13 +47,10 @@ public class AccessLogService {
 
     private static final String INSERT_SQL = """
             INSERT INTO access_log (occurred_at, method, path, query, category, status, duration_us,
-                response_bytes, client_ip, ip_subnet, user_agent, client_type, client_platform,
-                client_version, neko_client, client_id, client_instance_id, referer, origin,
-                accept_language, authenticated,
-                user_id, user_name,
-                admin_id, admin_username, host, scheme, protocol, thread, pow_difficulty, pow_status,
+                response_bytes, client_ip, ip_subnet, user_agent, referer, origin, accept_language, authenticated,
+                user_id, user_name, admin_id, admin_username, host, scheme, protocol, thread,
                 seo_render, threat_level, threat_score, threat_reasons, threat_engine_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """;
 
     private static volatile AccessLogService current;
@@ -202,12 +199,6 @@ public class AccessLogService {
         stmt.setString(i++, LogQuerySupport.truncate(r.clientIp(), 64));
         stmt.setString(i++, LogQuerySupport.truncate(r.ipSubnet(), 64));
         stmt.setString(i++, LogQuerySupport.truncate(r.userAgent(), 1024));
-        stmt.setString(i++, LogQuerySupport.truncate(r.clientType(), 24));
-        stmt.setString(i++, LogQuerySupport.truncate(r.clientPlatform(), 32));
-        stmt.setString(i++, LogQuerySupport.truncate(r.clientVersion(), 64));
-        stmt.setString(i++, LogQuerySupport.truncate(r.nekoClient(), 128));
-        stmt.setString(i++, LogQuerySupport.truncate(r.clientId(), 64));
-        stmt.setString(i++, LogQuerySupport.truncate(r.clientInstanceId(), 36));
         stmt.setString(i++, LogQuerySupport.truncate(r.referer(), 1024));
         stmt.setString(i++, LogQuerySupport.truncate(r.origin(), 255));
         stmt.setString(i++, LogQuerySupport.truncate(r.acceptLanguage(), 255));
@@ -228,12 +219,6 @@ public class AccessLogService {
         stmt.setString(i++, LogQuerySupport.truncate(r.scheme(), 16));
         stmt.setString(i++, LogQuerySupport.truncate(r.protocol(), 16));
         stmt.setString(i++, LogQuerySupport.truncate(r.thread(), 128));
-        if (r.powDifficulty() == null) {
-            stmt.setNull(i++, Types.INTEGER);
-        } else {
-            stmt.setInt(i++, r.powDifficulty());
-        }
-        stmt.setString(i++, LogQuerySupport.truncate(r.powStatus(), 24));
         if (r.seoRender() == null) {
             stmt.setNull(i++, Types.BOOLEAN);
         } else {
@@ -265,12 +250,6 @@ public class AccessLogService {
         row.put("client_ip", r.clientIp());
         row.put("ip_subnet", r.ipSubnet());
         row.put("user_agent", r.userAgent());
-        row.put("client_type", r.clientType());
-        row.put("client_platform", r.clientPlatform());
-        row.put("client_version", r.clientVersion());
-        row.put("neko_client", r.nekoClient());
-        row.put("client_id", r.clientId());
-        row.put("client_instance_id", r.clientInstanceId());
         row.put("referer", r.referer());
         row.put("origin", r.origin());
         row.put("accept_language", r.acceptLanguage());
@@ -283,8 +262,6 @@ public class AccessLogService {
         row.put("scheme", r.scheme());
         row.put("protocol", r.protocol());
         row.put("thread", r.thread());
-        row.put("pow_difficulty", r.powDifficulty());
-        row.put("pow_status", r.powStatus());
         row.put("seo_render", r.seoRender());
         row.put("threat_level", r.threatLevel());
         row.put("threat_score", r.threatScore());
@@ -298,30 +275,21 @@ public class AccessLogService {
      *
      * @param ip        客户端 IP（模糊匹配）
      * @param path      路径（模糊匹配）
-     * @param clientType 客户端类型（精确）
-     * @param clientId 客户端应用 ID（精确）
-     * @param clientInstanceId 客户端安装实例 ID（精确）
      * @param status    状态码（精确）
-     * @param powStatus PoW 结果标签（精确，见 {@link com.neko.music.util.PowAudit}）
      * @param threatLevel 威胁判定（精确：normal / suspected / attack）
      * @param fromMs    起始时间（含），null 不限
      * @param toMs      结束时间（含），null 不限
      * @param keyword   关键字，命中 路径 / 查询串 / UA / IP / 登录用户昵称 / 管理员用户名 /
-     *                  客户端 ID / 实例 ID / 威胁原因 任一
+     *                  威胁原因 任一
      */
-    public LogPage list(int page, int size, String ip, String path, String clientType,
-                        String clientId, String clientInstanceId, Integer status,
-                        String powStatus, String threatLevel, Long fromMs, Long toMs,
+    public LogPage list(int page, int size, String ip, String path, Integer status,
+                        String threatLevel, Long fromMs, Long toMs,
                         String keyword) throws SQLException {
         int safePage = Math.max(1, page);
         int safeSize = Math.min(Math.max(1, size), MAX_PAGE_SIZE);
 
         StringBuilder where = new StringBuilder(" WHERE 1=1");
         List<Object> params = new ArrayList<>();
-        appendEquals(where, params, "client_type", blankToNull(clientType));
-        appendEquals(where, params, "client_id", blankToNull(clientId));
-        appendEquals(where, params, "client_instance_id", blankToNull(clientInstanceId));
-        appendEquals(where, params, "pow_status", blankToNull(powStatus));
         appendEquals(where, params, "threat_level", blankToNull(threatLevel));
         if (status != null) {
             where.append(" AND status = ?");
@@ -339,7 +307,7 @@ public class AccessLogService {
         }
         appendKeyword(where, params, blankToNull(keyword),
                 "path", "query", "user_agent", "client_ip", "user_name", "admin_username",
-                "client_id", "client_instance_id", "threat_reasons");
+                "threat_reasons");
 
         long total;
         List<Map<String, Object>> items = new ArrayList<>();
@@ -364,7 +332,7 @@ public class AccessLogService {
     }
 
     /**
-     * 访问量概览：总量、今日量、独立 IP、爬虫占比，以及最近 N 天的趋势与 Top 榜。
+     * 访问量概览：总量、今日量、独立 IP，以及最近 N 天的趋势与 Top 榜。
      *
      * <p>下面这些聚合彼此独立，但**每条都要扫一遍窗口内的行**；串行执行的接口耗时就是它们的和
      * （7 天窗口实测约 740ms）。因此拆成任务并发取，墙钟时间退化成「最慢的那一条」。今日的多个
@@ -390,9 +358,6 @@ public class AccessLogService {
                 () -> query(conn -> grouped(conn,
                         "SELECT path AS k, COUNT(*) AS c FROM access_log WHERE occurred_at >= ? "
                                 + "GROUP BY path ORDER BY c DESC LIMIT " + TOP_LIMIT, windowStart)),
-                () -> query(conn -> countByQuery(conn,
-                        "SELECT client_type AS k, COUNT(*) AS c FROM access_log WHERE occurred_at >= ? "
-                                + "GROUP BY client_type ORDER BY c DESC", windowStart)),
                 () -> query(conn -> countByQuery(conn,
                         "SELECT category AS k, COUNT(*) AS c FROM access_log WHERE occurred_at >= ? "
                                 + "GROUP BY category ORDER BY c DESC", windowStart)),
@@ -422,10 +387,9 @@ public class AccessLogService {
         stats.put("topIps", done.get(3));
         stats.put("topUsers", done.get(4));
         stats.put("topPaths", done.get(5));
-        stats.put("clientTypes", done.get(6));
-        stats.put("categories", done.get(7));
-        stats.put("topUserAgents", done.get(8));
-        stats.put("threatLevels", done.get(9));
+        stats.put("categories", done.get(6));
+        stats.put("topUserAgents", done.get(7));
+        stats.put("threatLevels", done.get(8));
         return stats;
     }
 
@@ -433,11 +397,8 @@ public class AccessLogService {
     private static Map<String, Object> todayOverview(Connection conn, long startOfToday) throws SQLException {
         String sql = "SELECT COUNT(*) AS total, COUNT(DISTINCT client_ip) AS ips, "
                 + "COUNT(DISTINCT user_id) AS users, "
-                + "COALESCE(SUM(client_type IN ('bot','scanner')), 0) AS bots, "
                 + "COALESCE(SUM(status >= 400), 0) AS errors, "
                 + "COALESCE(SUM(seo_render = 1), 0) AS seo, "
-                + "COALESCE(SUM(pow_status IN ('missing','invalid','expired','mismatch','bad_proof',"
-                + "'rate_limited','marked','error')), 0) AS pow_rejected, "
                 + "COALESCE(SUM(threat_level = 'attack'), 0) AS attacks, "
                 + "COALESCE(SUM(threat_level = 'suspected'), 0) AS suspected "
                 + "FROM access_log WHERE occurred_at >= ?";
@@ -449,10 +410,8 @@ public class AccessLogService {
                 overview.put("todayRequests", rs.getLong("total"));
                 overview.put("todayUniqueIps", rs.getLong("ips"));
                 overview.put("todayLoggedUsers", rs.getLong("users"));
-                overview.put("todayBots", rs.getLong("bots"));
                 overview.put("todayErrors", rs.getLong("errors"));
                 overview.put("todaySeo", rs.getLong("seo"));
-                overview.put("todayPowRejected", rs.getLong("pow_rejected"));
                 overview.put("todayAttacks", rs.getLong("attacks"));
                 overview.put("todaySuspected", rs.getLong("suspected"));
             }

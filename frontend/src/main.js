@@ -1,8 +1,7 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
-import { installNekoClientHeader, primeClientIdentity } from './config/clientIdentity.js'
-import { installReplayProtection } from './utils/replayNonce.js'
+import { installRequestHeaders } from './config/requestHeaders.js'
 import { installAdminUnauthorizedHandler } from './utils/adminUnauthorized.js'
 import './assets/main.css'
 import './design/tokens.css'
@@ -32,14 +31,8 @@ const app = createApp(App)
 installI18n(app)
 applyBootSplashLocale()
 
-// 客户端标识：所有 fetch / XHR / axios 请求统一带 X-Neko-Client: web+<版本>
-installNekoClientHeader()
-
-// 客户端实例身份：后台完成首次注册 / 续签，业务请求会等待它就绪后再签名
-primeClientIdentity()
-
-// 通用防重放：动态接口自动补一次性 X-Neko-Nonce（依赖上面的 fetch/XHR 补丁，须在其后安装）
-installReplayProtection()
+// 所有 fetch / XHR / axios 请求统一补语言与用户令牌
+installRequestHeaders()
 
 // 管理员会话失效：后台管理请求返回 401 时清理登录态并回到登录页（须在最外层请求补丁之后安装）
 installAdminUnauthorizedHandler(router)
@@ -121,11 +114,6 @@ app.use(VueToastification, {
  * 网络慢最多等 3 秒，拉不到就照常挂载（页面会显示兜底提示）。
  */
 async function bootstrap() {
-  // 首个业务请求必须等实例私钥与短期令牌就绪；网络慢时最多等 5 秒，随后由请求本身重试。
-  await Promise.race([
-    primeClientIdentity(),
-    new Promise((resolve) => setTimeout(resolve, 5000)),
-  ])
   if (getToken()) {
     await Promise.race([
       loadUserInfo(),

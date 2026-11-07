@@ -7,13 +7,13 @@ import java.util.function.Supplier;
 /**
  * 单次请求内的「只算一次」缓存（ThreadLocal，随请求开始 / 结束由过滤器维护）。
  *
- * <p>为什么需要：一个动态请求要穿过访问日志、语言、安全头、限流、来源封禁、防爬、防重放等
+ * <p>为什么需要：一个动态请求要穿过访问日志、语言、安全头、限流、来源封禁等
  * 七八道门禁，每道门禁都要拿同一批输入做判定——规范化路径、客户端 IP、User-Agent 分类、语言、
  * 令牌对应的用户。这些取值在一次请求内是常量，重复计算只是把 CPU 花在同样的字符串上：</p>
  * <ul>
  *   <li>{@link RequestPath#of} 被每个过滤器各调一次；</li>
  *   <li>{@link ClientIpResolver#clientIp} 会解析转发头链、做地址合法性校验（含 {@code InetAddress} 解析）；</li>
- *   <li>{@link com.neko.music.seo.UserAgentClassifier} 用十来条正则扫 UA，访问日志还要再算一遍客户端指纹；</li>
+ *   <li>{@link com.neko.music.seo.UserAgentClassifier} 用十来条正则扫 UA；</li>
  *   <li>令牌 → 用户 ID 的 Redis 查询会被访问日志与处理器各做一次，处理器还要再查一次 TTL 决定是否续期。</li>
  * </ul>
  *

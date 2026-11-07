@@ -17,7 +17,6 @@ package com.neko.music.model;
  * @param durationUs    处理耗时（微秒）
  * @param clientIp      可信客户端 IP
  * @param userAgent     原始 User-Agent
- * @param clientPlatform 客户端平台
  * @param detail        补充说明
  */
 public record OperationLogRecord(
@@ -35,6 +34,5 @@ public record OperationLogRecord(
         long durationUs,
         String clientIp,
         String userAgent,
-        String clientPlatform,
         String detail) {
 }

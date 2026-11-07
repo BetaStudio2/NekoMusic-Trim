@@ -29,8 +29,8 @@ public class OperationLogService {
 
     private static final String INSERT_SQL = """
             INSERT INTO operation_log (occurred_at, admin_id, admin_username, admin_role, module, action,
-                method, path, query, status, success, duration_us, client_ip, user_agent, client_platform, detail)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                method, path, query, status, success, duration_us, client_ip, user_agent, detail)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """;
 
     private static volatile OperationLogService current;
@@ -99,7 +99,6 @@ public class OperationLogService {
         stmt.setLong(i++, r.durationUs());
         stmt.setString(i++, LogQuerySupport.truncate(r.clientIp(), 64));
         stmt.setString(i++, LogQuerySupport.truncate(r.userAgent(), 1024));
-        stmt.setString(i++, LogQuerySupport.truncate(r.clientPlatform(), 32));
         stmt.setString(i, LogQuerySupport.truncate(r.detail(), 1024));
     }
 

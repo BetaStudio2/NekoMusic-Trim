@@ -7,7 +7,7 @@
 > **首要约束（违反即视为未完成）**
 > 1. 新增 API 必须显式设置 `Cache-Control`（见「HTTP 缓存策略」）。
 > 2. 新增/修改/删除后端 API 必须同步更新 API 文档（见「API 文档同步」）。
-> 3. 新增/修改的**动态接口必须纳入请求防重放**，且不得新增 `config.yml` 配置项（见「安全防护约定」）。
+> 3. 新增运行时配置不得写入 `config.yml`（见「安全防护约定」）。
 > 3.1 **新增运行时配置一律加到 `system_settings`**（后端 `config/SystemSettingRegistry.java` 登记 +
 >      后台「系统设置」页维护），`config.yml` 只保留 `mysql.*` 启动引导信息（见「运行时配置」）。
 > 4. API 文档**只写客户端契约，不写安全实现细节**（见「安全防护约定」）。
@@ -97,28 +97,6 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
 
 ## 安全防护约定（强约束）
 
-### 请求防重放（动态接口）
-
-- **所有动态接口默认在保护范围内**：`/api/*`、`/loser/*` 的受保护请求都必须带一次性请求头
-  `X-Neko-Nonce`（读 / 写两类，`GET` 用读、写方法用写，用后即废，重放返回 `409`）。
-  统一校验在 `filter/ReplayProtectionFilter.java`，签发在 `handlers/ReplayNonceHandler.java`
-  （`GET /api/replay/nonce`），消费在 `service/ReplayNonceService.java`。
-- **领取 nonce 必须先换题**（不能直接领）：`GET /api/replay/challenge`
-  （`handlers/ReplayChallengeHandler.java`）下发一次性挑战，校验在
-  `service/ReplayChallengeService.java`；签发限额在 `service/ReplayIssueLimiter.java`。
-  `handlers/ReplayNonceHandler.java` 的 `REQUIRE_CHALLENGE` 常量为 `true` 时，没有
-  `challenge` 的领取请求一律 `400`；该常量只在紧急回退时改 `false`（会重新暴露免解题领取）。
-  两个领取接口同样是自举接口，都豁免 nonce 校验。
-- 新增接口**不要**自行实现 nonce 逻辑；确需豁免的（浏览器原生 `<img>` 请求、SSE、第三方回调、
-  `multipart` 上传、`OPTIONS`/`HEAD`）只能显式加进 `ReplayProtectionFilter` 的类常量清单，
-  并在专项文档里说明豁免原因。
-- 静态资源（`/media/*`、`/assets/*`、安装包）不校验，保持 CDN 公共缓存语义，**不要**给它们加
-  逐请求校验；媒体解析接口（`/api/music/file/{id}`）属于动态接口，必须在保护范围内。
-- 改动态接口时，Web 前端与 `Android/`、`pc/` 客户端要**同步接入**：启动或池空时调
-  `GET /api/replay/nonce` 领 nonce，随请求带 `X-Neko-Nonce`，收到 `409` 重新领取并重试一次；
-  客户端接口（如 `/version`）的改动同样要跟进，不要只改服务端一端。
-- 防护开关、豁免清单一律写成代码里的类常量，**不要新增 `config.yml` 配置项**。
-
 ### 响应安全头（CSP）
 
 - 全部响应（页面、静态资源、API、SSE、媒体、报错页）都由 `filter/SecurityHeadersFilter.java`
@@ -130,28 +108,21 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
   （`img-src https: http:`）。新增内联脚本、外部 CDN、iframe 或 Worker 时必须同步调整策略。
 - 策略有单测锁定（`SecurityHeadersFilterTest`）：收紧或放宽都要在同一处改用例，否则视为未完成。
 
-### 客户端身份
+### User-Agent 与 SEO
 
-- 所有出站请求必须显式携带 `User-Agent`；**空 / 缺失 UA 一律按爬虫处理**（`/api/*` 直接 `403`），
-  不得为此开豁免。
-- 浏览器/官方客户端无需特殊处理；第三方客户端必须带版本号 `User-Agent` 与
-  `X-Neko-Client: <平台>+<版本>`。
-- 官方客户端的 UA 就是 `NekoMusic-<平台>/<版本>`（`seo/UserAgentClassifier`）：**判定必须整体锚定**，
-  禁止再写成「UA 里包含 `android` / `okhttp` / `qt` / `nekomusic` 就放行」这类子串匹配，也禁止把
-  「原生客户端放行」放在爬虫黑名单之前（否则 `sqlmap android` 这类组合能整层绕过）。
-- 第三方客户端只能通过 `network.allow_client_user_agents` 登记放行（子串至少 6 个字符）；
-  登记优先于黑名单判定。
+- 所有出站请求应携带标准 `User-Agent`；官方客户端的 UA 为 `NekoMusic-<平台>/<版本>`。
+- `User-Agent` 只用于 SEO 页面与 SPA 壳的表示选择，不参与 API 鉴权、放行或拦截。
 - 公开且允许 CDN 缓存的接口（`/api/music/ranking`、`/api/music/latest`）对所有请求者一致返回
-  JSON，不参与防爬分流；否则边缘缓存命中与否会让同一个 UA 时而被拦、时而拿到 JSON。
+  JSON，不按 UA 分流。
 
 ### API 文档脱敏
 
 - **铁律：后台管理类接口不写入 API 文档。** 管理端（`/api/admin/*` 等）只面向官方管理后台与
   运维，其存在与取值都属于内部信息；新增这类接口时不要往文档里加端点、字段或示例。
 - API 文档只描述**客户端可见契约**：端点、请求头 / 参数、请求体、响应结构、状态码，以及客户端
-  必须遵守的行为约定（如豁免接口清单、读 / 写类别、`409` 重试）。
+  必须遵守的行为约定。
 - **不得**写入安全实现细节，包括但不限于：防护判定规则与判定顺序、爬虫关键词与放行/白名单、
-  频率与时效的具体数值阈值、nonce 形态与有效期、内部存储与算法（Redis / Lua 等）、配置项名称、
+  频率与时效的具体数值阈值、内部存储与算法（Redis / Lua 等）、配置项名称、
   IP 解析与 CDN 头的处理方式，以及「某路径未被保护 / 可被绕过 / 地址可复用」之类的旁路说明。
 - 防护类专项文档要在开头声明：具体判定规则、关键词、名单与阈值属安全实现，**不对外公开且会随时调整**。
 - 破坏性变更仍需写清兼容 / 迁移方式，但只描述调用方式，不解释背后的防护机制。
@@ -162,7 +133,7 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
 包括但不限于：路由/方法变更、请求参数或字段变更、响应结构变更、鉴权/权限变化、状态码变化、接口下线。
 
 - 主文档：`Neko歌姬计划文档/README.md`（标题为「Neko歌姬计划 API 文档」，含 `## 目录`）。
-- 专项文档：如 `API-滑块与人机验证.md`、`API-请求防重放.md`、`API-防爬与客户端识别.md`（均在
+- 专项文档：如 `API-滑块与人机验证.md`（均在
   `Neko歌姬计划文档/`）；涉及对应流程时一并更新，并按「API 文档脱敏」收敛内容。
   新专项主题可新增独立 `.md`，并在主文档 `## 目录` 里加链接。
 - 文档在 **git submodule** `Neko歌姬计划文档/`（独立仓库 `FantasyNetworkCN/NekoMusicDocs`）。
@@ -205,7 +176,7 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
   `Accept-Ranges`），不要手写头部。
 - 给「同一 URL 内容可能被替换」的资源别加 `immutable`；入口 HTML / Service Worker 保持可再校验，
   否则用户拿不到新版本。
-- 需要 `Vary` 的响应（如按 User-Agent 区分爬虫/浏览器）要显式设置，避免共享缓存串味。
+- 需要 `Vary` 的响应（如按 User-Agent 区分 SEO HTML / SPA 壳）要显式设置，避免共享缓存串味。
 
 ## 不要提交
 

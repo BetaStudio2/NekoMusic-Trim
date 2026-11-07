@@ -12,11 +12,9 @@ import com.neko.music.database.LyricsDatabaseManager;
 import com.neko.music.database.LogDatabaseManager;
 import com.neko.music.service.*;
 import com.neko.music.database.VipPayOrderDatabaseManager;
-import com.neko.music.database.ReplaySourceMarkDatabaseManager;
 import com.neko.music.database.VipPricingDatabaseManager;
 import com.neko.music.database.SystemSettingsDatabaseManager;
 import com.neko.music.database.UserNotificationDatabaseManager;
-import com.neko.music.database.ClientRegistryDatabaseManager;
 import com.neko.music.service.UserNotificationService;
 import com.neko.music.handlers.*;
 
@@ -28,12 +26,9 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.server.handler.gzip.GzipHandler;
 import com.neko.music.filter.CacheControlFilter;
-import com.neko.music.filter.ClientIdentityFilter;
-import com.neko.music.filter.CrawlerProtectionFilter;
 import com.neko.music.filter.RequestAuditFilter;
 import com.neko.music.filter.RequestLocaleFilter;
 import com.neko.music.filter.IPRateLimitFilter;
-import com.neko.music.filter.ReplayProtectionFilter;
 import com.neko.music.filter.SecurityHeadersFilter;
 import com.neko.music.filter.SourceBanFilter;
 import com.neko.music.filter.StaticPageSeoFilter;
@@ -100,12 +95,8 @@ public class Main {
     private static UserNotificationService userNotificationService;
     private static IpRegionService ipRegionService;
     private static VipPricingDatabaseManager vipPricingDatabaseManager;
-    private static ReplaySourceMarkDatabaseManager replaySourceMarkDatabaseManager;
     private static VipPayOrderDatabaseManager vipPayOrderDatabaseManager;
     private static SystemSettingsDatabaseManager systemSettingsDatabaseManager;
-    private static ClientRegistryDatabaseManager clientRegistryDatabaseManager;
-    private static ClientTokenService clientTokenService;
-    private static ClientIdentityService clientIdentityService;
     private static VideoRenderJobStore videoRenderJobStore;
     private static VideoRenderQuotaService videoRenderQuotaService;
     private static VideoRenderService videoRenderService;
@@ -178,11 +169,6 @@ public class Main {
         vipPricingDatabaseManager = new VipPricingDatabaseManager(databaseManager);
         vipPayOrderDatabaseManager = new VipPayOrderDatabaseManager(databaseManager);
 
-        // 防重放加压越界来源标记：越界即落主库留痕（表随业务库备份），领取侧按标记临时拒绝
-        replaySourceMarkDatabaseManager = new ReplaySourceMarkDatabaseManager(databaseManager);
-        ReplaySourceMarkService.setCurrent(new ReplaySourceMarkService(
-                new ReplaySourceMarkService.SqlStore(replaySourceMarkDatabaseManager)));
-
         // 运行时配置改由主库 system_settings 表承载：首次启动把 config.yml 的现值灌进表里，
         // 之后用表里的值覆盖配置树。必须在依赖配置的服务（Redis 等）之前完成。
         systemSettingsDatabaseManager = new SystemSettingsDatabaseManager(databaseManager);
@@ -191,13 +177,6 @@ public class Main {
         java.util.Map<String, String> storedSettings = systemSettingsDatabaseManager.loadAll();
         configManager.applyOverrides(storedSettings);
         logger.info("已从数据库加载 {} 条系统设置", storedSettings.size());
-
-        // 客户端应用 / 安装实例身份：公开 client_id + 每实例私钥 + 短期令牌 + 每请求 ECDSA 签名。
-        // 注册表属于业务数据，不走 system_settings；官方应用在这里幂等种子化。
-        clientRegistryDatabaseManager = new ClientRegistryDatabaseManager(databaseManager);
-        clientRegistryDatabaseManager.seedOfficialApps();
-        clientTokenService = new ClientTokenService(configManager);
-        clientIdentityService = new ClientIdentityService(clientRegistryDatabaseManager, clientTokenService);
 
         // 访问日志 / 操作日志：独立日志库（不共用主库），失败只停用日志能力
         initializeLogging();
@@ -374,12 +353,12 @@ public class Main {
         context.setAttribute("ipRateLimitService", ipRateLimitService);
         context.setAttribute("sourceBanService", sourceBanService);
 
-        // 访问日志 + 操作日志：必须注册在最外层，才能看到经过后续门禁（限流/封禁/防爬/防重放）
+        // 访问日志 + 操作日志：必须注册在最外层，才能看到经过后续门禁（限流/封禁）
         // 之后的真实状态码与总耗时——被挡下的请求同样要留痕
         context.addFilter(RequestAuditFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
 
         // 响应语言：按 Accept-Language 决定 API 文案用中文还是英文。紧跟访问日志注册，
-        // 让限流 / 封禁 / 防爬等门禁写出的错误体也带上正确语言
+        // 让限流 / 封禁等门禁写出的错误体也带上正确语言
         context.addFilter(RequestLocaleFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
 
         // 通用安全加固：禁用 TRACE/TRACK、补安全响应头、隐藏版本（最先注册，作用于全部响应）
@@ -388,19 +367,9 @@ public class Main {
         // IP 限流需在嵌入式 Jetty 中显式注册（@WebFilter 不会生效）
         context.addFilter(IPRateLimitFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
 
-        // 认证失败来源封禁：反复失败的来源在进入路由前被挡掉（429）。放在防爬 / 防重放门禁之前，
-        // 免得被封来源还要走一遍 nonce 校验；不依赖前置门禁，门禁被绕过时仍独立生效
+        // 认证失败来源封禁：反复失败的来源在进入路由前被挡掉（429）。
+        // 不依赖前置门禁，门禁被绕过时仍独立生效
         context.addFilter(SourceBanFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
-
-        // 保守防爬：拦截明确为爬虫/无头/命令行工具对 /api/* 的访问（不影响浏览器与原生客户端）
-        context.addFilter(CrawlerProtectionFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
-
-        // 客户端实例身份：公开 client_id + 每实例私钥签名 + 短期令牌；位于防爬之后、防重放之前。
-        context.addFilter(ClientIdentityFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
-
-        // 通用防重放：动态接口（/api/*、/loser/*）必须带一次性 nonce，重放 409；
-        // 静态资源与 /media/* 公共缓存路径不受影响
-        context.addFilter(ReplayProtectionFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
 
         // 静态路由（首页 / 下载 / 关于等）对爬虫返回服务端 SEO HTML，浏览器仍走 SPA
         context.addFilter(StaticPageSeoFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
@@ -716,25 +685,8 @@ public class Main {
         return vipPayOrderDatabaseManager;
     }
 
-    /** 防重放加压来源标记表（后台/运维查询与人工放行）。 */
-    public static ReplaySourceMarkDatabaseManager getReplaySourceMarkDatabaseManager() {
-        return replaySourceMarkDatabaseManager;
-    }
-
     public static SystemSettingsDatabaseManager getSystemSettingsDatabaseManager() {
         return systemSettingsDatabaseManager;
-    }
-
-    public static ClientRegistryDatabaseManager getClientRegistryDatabaseManager() {
-        return clientRegistryDatabaseManager;
-    }
-
-    public static ClientTokenService getClientTokenService() {
-        return clientTokenService;
-    }
-
-    public static ClientIdentityService getClientIdentityService() {
-        return clientIdentityService;
     }
 
     public static VideoRenderJobStore getVideoRenderJobStore() {

@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p><b>SSE 契约（{@code /access/stream}）：</b>{@code EventSource} 无法携带请求头，因此该端点
  * 同时接受 {@code Authorization: Bearer <token>} 与 {@code ?token=<token>}（浏览器走后者），
- * 并在防重放豁免清单里（见 {@code ReplayProtectionFilter}）。连上先发一帧 {@code ready}
+ * 连上先发一帧 {@code ready}
  * （含服务端时间），此后每产生一条访问日志推一帧 {@code record}（负载与列表里的单行同一形状，
  * 仅缺自增 {@code id}），空闲 15 秒发一次注释心跳；连接最长存活 5 分钟后主动断开、由客户端重连。
  * 实时流只是「提前告知」，断线期间的行由列表接口补全，服务端不做重放。</p>
@@ -125,11 +125,7 @@ public class AdminLogHandler extends ApiServlet {
                 parseInt(request.getParameter("size"), DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE),
                 request.getParameter("ip"),
                 request.getParameter("path"),
-                request.getParameter("clientType"),
-                request.getParameter("clientId"),
-                request.getParameter("clientInstanceId"),
                 parseInteger(request.getParameter("status")),
-                request.getParameter("powStatus"),
                 request.getParameter("threatLevel"),
                 parseLong(request.getParameter("from")),
                 parseLong(request.getParameter("to")),

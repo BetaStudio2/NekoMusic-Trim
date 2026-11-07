@@ -218,25 +218,6 @@ public class DatabaseInitializer {
             executeTableDdl(stmt, createUserNotifications,
                     "user_notifications 表已就绪", "创建 user_notifications 表失败（可能已存在）");
 
-            // 防重放加压越界来源：加压阶梯无上限，越界（题目已不可解）时落库标记并拒绝领取，
-            // 让处置可见、可复核、可人工放行；到期自动失效，不需要人工清理
-            String createReplaySourceMarks = """
-                CREATE TABLE IF NOT EXISTS replay_source_marks (
-                    ip VARCHAR(64) NOT NULL,
-                    marks INT NOT NULL DEFAULT 1,
-                    peak_difficulty_bits INT NOT NULL DEFAULT 0,
-                    window_requests INT NOT NULL DEFAULT 0,
-                    reason VARCHAR(64) NOT NULL DEFAULT '',
-                    first_marked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    last_marked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    expires_at TIMESTAMP NOT NULL,
-                    PRIMARY KEY (ip),
-                    KEY idx_replay_marks_expires (expires_at)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                """;
-            executeTableDdl(stmt, createReplaySourceMarks,
-                    "replay_source_marks 表已就绪", "创建 replay_source_marks 表失败（可能已存在）");
-
             String createVipPayOrders = """
                 CREATE TABLE IF NOT EXISTS vip_pay_orders (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -258,58 +239,6 @@ public class DatabaseInitializer {
                 """;
             executeTableDdl(stmt, createVipPayOrders,
                     "vip_pay_orders 表已就绪", "创建 vip_pay_orders 表失败（可能已存在）");
-
-            // 客户端应用登记：client_id 是公开标识，实例身份靠私钥 + 短期令牌 + 每请求签名。
-            // 官方应用由启动代码种入；第三方应用通过后台创建。机密客户端只保存 secret 哈希。
-            String createClientApp = """
-                CREATE TABLE IF NOT EXISTS client_app (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    client_id VARCHAR(64) NOT NULL,
-                    name VARCHAR(100) NOT NULL,
-                    owner_label VARCHAR(100) NOT NULL DEFAULT '',
-                    platform VARCHAR(24) NOT NULL,
-                    confidential TINYINT(1) NOT NULL DEFAULT 0,
-                    secret_hash VARCHAR(128) NULL,
-                    status VARCHAR(16) NOT NULL DEFAULT 'active',
-                    official TINYINT(1) NOT NULL DEFAULT 0,
-                    attestation_required TINYINT(1) NOT NULL DEFAULT 0,
-                    allowed_origins TEXT NULL,
-                    package_name VARCHAR(255) NULL,
-                    signing_digest CHAR(64) NULL,
-                    created_at BIGINT NOT NULL,
-                    updated_at BIGINT NOT NULL,
-                    expires_at BIGINT NULL,
-                    UNIQUE KEY uk_client_app_client_id (client_id),
-                    KEY idx_client_app_platform_status (platform, status)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                """;
-            executeTableDdl(stmt, createClientApp,
-                    "client_app 表已就绪", "创建 client_app 表失败（可能已存在）");
-
-            // 每个安装实例一把不可导出的 EC P-256 私钥，公钥 SPKI 登记在这里；吊销即时生效于本进程缓存。
-            String createClientInstance = """
-                CREATE TABLE IF NOT EXISTS client_instance (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    instance_id CHAR(36) NOT NULL,
-                    client_id VARCHAR(64) NOT NULL,
-                    platform VARCHAR(24) NOT NULL,
-                    public_key_spki VARCHAR(1024) NOT NULL,
-                    attestation_level VARCHAR(16) NOT NULL DEFAULT 'none',
-                    app_id VARCHAR(255) NOT NULL DEFAULT '',
-                    signing_digest CHAR(64) NULL,
-                    status VARCHAR(16) NOT NULL DEFAULT 'active',
-                    created_at BIGINT NOT NULL,
-                    last_seen_at BIGINT NOT NULL,
-                    expires_at BIGINT NULL,
-                    UNIQUE KEY uk_client_instance_id (instance_id),
-                    KEY idx_client_instance_client (client_id, last_seen_at),
-                    KEY idx_client_instance_status (status),
-                    CONSTRAINT fk_client_instance_app
-                        FOREIGN KEY (client_id) REFERENCES client_app(client_id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                """;
-            executeTableDdl(stmt, createClientInstance,
-                    "client_instance 表已就绪", "创建 client_instance 表失败（可能已存在）");
 
             migrateAppReleaseTable(conn, stmt);
 

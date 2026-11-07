@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * {@code Accept-Language} 解析：只认站点支持的语言，其余一律回落源语言。
  *
- * <p>该结果直接决定 API 响应文案用哪种语言，且「头缺失」也是防爬判定的输入之一，因此把边界
+ * <p>该结果直接决定 API 响应文案用哪种语言，因此把边界
  * （q 值排序、通配、地区变体、无头）单独锁住。</p>
  */
 class RequestLocaleTest {

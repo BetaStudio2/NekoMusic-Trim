@@ -64,8 +64,7 @@ public class SliderCaptchaVerifyHandler extends ApiServlet {
                     token,
                     offsetX,
                     trace,
-                    request.getHeader("User-Agent"),
-                    request.getHeader("X-Neko-Client"));
+                    request.getHeader("User-Agent"));
             if (pass.isEmpty()) {
                 sendJson(response, false, "captcha.wrong_position", null);
                 return;

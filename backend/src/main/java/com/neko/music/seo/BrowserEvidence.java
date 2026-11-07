@@ -3,7 +3,7 @@ package com.neko.music.seo;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * 浏览器特征头的提取与判定（供防爬、SEO 分流、详情页等多处复用，避免逻辑漂移）。
+ * 浏览器特征头的提取与判定（供 SEO 分流、详情页等多处复用，避免逻辑漂移）。
  *
  * <p>真实浏览器访问页面或 fetch 接口时，一定同时带 {@code Accept} 与 {@code Accept-Language}。
  * 缺少这两者而仅伪造 {@code Mozilla/} UA 的，视为爬虫 / 脚本 / 环境异常客户端。</p>

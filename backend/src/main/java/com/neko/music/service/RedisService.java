@@ -218,7 +218,7 @@ public class RedisService {
     }
 
     /**
-     * 执行返回数组的 Lua 脚本（批量签发 nonce 用）：一次往返完成整批写入。
+     * 执行返回数组的 Lua 脚本：一次往返完成批量操作。
      * 失败返回 {@code null}，由调用方明确报错，不静默降级。
      */
     public List<Object> evalMulti(String script, String[] keys, String[] args) {

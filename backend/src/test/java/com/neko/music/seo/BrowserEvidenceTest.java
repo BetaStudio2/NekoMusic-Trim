@@ -14,8 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 浏览器特征头判定：{@code Accept} 与 {@code Accept-Language} 必须同时存在。
  *
  * <p>{@code Accept-Language} 是硬性要求，缺失一律按环境异常拒绝；且不再接受 {@code Sec-Fetch-*}
- * 作为替代——该组头脚本随手可伪造，单独拿它当证据等于开一个不设防的入口。这条规则同时决定
- * 防爬 403（{@code CrawlerProtectionFilter}）与 SEO / SPA 分流（静态页与详情页），因此单独锁住。</p>
+ * 作为替代——该组头脚本随手可伪造，单独拿它当证据等于开一个不设防的入口。这条规则决定
+ * SEO / SPA 分流（静态页与详情页），因此单独锁住。</p>
  */
 class BrowserEvidenceTest {
 

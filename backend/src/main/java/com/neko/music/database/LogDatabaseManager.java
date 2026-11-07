@@ -46,8 +46,6 @@ public class LogDatabaseManager {
             + "OR LOWER(COALESCE(query, '')) LIKE '%sleep(%')";
 
     private static final int LEGACY_BUGGY_ENGINE_VERSION = 3;
-    private static final int HISTORICAL_REPLAY_MIN_FAILURES = 80;
-    private static final double HISTORICAL_REPLAY_MIN_RATIO = 0.80;
     private static final int HISTORICAL_SINGLE_PATH_MIN_REQUESTS = 300;
     private static final String LEGACY_REPAIR_SCOPE =
             "threat_engine_version = " + LEGACY_BUGGY_ENGINE_VERSION;
@@ -126,12 +124,6 @@ public class LogDatabaseManager {
                 client_ip VARCHAR(64) NOT NULL,
                 ip_subnet VARCHAR(64) NULL COMMENT 'IPv4 /24 或 IPv6 /48，便于聚合同一网段',
                 user_agent VARCHAR(1024) NULL,
-                client_type VARCHAR(24) NOT NULL COMMENT 'browser/official_client/third_party/bot/scanner/unknown',
-                client_platform VARCHAR(32) NULL,
-                client_version VARCHAR(64) NULL,
-                neko_client VARCHAR(128) NULL COMMENT 'X-Neko-Client 头原值',
-                client_id VARCHAR(64) NULL COMMENT '客户端应用 ID（公开标识）',
-                client_instance_id CHAR(36) NULL COMMENT '客户端安装实例 ID',
                 referer VARCHAR(1024) NULL,
                 origin VARCHAR(255) NULL,
                 accept_language VARCHAR(255) NULL,
@@ -144,8 +136,6 @@ public class LogDatabaseManager {
                 scheme VARCHAR(16) NULL,
                 protocol VARCHAR(16) NULL,
                 thread VARCHAR(128) NULL,
-                pow_difficulty INT NULL COMMENT '本次请求对应的 PoW 难度（比特）',
-                pow_status VARCHAR(24) NULL COMMENT 'PoW 结果标签：verified/missing/issued/...',
                 seo_render TINYINT(1) NULL COMMENT '本次是否返回服务端 SEO 渲染 HTML；与 SEO 无关为 NULL',
                 threat_level VARCHAR(16) NOT NULL DEFAULT 'normal' COMMENT '威胁判定：normal/suspected/attack',
                 threat_score INT NOT NULL DEFAULT 0 COMMENT '综合风险分 0-100',
@@ -155,13 +145,9 @@ public class LogDatabaseManager {
                 KEY idx_access_ip (client_ip),
                 KEY idx_access_path (path(191)),
                 KEY idx_access_status (status),
-                KEY idx_access_type (client_type),
-                KEY idx_access_pow (pow_status),
                 KEY idx_access_threat (threat_level),
                 KEY idx_access_threat_engine (threat_engine_version),
-                KEY idx_access_user (user_id),
-                KEY idx_access_client (client_id),
-                KEY idx_access_client_instance (client_instance_id)
+                KEY idx_access_user (user_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """;
 
@@ -182,7 +168,6 @@ public class LogDatabaseManager {
                 duration_us BIGINT NOT NULL COMMENT '处理耗时（微秒）',
                 client_ip VARCHAR(64) NOT NULL,
                 user_agent VARCHAR(1024) NULL,
-                client_platform VARCHAR(32) NULL,
                 detail VARCHAR(1024) NULL,
                 KEY idx_operation_occurred (occurred_at),
                 KEY idx_operation_admin (admin_id),
@@ -206,10 +191,6 @@ public class LogDatabaseManager {
      * {@code information_schema} 再决定是否执行 DDL；整个过程幂等，可在每次启动时安全重跑。</p>
      */
     private static void migrate(Connection conn) throws SQLException {
-        ensureColumn(conn, "access_log", "pow_difficulty", "INT NULL COMMENT '本次请求对应的 PoW 难度（比特）'");
-        ensureColumn(conn, "access_log", "pow_status",
-                "VARCHAR(24) NULL COMMENT 'PoW 结果标签：verified/missing/issued/...'");
-        ensureIndex(conn, "access_log", "idx_access_pow", "pow_status");
         ensureColumn(conn, "access_log", "seo_render",
                 "TINYINT(1) NULL COMMENT '本次是否返回服务端 SEO 渲染 HTML；与 SEO 无关为 NULL'");
         ensureColumn(conn, "access_log", "threat_level",
@@ -229,22 +210,15 @@ public class LogDatabaseManager {
         ensureColumn(conn, "access_log", "user_name",
                 "VARCHAR(255) NULL COMMENT '已登录用户昵称（随日志快照保存）'");
         ensureIndex(conn, "access_log", "idx_access_user", "user_id");
-        ensureColumn(conn, "access_log", "client_id",
-                "VARCHAR(64) NULL COMMENT '客户端应用 ID（公开标识）' AFTER `neko_client`");
-        ensureColumn(conn, "access_log", "client_instance_id",
-                "CHAR(36) NULL COMMENT '客户端安装实例 ID' AFTER `client_id`");
-        ensureIndex(conn, "access_log", "idx_access_client", "client_id");
-        ensureIndex(conn, "access_log", "idx_access_client_instance", "client_instance_id");
         // 概览聚合的覆盖索引：列表检索只按单列过滤，但概览要对窗口做 GROUP BY。
         // 只有 occurred_at 的索引必须逐行回聚簇索引取聚合列（窗口内几万行就是几万次随机读），
         // 把聚合列接在 occurred_at 后面即可只走索引；occurred_at 必须在最左，范围条件才用得上。
         ensureIndex(conn, "access_log", "idx_access_occurred_path", "occurred_at, path");
         ensureIndex(conn, "access_log", "idx_access_occurred_ip", "occurred_at, client_ip");
-        ensureIndex(conn, "access_log", "idx_access_occurred_type", "occurred_at, client_type");
         ensureIndex(conn, "access_log", "idx_access_occurred_category", "occurred_at, category");
         ensureIndex(conn, "access_log", "idx_access_occurred_user", "occurred_at, user_id, user_name");
         backfillThreatLabels(conn);
-        repairLegacyReplayAndFloodLabels(conn);
+        repairLegacyFloodLabels(conn);
         // 耗时精度升级：老库的毫秒列（duration_ms）改名为微秒列（duration_us）并 ×1000 换算。
         migrateDurationToMicros(conn, "access_log");
         migrateDurationToMicros(conn, "operation_log");
@@ -253,16 +227,14 @@ public class LogDatabaseManager {
     /**
      * 旧日志的一次性威胁回填。
      *
-     * <p>实时算法需要请求进入时才能计算；历史行先按来源 IP 与客户端指纹的失败簇识别成规模攻击，
-     * 剩下的再按已保存的状态码、路径、UA 分类和 PoW 结果保守分类。只处理引擎版本为 0 的行，
+     * <p>实时算法需要请求进入时才能计算；历史行先按来源 IP 与 User-Agent 的失败簇识别成规模攻击，
+     * 剩下的再按已保存的状态码、路径与 UA 分类保守分类。只处理引擎版本为 0 的行，
      * 新记录一律写入当前版本，不会每次启动都被重新标记。</p>
      */
     private static void backfillThreatLabels(Connection conn) {
         String dangerous = HISTORICAL_DANGEROUS_SQL;
-        String replayFailure = "pow_status IN ('invalid','missing','expired','mismatch','bad_proof')";
-        String attack = "pow_status = 'marked' OR " + dangerous;
-        String suspected = "status IN (401,403,404,429) OR client_type IN ('bot','scanner') "
-                + "OR pow_status = 'rate_limited'";
+        String attack = dangerous;
+        String suspected = "status IN (401,403,404,429)";
         String directSql = "UPDATE access_log SET "
                 + "threat_level = CASE "
                 + "WHEN " + attack + " THEN 'attack' "
@@ -270,13 +242,11 @@ public class LogDatabaseManager {
                 + "threat_score = CASE "
                 + "WHEN " + attack + " THEN 70 "
                 + "WHEN " + suspected + " THEN 35 "
-                + "WHEN status = 409 AND " + replayFailure + " THEN 15 "
                 + "ELSE 0 END, "
                 + "threat_reasons = CASE "
                 + "WHEN " + attack + " THEN '历史回填：高危扫描特征' "
                 + "WHEN " + suspected + " THEN '历史回填：4xx / 爬虫 / 验证失败（建议复核）' "
-                + "WHEN status = 409 AND " + replayFailure
-                + " THEN '历史回填：单次防重放凭证失效' ELSE NULL END, "
+                + "ELSE NULL END, "
                 + "threat_engine_version = " + ThreatAssessment.CURRENT_ENGINE_VERSION + " "
                 + "WHERE threat_engine_version = 0 LIMIT 5000";
         int sourceClusters = 0;
@@ -294,14 +264,14 @@ public class LogDatabaseManager {
             clientClusters = executeUpdate(conn,
                     "UPDATE access_log a JOIN threat_client_clusters c ON a.user_agent = c.user_agent "
                             + "SET a.threat_level = 'attack', a.threat_score = 80, "
-                            + "a.threat_reasons = '历史回填：同客户端指纹跨网段失败簇', "
+                            + "a.threat_reasons = '历史回填：同 User-Agent 跨网段失败簇', "
                             + "a.threat_engine_version = " + ThreatAssessment.CURRENT_ENGINE_VERSION + " "
                             + "WHERE a.threat_engine_version = 0 "
                             + "AND a.status IN (401,403,404,429)");
             remaining = updateInBatches(conn, directSql);
             int total = sourceClusters + clientClusters + remaining;
             if (total > 0) {
-                logger.info("日志库回填历史威胁判定 {} 条（来源簇 {}，客户端指纹簇 {}）",
+                logger.info("日志库回填历史威胁判定 {} 条（来源簇 {}，User-Agent 簇 {}）",
                         total, sourceClusters, clientClusters);
             }
         } catch (SQLException e) {
@@ -313,36 +283,11 @@ public class LogDatabaseManager {
     }
 
     /**
-     * 修正第 3 版规则留下的两类错误历史标记：单次 409 被无差别降级，以及高频单资源请求从未
-     * 纳入攻击判定。修正只处理上一版规则产出的行，完成后归档到当前版本，避免每次启动重扫全表。
-     *
-     * <p>批量防重放失败必须同时满足次数与占比，单次 nonce 失效仍保持正常；同一来源对同一路径
-     * 的 200/206/304 高密度重复请求独立判攻击。高危路径、扫描器与 marked 来源不会被降级。</p>
+     * 修正第 3 版规则漏掉的高频单资源请求，并把上一版规则产出的行归档到当前版本。
      */
-    private static void repairLegacyReplayAndFloodLabels(Connection conn) {
+    private static void repairLegacyFloodLabels(Connection conn) {
         try {
             prepareLegacyBursts(conn);
-            int downgraded = executeUpdate(conn,
-                    "UPDATE access_log SET threat_level = 'normal', threat_score = CASE "
-                            + "WHEN COALESCE(pow_status, '') IN "
-                            + "('invalid','missing','expired','mismatch','bad_proof') THEN 15 ELSE 0 END, "
-                            + "threat_reasons = '历史修正：单次防重放凭证失效不单独判定攻击', "
-                            + "threat_engine_version = " + ThreatAssessment.CURRENT_ENGINE_VERSION + " "
-                            + "WHERE " + LEGACY_REPAIR_SCOPE
-                            + " AND status = 409 AND threat_level = 'attack' "
-                            + "AND COALESCE(client_type, '') NOT IN ('bot','scanner') "
-                            + "AND COALESCE(pow_status, '') <> 'marked' "
-                            + "AND NOT " + HISTORICAL_DANGEROUS_SQL);
-            int replayBursts = executeUpdate(conn,
-                    "UPDATE access_log a JOIN threat_replay_bursts b "
-                            + "ON a.client_ip = b.client_ip "
-                            + "AND a.occurred_at DIV 600000 = b.bucket_start "
-                            + "SET a.threat_level = 'attack', a.threat_score = 80, "
-                            + "a.threat_reasons = '历史修正：同来源短时批量防重放失败', "
-                            + "a.threat_engine_version = " + ThreatAssessment.CURRENT_ENGINE_VERSION + " "
-                            + "WHERE a.threat_engine_version = " + LEGACY_BUGGY_ENGINE_VERSION + " "
-                            + "AND a.status = 409 AND a.pow_status IN "
-                            + "('invalid','missing','expired','mismatch','bad_proof')");
             int pathBursts = executeUpdate(conn,
                     "UPDATE access_log a JOIN threat_single_path_bursts b "
                             + "ON a.client_ip = b.client_ip AND a.path = b.path "
@@ -356,10 +301,8 @@ public class LogDatabaseManager {
                     "UPDATE access_log SET threat_engine_version = "
                             + ThreatAssessment.CURRENT_ENGINE_VERSION + " "
                             + "WHERE threat_engine_version = " + LEGACY_BUGGY_ENGINE_VERSION);
-            int corrected = downgraded + replayBursts + pathBursts;
-            if (corrected > 0 || archived > 0) {
-                logger.info("日志库修正历史威胁标记（单次降级 {}，重放风暴 {}，单路径刷取 {}；归档 {}）",
-                        downgraded, replayBursts, pathBursts, archived);
+            if (pathBursts > 0 || archived > 0) {
+                logger.info("日志库修正历史威胁标记（单路径刷取 {}；归档 {}）", pathBursts, archived);
             }
         } catch (SQLException e) {
             // 修正失败不影响日志写入；下一次启动会继续尝试
@@ -369,35 +312,11 @@ public class LogDatabaseManager {
         }
     }
 
-    /** 基于 10 分钟桶识别历史上的批量防重放失败与单路径高频刷取。 */
+    /** 基于 10 分钟桶识别历史上的单路径高频刷取。 */
     private static void prepareLegacyBursts(Connection conn) throws SQLException {
         String scope = LEGACY_REPAIR_SCOPE;
-        String replayFailure = "pow_status IN ('invalid','missing','expired','mismatch','bad_proof')";
         try (Statement stmt = conn.createStatement()) {
             dropLegacyBursts(conn);
-            stmt.execute("CREATE TEMPORARY TABLE threat_ip_bucket_totals ("
-                    + "client_ip VARCHAR(64) NOT NULL, bucket_start BIGINT NOT NULL, "
-                    + "total INT NOT NULL, PRIMARY KEY (client_ip, bucket_start))");
-            stmt.execute("INSERT INTO threat_ip_bucket_totals (client_ip, bucket_start, total) "
-                    + "SELECT client_ip, occurred_at DIV 600000, COUNT(*) FROM access_log "
-                    + "WHERE " + scope + " AND client_ip IS NOT NULL AND client_ip <> '' "
-                    + "GROUP BY client_ip, occurred_at DIV 600000");
-
-            stmt.execute("CREATE TEMPORARY TABLE threat_replay_bursts ("
-                    + "client_ip VARCHAR(64) NOT NULL, bucket_start BIGINT NOT NULL, "
-                    + "PRIMARY KEY (client_ip, bucket_start))");
-            stmt.execute("INSERT INTO threat_replay_bursts (client_ip, bucket_start) "
-                    + "SELECT r.client_ip, r.bucket_start FROM ("
-                    + "SELECT client_ip, occurred_at DIV 600000 AS bucket_start, "
-                    + "COUNT(*) AS replay_failures FROM access_log "
-                    + "WHERE " + scope + " AND status = 409 AND " + replayFailure
-                    + " AND client_ip IS NOT NULL AND client_ip <> '' "
-                    + "GROUP BY client_ip, occurred_at DIV 600000 "
-                    + "HAVING COUNT(*) >= " + HISTORICAL_REPLAY_MIN_FAILURES + ") r "
-                    + "JOIN threat_ip_bucket_totals t ON r.client_ip = t.client_ip "
-                    + "AND r.bucket_start = t.bucket_start "
-                    + "WHERE r.replay_failures / t.total >= " + HISTORICAL_REPLAY_MIN_RATIO);
-
             stmt.execute("CREATE TEMPORARY TABLE threat_single_path_bursts ("
                     + "client_ip VARCHAR(64) NOT NULL, path VARCHAR(512) NOT NULL, "
                     + "bucket_start BIGINT NOT NULL, PRIMARY KEY (client_ip, path, bucket_start))");
@@ -413,7 +332,7 @@ public class LogDatabaseManager {
     }
 
     /**
-     * 为历史回填建立来源 / 客户端指纹聚类。
+     * 为历史回填建立来源 / User-Agent 聚类。
      *
      * <p>历史行没有实时滑动窗口，但可以用全量日志近似出「短时高频失败来源」和「同一 UA 跨多个
      * 网段失败」。这能在升级后立刻把成簇的扫描型 4xx 标成攻击，而不是全部保守地塞进疑似。</p>
@@ -478,8 +397,6 @@ public class LogDatabaseManager {
 
     private static void dropLegacyBursts(Connection conn) {
         try (Statement stmt = conn.createStatement()) {
-            stmt.execute("DROP TEMPORARY TABLE IF EXISTS threat_ip_bucket_totals");
-            stmt.execute("DROP TEMPORARY TABLE IF EXISTS threat_replay_bursts");
             stmt.execute("DROP TEMPORARY TABLE IF EXISTS threat_single_path_bursts");
         } catch (SQLException e) {
             logger.debug("清理历史威胁修正临时表失败: {}", e.getMessage());

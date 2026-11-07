@@ -1,7 +1,6 @@
 package com.neko.music.security;
 
 import com.neko.music.model.ThreatAssessment;
-import com.neko.music.util.ClientFingerprint;
 import com.neko.music.util.RequestCategory;
 
 import java.net.InetAddress;
@@ -26,9 +25,9 @@ import java.util.regex.Pattern;
  * <p>判定分三层：</p>
  * <ol>
  *   <li><b>请求特征</b>：扫描器 UA、敏感文件探测、注入载荷、路径穿越、异常方法、
- *       401/403/404/429，以及按来源密度累计的防重放 / PoW 异常。</li>
+ *       401/403/404/429。</li>
  *   <li><b>来源行为窗口</b>：单客户端 / 单 IP 与粗粒度网段在短时间内的拒绝率、认证失败、
- *       404 数、路径扩散度；同一 IP 出现多个客户端身份时按共享出口降级到客户端维度。</li>
+ *       404 数、路径扩散度；同一 IP 出现多个客户端形态时按共享出口降级到客户端维度。</li>
  *   <li><b>跨来源聚类</b>：同一 UA / 路径族在多网段、多 IP 上同步失败；以及全站在短窗口内的
  *       大面积拒绝。该层专门覆盖攻击者轮换 IPv4 /24、IPv6 /48 甚至不同地址段的情况。</li>
  * </ol>
@@ -74,18 +73,9 @@ public final class ThreatDetectionService {
             "(?is).+\\.(?:php|asp|aspx|jsp|cgi|env|bak|sql|old|swp)(?:/.*)?$");
 
     private static final Set<String> UNUSUAL_METHODS = Set.of("TRACE", "TRACK", "CONNECT", "DEBUG");
-    private static final Set<String> POW_HIGH_RISK = Set.of("marked");
-    private static final Set<String> POW_REPLAY_FAILURE = Set.of(
-            "invalid", "missing", "expired", "mismatch", "bad_proof");
-    private static final Set<String> POW_REPLAY_CHALLENGE_FAILURE = Set.of(
-            "invalid", "mismatch", "bad_proof");
-    private static final Set<String> POW_RATE_LIMITED = Set.of("rate_limited");
-    private static final int REPLAY_BURST_MIN_FAILURES = 80;
-    private static final double REPLAY_BURST_MIN_RATIO = 0.80;
-    private static final int REPLAY_BURST_SCORE = 50;
     private static final int SINGLE_PATH_FLOOD_MIN_REQUESTS = 300;
     private static final int SINGLE_PATH_FLOOD_SCORE = 60;
-    /** 同一 IP 出现多个稳定客户端身份时按 CGNAT / 共享出口处理，不再用 IP 级高频规则。 */
+    /** 同一 IP 出现多个稳定客户端键时按 CGNAT / 共享出口处理，不再用 IP 级高频规则。 */
     private static final int SHARED_SOURCE_MIN_CLIENTS = 2;
 
     private static final ThreatDetectionService SHARED =
@@ -122,10 +112,8 @@ public final class ThreatDetectionService {
         String decoded = decode(path, facts.query());
         String decodedLower = decoded.toLowerCase(Locale.ROOT);
         String method = safe(facts.method()).toUpperCase(Locale.ROOT);
-        String clientType = safe(facts.clientType());
         String clientIp = safe(facts.clientIp());
-        String clientKey = clientIdentityKey(facts.userAgent(), facts.nekoClient(), facts.clientId(),
-                facts.clientInstanceId(), facts.userId());
+        String clientKey = clientSourceKey(facts.userAgent(), facts.userId());
 
         int signature = signatureScore(pathLower, decodedLower, method, reasons);
         score += signature;
@@ -156,51 +144,15 @@ public final class ThreatDetectionService {
             reasons.add("页面路径探测");
         }
 
-        String pow = safe(facts.powStatus());
         if (facts.status() == 409) {
-            reasons.add(POW_REPLAY_FAILURE.contains(pow)
-                    ? "请求冲突且防重放凭证失效" : "业务状态冲突");
+            reasons.add("业务状态冲突");
         }
 
-        if (ClientFingerprint.SCANNER.equals(clientType)) {
-            score += 45;
-            reasons.add("安全扫描器 User-Agent");
-            if (denied) {
-                score += 15;
-            }
-        } else if (ClientFingerprint.BOT.equals(clientType)) {
-            score += 25;
-            reasons.add("爬虫 User-Agent");
-        } else if (ClientFingerprint.UNKNOWN.equals(clientType)
-                && (safe(facts.userAgent()).isBlank() || dynamic)) {
-            score += 15;
-            reasons.add("缺少可识别客户端身份");
-        }
-
-        if (POW_HIGH_RISK.contains(pow)) {
-            score += 55;
-            reasons.add("来源已被防重放链路标记");
-        } else if (POW_RATE_LIMITED.contains(pow)) {
-            score += 20;
-            reasons.add("防重放凭证签发被限流");
-        } else if (POW_REPLAY_CHALLENGE_FAILURE.contains(pow)) {
-            score += 15;
-            reasons.add("防重放凭证失效（可能过期、已用或来源变化）");
-        } else if ("missing".equals(pow) && dynamic) {
-            score += 10;
-            reasons.add("动态接口缺少防重放凭证");
-        } else if ("expired".equals(pow)) {
-            score += 10;
-            reasons.add("防重放挑战已过期");
-        }
-
-        boolean highRisk = signature >= 60 || POW_HIGH_RISK.contains(pow)
-                || ClientFingerprint.SCANNER.equals(clientType);
-        boolean replayFailure = POW_REPLAY_FAILURE.contains(pow);
-        Event event = new Event(now, highRisk, scanFailure, notFound, authFailure, replayFailure,
+        boolean highRisk = signature >= 60;
+        Event event = new Event(now, highRisk, scanFailure, notFound, authFailure,
                 facts.status() == 200, pathLower, networkScope(clientIp), clientIp,
                 pathFamily(pathLower), clientKey);
-        String uaKey = uaFingerprint(facts.userAgent(), facts.nekoClient(), facts.clientId());
+        String uaKey = uaFingerprint(facts.userAgent());
         remember("global", event, now, GLOBAL_WINDOW_MAX_EVENTS);
         if (!clientIp.isBlank()) {
             remember("ip:" + clientIp, event, now, WINDOW_MAX_EVENTS);
@@ -234,34 +186,30 @@ public final class ThreatDetectionService {
         boolean success = facts.status() == 200;
         score += sourceBehaviorScore(sourceStats, networkStats, isCredentialPath(pathLower), success,
                 exactPathHits, sharedSource, reasons);
-        // 单次 nonce / 挑战失效不参与全站聚类，否则同刻发生的其他扫描会把正常客户端的
-        // 过期请求连带抬高。只有本地重放失败达到异常密度时，才进入跨来源关联。
         boolean strongAnomaly = signature > 0 || denied || highRisk;
-        boolean replayBurst = qualifiesReplayBurst(sourceStats);
         // 普通 200 不扫描跨来源窗口，避免把每个正常请求都拖进额外聚合；
         // 只有当前来源已经夹带失败探测时才进一步判断是否为成功遍历。
-        if (strongAnomaly || replayBurst || (success && sourceStats.scanFailures() > 0)) {
+        if (strongAnomaly || (success && sourceStats.scanFailures() > 0)) {
             WindowStats uaStats = uaKey.isBlank()
                     ? WindowStats.EMPTY : snapshot("ua:" + uaKey, now - WINDOW_MS);
             WindowStats pathStats = snapshot("path:" + event.pathFamily(), now - WINDOW_MS);
             WindowStats burstStats = snapshot("global", now - BURST_WINDOW_MS);
             boolean successProbe = success
                     && hasSuccessProbe(sourceStats, uaStats, pathStats, burstStats);
-            if (strongAnomaly || replayBurst || successProbe) {
+            if (strongAnomaly || successProbe) {
                 score += distributedCampaignScore(uaStats, pathStats, burstStats, success, reasons);
             }
         }
         int ruleScore = Math.min(100, score);
-        double[] modelFeatures = modelFeatures(signature, clientType, denied, success,
-                sourceStats, networkStats, facts.powStatus(), method);
+        double[] modelFeatures = modelFeatures(signature, denied, success,
+                sourceStats, networkStats, method);
         OnlineThreatModel.Prediction prediction = adaptiveModel.predict(modelFeatures);
 
         // 只用高置信事件训练，避免把边界请求或共享出口流量当成标签污染模型。
         boolean trustedAttack = signature >= 60
-                || ClientFingerprint.SCANNER.equals(clientType)
                 || ruleScore >= ATTACK_THRESHOLD;
         boolean trustedNormal = !trustedAttack && success && !denied && signature == 0
-                && sourceStats.scanFailures() == 0 && sourceStats.replayFailures() == 0;
+                && sourceStats.scanFailures() == 0;
         if (trustedAttack || trustedNormal) {
             adaptiveModel.learn(modelFeatures, trustedAttack);
         }
@@ -280,24 +228,23 @@ public final class ThreatDetectionService {
      * 将规则特征压缩成固定维度的数值向量。比例和数量使用对数/归一化，避免单个来源的
      * 极端流量把梯度放大；模型只负责灰区校准，不替代明确的攻击特征。
      */
-    private static double[] modelFeatures(int signature, String clientType, boolean denied,
+    private static double[] modelFeatures(int signature, boolean denied,
                                           boolean success, WindowStats source, WindowStats network,
-                                          String powStatus, String method) {
+                                          String method) {
         double total = Math.max(1, source.total());
         double[] features = new double[OnlineThreatModel.featureCount()];
         features[0] = Math.min(1.0, signature / 100.0);
-        features[1] = ClientFingerprint.SCANNER.equals(clientType) ? 1.0 : 0.0;
-        features[2] = ClientFingerprint.BOT.equals(clientType) ? 1.0 : 0.0;
+        features[1] = Math.min(1.0, source.distinctClients() / 10.0);
+        features[2] = Math.min(1.0, source.distinctIps() / 10.0);
         features[3] = denied ? 1.0 : 0.0;
         features[4] = Math.min(1.0, source.authFailures() / total);
         features[5] = Math.min(1.0, source.scanFailures() / total);
         features[6] = Math.min(1.0, Math.log1p(source.total()) / Math.log1p(WINDOW_MAX_EVENTS));
         features[7] = Math.min(1.0, Math.log1p(source.distinctPaths()) / Math.log1p(WINDOW_MAX_EVENTS));
-        features[8] = Math.min(1.0, source.replayRatio());
+        features[8] = Math.min(1.0, source.notFound() / total);
         features[9] = Math.min(1.0, network.distinctNetworks() / 10.0);
         features[10] = success ? 1.0 : 0.0;
-        features[11] = (POW_HIGH_RISK.contains(safe(powStatus)) || UNUSUAL_METHODS.contains(method))
-                ? 1.0 : 0.0;
+        features[11] = UNUSUAL_METHODS.contains(method) ? 1.0 : 0.0;
         return features;
     }
 
@@ -389,11 +336,6 @@ public final class ThreatDetectionService {
                 score += 20;
                 reasons.add(sharedSource ? "同一客户端持续认证失败" : "同一 IP 持续认证失败");
             }
-            if (qualifiesReplayBurst(source)) {
-                score += REPLAY_BURST_SCORE;
-                reasons.add(sharedSource ? "同一客户端短时大量防重放凭证失败"
-                        : "同一来源短时大量防重放凭证失败");
-            }
             if (qualifiesSinglePathFlood(exactPathHits)) {
                 score += SINGLE_PATH_FLOOD_SCORE;
                 reasons.add(sharedSource ? "同一客户端短时高频重复请求同一路径"
@@ -441,14 +383,14 @@ public final class ThreatDetectionService {
         if (ua.total() > 0) {
             if (ua.distinctNetworks() >= 4 && ua.scanFailures() >= 6 && ua.scanRatio() >= 0.5) {
                 score += 35;
-                reasons.add("多个网段共享同一客户端指纹");
+                reasons.add("多个网段共享同一 User-Agent");
             } else if (ua.total() >= 12 && ua.scanFailures() >= 8 && ua.scanRatio() >= 0.25) {
                 score += 20;
-                reasons.add("同一客户端指纹短时高频失败");
+                reasons.add("同一 User-Agent 短时高频失败");
             }
             if (ua.authFailures() >= 6 && ua.distinctNetworks() >= 4) {
                 authScore += 15;
-                reasons.add("多个网段共享同一客户端指纹（认证失败）");
+                reasons.add("多个网段共享同一 User-Agent（认证失败）");
             }
         }
 
@@ -485,7 +427,7 @@ public final class ThreatDetectionService {
         if (success) {
             if (qualifiesUaSuccessProbe(ua)) {
                 successScore += 30;
-                reasons.add("多个网段共享同一客户端指纹成功遍历资源");
+                reasons.add("多个网段共享同一 User-Agent 成功遍历资源");
             }
             if (qualifiesPathSuccessProbe(path)) {
                 successScore += 20;
@@ -543,11 +485,6 @@ public final class ThreatDetectionService {
 
     private static boolean qualifiesBurstSuccessProbe(WindowStats burst) {
         return burst.distinctNetworks() >= 6 && qualifiesSuccessProbe(burst, 300, 0, 24);
-    }
-
-    private static boolean qualifiesReplayBurst(WindowStats stats) {
-        return stats.replayFailures() >= REPLAY_BURST_MIN_FAILURES
-                && stats.replayRatio() >= REPLAY_BURST_MIN_RATIO;
     }
 
     private static boolean qualifiesSinglePathFlood(int exactPathHits) {
@@ -636,35 +573,20 @@ public final class ThreatDetectionService {
         return "";
     }
 
-    private static String uaFingerprint(String userAgent, String nekoClient, String clientId) {
+    private static String uaFingerprint(String userAgent) {
         String ua = safe(userAgent).trim().toLowerCase(Locale.ROOT);
-        String declared = safe(nekoClient).trim().toLowerCase(Locale.ROOT);
-        String app = safe(clientId).trim().toLowerCase(Locale.ROOT);
-        if (ua.isBlank() && declared.isBlank() && app.isBlank()) {
+        if (ua.isBlank()) {
             return "";
         }
-        return Integer.toHexString(ua.hashCode()) + ":" + ua.length() + ":"
-                + Integer.toHexString(declared.hashCode()) + ":" + Integer.toHexString(app.hashCode());
+        return Integer.toHexString(ua.hashCode()) + ":" + ua.length();
     }
 
-    /** 稳定客户端身份：实例 ID 优先，其次登录用户 + 客户端形态，最后才退回 UA / 应用标识。 */
-    private static String clientIdentityKey(String userAgent, String nekoClient, String clientId,
-                                            String clientInstanceId, Integer userId) {
-        String instance = safe(clientInstanceId).trim().toLowerCase(Locale.ROOT);
-        if (!instance.isBlank()) {
-            return "i:" + instance;
-        }
+    /** 稳定来源键：登录用户优先，匿名请求退回 UA。 */
+    private static String clientSourceKey(String userAgent, Integer userId) {
         String ua = safe(userAgent).trim().toLowerCase(Locale.ROOT);
-        String declared = safe(nekoClient).trim().toLowerCase(Locale.ROOT);
-        String app = safe(clientId).trim().toLowerCase(Locale.ROOT);
-        String weak = Integer.toHexString(ua.hashCode()) + ":" + ua.length() + ":"
-                + Integer.toHexString(declared.hashCode()) + ":"
-                + Integer.toHexString(app.hashCode());
+        String weak = Integer.toHexString(ua.hashCode()) + ":" + ua.length();
         if (userId != null && userId > 0) {
             return "u:" + userId + ":" + weak;
-        }
-        if (!app.isBlank()) {
-            return "c:" + app + ":" + weak;
         }
         return ua.isBlank() ? "" : "a:" + weak;
     }
@@ -697,21 +619,20 @@ public final class ThreatDetectionService {
     /** 一个请求事实快照。查询串仅用于规则匹配，调用方不要把它写入日志。 */
     public record RequestFacts(long occurredAt, String method, String path, String query,
                                String category, int status, String clientIp, String userAgent,
-                               String clientType, String nekoClient, String clientId,
-                               String clientInstanceId, Integer userId, String powStatus) {
+                               Integer userId) {
     }
 
     private record Event(long at, boolean highRisk, boolean scanFailure, boolean notFound,
-                         boolean authFailure, boolean replayFailure, boolean success, String path,
+                         boolean authFailure, boolean success, String path,
                          String network, String ip, String pathFamily, String clientKey) {
     }
 
     private record WindowStats(int total, int successes, int scanFailures, int notFound,
-                               int authFailures, int replayFailures, int highRisk, int distinctIps,
+                               int authFailures, int highRisk, int distinctIps,
                                int distinctNetworks, int distinctPaths,
                                int distinctSuccessPaths, int distinctClients, double scanRatio) {
         private static final WindowStats EMPTY =
-                new WindowStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0);
+                new WindowStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0);
 
         static WindowStats of(List<Event> events) {
             if (events.isEmpty()) {
@@ -721,7 +642,6 @@ public final class ThreatDetectionService {
             int scanFailures = 0;
             int notFound = 0;
             int authFailures = 0;
-            int replayFailures = 0;
             int highRisk = 0;
             Set<String> ips = new HashSet<>();
             Set<String> networks = new HashSet<>();
@@ -742,9 +662,6 @@ public final class ThreatDetectionService {
                 if (event.authFailure()) {
                     authFailures++;
                 }
-                if (event.replayFailure()) {
-                    replayFailures++;
-                }
                 if (event.highRisk()) {
                     highRisk++;
                 }
@@ -760,7 +677,7 @@ public final class ThreatDetectionService {
                 }
             }
             return new WindowStats(events.size(), successes, scanFailures, notFound, authFailures,
-                    replayFailures, highRisk, ips.size(), networks.size(), paths.size(),
+                    highRisk, ips.size(), networks.size(), paths.size(),
                     successPaths.size(), clients.size(),
                     events.isEmpty() ? 0.0 : (double) scanFailures / events.size());
         }
@@ -768,10 +685,6 @@ public final class ThreatDetectionService {
         private double probeFailureRatio() {
             int mixed = successes + scanFailures;
             return mixed == 0 ? 0.0 : (double) scanFailures / mixed;
-        }
-
-        private double replayRatio() {
-            return total == 0 ? 0.0 : (double) replayFailures / total;
         }
     }
 

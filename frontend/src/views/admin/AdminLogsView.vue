@@ -126,11 +126,9 @@ const MODULES = [
   '歌词管理',
   '审核管理',
   '客户端更新',
-  '客户端接入',
   '系统设置',
   '外站补全',
   'VIP 定价',
-  '防重放标记',
   '管理员管理',
   '管理员登录',
   '数据统计'
@@ -225,7 +223,6 @@ function openDetail(row) {
     { label: '结果', value: Number(row.success) ? '成功' : '失败' },
     { label: '耗时', value: formatLatency(row.duration_us) },
     { label: '来源 IP', value: row.client_ip, mono: true },
-    { label: '客户端平台', value: row.client_platform },
     { label: 'User-Agent', value: row.user_agent, mono: true, block: true }
   ]
   // 解析不出「原值 → 新值」时才把原文照抄一份（老记录写的是路径编号这类纯文本）

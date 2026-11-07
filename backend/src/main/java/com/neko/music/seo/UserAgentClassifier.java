@@ -1,7 +1,6 @@
 package com.neko.music.seo;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
@@ -9,7 +8,7 @@ import java.util.regex.Pattern;
  * 判断请求是否应收到服务端渲染的 SEO HTML。
  *
  * <p>详情页、歌单页与静态页（首页 / 下载 / 关于等）共用同一套判定，避免多处逻辑漂移。
- * 浏览器（UA 结构像浏览器，或命中 {@link #KNOWN_BROWSER_UA_TOKENS}）返回 SPA；搜索引擎、
+     * 浏览器（UA 结构像浏览器，或命中 {@link #KNOWN_BROWSER_UA_TOKENS}）返回 SPA；搜索引擎、
  * AI 抓取器、链接预览机器人、监控与命令行客户端一律返回可被无 JS 解析的 HTML。
  * 不能只看「有没有 {@code Mozilla/}」：该前缀随手可伪造，还会误伤不带它的真实浏览器。</p>
  *
@@ -95,12 +94,10 @@ public final class UserAgentClassifier {
      * 结构判定（{@link #looksLikeRealBrowser}）识别不出来，只能按 token 显式登记。当前成员为
      * Via（{@code Via/1.9.0 (iPad; iOS 27.0.1; Scale/2.00)}）。
      *
-     * <p>漏判的后果是整站不可用：{@code /api/*} 直接 403、页面被降级成 SEO HTML，且用户
-     * 无法通过「保留浏览器自身 UA」自救，因此必须在这里认出来。</p>
+     * <p>漏判会让真实浏览器拿到无交互的 SEO HTML，因此必须在这里认出来。</p>
      *
      * <p><b>只登记真实浏览器，token 必须足够独特并要求 {@code /} 加版本号</b>（如 {@code via/\d}），
-     * 否则等于短子串万能放行。判定顺序与黑名单一致：先黑名单、后本名单（调用点均位于爬虫黑名单
-     * 之后），且 API 放行仍要求浏览器特征头（{@link BrowserEvidence}），不构成免检。</p>
+     * 否则等于短子串万能放行。判定顺序保持先黑名单、后浏览器识别。</p>
      */
     private static final Pattern KNOWN_BROWSER_UA_TOKENS = Pattern.compile(
             "(?i)\\bvia/\\d");
@@ -112,20 +109,15 @@ public final class UserAgentClassifier {
     /**
      * 一个 UA 的判定结果（一次性算完，之后按 UA 复用）。
      *
-     * @param bot          命中爬虫 / 无头 / 命令行 / 扫描器黑名单（空 UA 也算）
-     * @param browser      结构上像真实浏览器（或命中 {@link #KNOWN_BROWSER_UA_TOKENS}）
-     * @param scanner      命中安全扫描器黑名单
-     * @param nativeClient 严格匹配官方客户端 UA（{@code NekoMusic-<平台>/<版本>}）
-     * @param platform     官方客户端平台（小写）；非官方客户端为空串
-     * @param version      官方客户端版本；非官方客户端为空串
+     * @param bot     命中爬虫 / 无头 / 命令行 / 扫描器黑名单（空 UA 也算）
+     * @param browser 结构上像真实浏览器（或命中 {@link #KNOWN_BROWSER_UA_TOKENS}）
      */
-    public record Profile(boolean bot, boolean browser, boolean scanner, boolean nativeClient,
-                          String platform, String version) {
+    public record Profile(boolean bot, boolean browser) {
     }
 
     /**
      * UA 判定结果缓存：UA 的取值种类很少（几端客户端 + 主流浏览器），而判定要跑十来条正则、
-     * 每条请求又会被防爬、SEO 分流与访问日志各问一遍。因此按 UA 缓存结果，命中就是一次 map 查找。
+     * 每条请求又会被 SEO 分流与详情页各问一遍。因此按 UA 缓存结果，命中就是一次 map 查找。
      *
      * <p>缓存有界：UA 由客户端决定，可以被构造成无限多个取值，因此超过 {@link #PROFILE_CACHE_MAX}
      * 就整体清空（宁可重算，也不能被撑爆内存）。缓存里只放判定结论，不含任何请求相关信息。</p>
@@ -153,9 +145,8 @@ public final class UserAgentClassifier {
     /** 计算判定结果（不做缓存）。空 UA：按爬虫处理，其余标记均为 false。 */
     private static Profile computeProfile(String ua) {
         if (ua.isEmpty()) {
-            return new Profile(true, false, false, false, "", "");
+            return new Profile(true, false);
         }
-        boolean scanner = SECURITY_SCANNERS.matcher(ua).find();
         boolean bot = matchesAny(ua,
                 GENERIC_FETCHERS,
                 SEARCH_ENGINE_BOTS,
@@ -166,67 +157,12 @@ public final class UserAgentClassifier {
                 HEADLESS_BROWSERS,
                 MONITORS_ARCHIVERS,
                 SECURITY_SCANNERS);
-        boolean browser = looksLikeBrowserUncached(ua);
-        // PARTS 只负责切分平台与版本，平台必须是**白名单**里的精确取值，不能按任意子串放行
-        java.util.regex.Matcher parts = OFFICIAL_CLIENT_UA_PARTS.matcher(ua);
-        boolean hasParts = parts.matches();
-        String platform = hasParts ? parts.group(1).toLowerCase(java.util.Locale.ROOT) : "";
-        String version = hasParts ? parts.group(2) : "";
-        boolean nativeClient = hasParts && OFFICIAL_CLIENT_UA_PLATFORMS.contains(platform);
-        return new Profile(bot, browser, scanner, nativeClient, platform, version);
+        return new Profile(bot, looksLikeBrowserUncached(ua));
     }
 
     /** 仅供测试：清空判定缓存。 */
     static void clearProfileCache() {
         PROFILE_CACHE.clear();
-    }
-
-    /**
-     * 官方客户端 UA 的严格格式：{@code NekoMusic-<平台>/<版本>}。
-     *
-     * <p>必须整体匹配，且版本必须存在并以数字开头——客户端只会发
-     * {@code NekoMusic-android/202601008}、{@code NekoMusic-PC/2026.108.52} 这种形式，
-     * 因此 {@code NekoMusic-android}、{@code NekoMusic Android}、{@code NekoMusic Qt}
-     * 这类缺版本或空格写法一律不放行。平台取值另由
-     * {@link #OFFICIAL_CLIENT_UA_PLATFORMS} 做精确白名单校验。</p>
-     */
-    private static final Pattern OFFICIAL_CLIENT_UA_PARTS = Pattern.compile(
-            "(?i)^nekomusic-([a-z0-9]+)/(\\d[\\w.+-]*)$");
-
-    /**
-     * 官方客户端 UA 可使用的平台取值。
-     *
-     * <p>手表客户端使用独立平台名 {@code awatch}（UA 为 {@code NekoMusic-AWatch/<版本>}），
-     * 不能并入 {@code android} 或使用笼统的 {@code watch}：前者会混同手机 / 平板安装包，
-     * 后者会让任意带 watch 字样的 UA 获得放行机会。</p>
-     */
-    private static final String WATCH_CLIENT_UA_PLATFORM = "awatch";
-
-    private static final Set<String> OFFICIAL_CLIENT_UA_PLATFORMS = Set.of(
-            "android", WATCH_CLIENT_UA_PLATFORM, "pc", "ios", "macos", "windows", "linux", "qt",
-            "harmony");
-
-    /**
-     * {@code X-Neko-Client: <平台>+<版本>} 中官方客户端可自报的平台取值。
-     *
-     * <p>手表客户端自报 {@code AndroidWatch}；UA 平台使用 {@code awatch}，两者都按精确取值登记，
-     * 不能互相替代，也不能放宽成包含 {@code watch} 即可。</p>
-     */
-    private static final Set<String> OFFICIAL_CLIENT_SELF_REPORTED_PLATFORMS = Set.of(
-            "android", "androidwatch", "pc", "ios", "macos", "windows", "linux", "qt",
-            "harmony");
-
-    /**
-     * {@code X-Neko-Client} 自报的平台是否属于官方客户端（{@code <平台>+<版本>} 里的平台）。
-     *
-     * <p>{@code web} 不算：那是运行在浏览器里的前端应用，身份是「浏览器」，不是原生客户端。
-     * 第三方客户端即使被 {@code network.allow_client_user_agents} 登记放行，其自报平台也不在
-     * 这份名单里。</p>
-     */
-    public static boolean isOfficialClientPlatform(String platform) {
-        return platform != null
-                && OFFICIAL_CLIENT_SELF_REPORTED_PLATFORMS.contains(
-                        platform.trim().toLowerCase(java.util.Locale.ROOT));
     }
 
     public static boolean shouldRenderSeo(String userAgent) {
@@ -254,51 +190,6 @@ public final class UserAgentClassifier {
             return true;
         }
         return !hasBrowserFetchEvidence;
-    }
-
-    /**
-     * 判断该 UA 是否命中「爬虫 / 无头浏览器 / 命令行工具 / 安全扫描器」黑名单。
-     *
-     * <p>这里<b>只做黑名单匹配</b>，不能先放行「原生客户端」：否则凡是「黑名单关键词 + 一个放行子串」
-     * 的组合（例如 {@code sqlmap android}、{@code python-requests Android}）都能整层绕过。
-     * 官方客户端的 UA（{@code NekoMusic-<平台>/<版本>}）本身不含黑名单关键词，由过滤器里的
-     * {@link #isNativeClient} 严格判定后放行。</p>
-     *
-     * <p><b>空 UA 一律视为爬虫</b>（返回 true）：三端客户端都会显式携带 UA，缺失 UA 的请求只能是
-     * 脚本或探测工具，不能靠「不带 UA」绕过防爬与浏览器完整性校验。</p>
-     */
-    public static boolean isBotForApi(String userAgent) {
-        if (userAgent == null || userAgent.isBlank()) {
-            return true;
-        }
-        return profile(userAgent).bot();
-    }
-
-    /**
-     * 官方客户端 UA 判定（严格锚定）：{@code NekoMusic-<平台>/<版本>}，版本必须存在。
-     *
-     * <p><b>必须整体匹配</b>，不能退化成「UA 里出现 android / okhttp / qt / nekomusic 就放行」——那种
-     * 子串判定会让任何脚本只在 UA 里塞一个关键词，就同时绕过黑名单与浏览器完整性两层判定
-     * （实测 {@code sqlmap android} 因此可以拿到 JSON）。同样不能放宽成「平台后缀可省、版本可省」，
-     * 否则 {@code NekoMusic-android} 这类裸前缀就能拿到 JSON。</p>
-     *
-     * <p>媒体播放器（mpv / VLC / FFmpeg / 裸 OkHttp）只取 {@code /media/*} 直链，不经过防爬过滤器，
-     * 因此不再在这里豁免；其它三方客户端请在 {@code network.allow_client_user_agents} 登记。</p>
-     */
-    public static boolean isNativeClient(String ua) {
-        if (ua == null || ua.isBlank()) {
-            return false;
-        }
-        return profile(ua).nativeClient();
-    }
-
-    /** 是否为独立手表客户端（严格匹配并限定 {@code awatch} 平台）。 */
-    public static boolean isWatchClient(String ua) {
-        if (ua == null || ua.isBlank()) {
-            return false;
-        }
-        Profile profile = profile(ua);
-        return profile.nativeClient() && WATCH_CLIENT_UA_PLATFORM.equals(profile.platform());
     }
 
     /**
@@ -333,35 +224,6 @@ public final class UserAgentClassifier {
         return ua.contains("AppleWebKit/")
                 || ua.contains("Gecko/")
                 || ua.contains("Trident/");
-    }
-
-    /**
-     * 是否命中「安全扫描 / 漏洞探测工具」黑名单（sqlmap、Nikto、Nmap 等）。
-     *
-     * <p>与 {@link #isBotForApi} 分开暴露：访问日志要把「业务爬虫」与「攻击性扫描器」区分开，
-     * 便于安全分析直接按类型筛。
-     */
-    public static boolean isSecurityScanner(String userAgent) {
-        if (userAgent == null || userAgent.isBlank()) {
-            return false;
-        }
-        return profile(userAgent).scanner();
-    }
-
-    /** 官方客户端 UA 的平台（小写）；非官方客户端返回空串。 */
-    public static String officialClientPlatform(String userAgent) {
-        if (userAgent == null || userAgent.isBlank()) {
-            return "";
-        }
-        return profile(userAgent).platform();
-    }
-
-    /** 官方客户端 UA 的版本；非官方客户端返回空串。 */
-    public static String officialClientVersion(String userAgent) {
-        if (userAgent == null || userAgent.isBlank()) {
-            return "";
-        }
-        return profile(userAgent).version();
     }
 
     private static boolean matchesAny(String userAgent, Pattern... patterns) {

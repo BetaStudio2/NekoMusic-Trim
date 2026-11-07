@@ -18,14 +18,8 @@ import java.io.IOException;
  *
  * <p>返回 JSON {@code {"success":true,"data":{"url":"/media/music/..."}}}，由播放器 / 下载逻辑再取。</p>
  *
- * <p>本接口是「有服务端成本」的只读接口：每次调用都会触发音质解析（可能转码）。它由
- * {@code ReplayProtectionFilter} 统一要求一次性 {@code X-Neko-Nonce}，因此抓包重放同一个请求
- * 只能成功一次，重放会得到 409。返回的 {@code /media/music/...} 仍是固定地址、由 CDN 共享缓存，
- * 本接口不改变媒体缓存语义。</p>
- *
- * <p>为什么不再 302：{@code <audio src>} 无法携带自定义请求头，302 会把校验绕过去；返回 JSON
- * 让调用方用 {@code fetch}（可带头）换取地址。旧的 {@code /{id}/challenge}、{@code /{id}/resolve}
- * 两步协议已由通用 nonce 机制取代。</p>
+ * <p>本接口是「有服务端成本」的只读接口：每次调用都会触发音质解析（可能转码）。返回的
+ * {@code /media/music/...} 是固定地址，由 CDN 共享缓存，本接口不改变媒体缓存语义。</p>
  */
 public class MusicFileHandler extends ApiServlet {
 

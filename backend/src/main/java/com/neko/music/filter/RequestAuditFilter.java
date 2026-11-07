@@ -11,11 +11,8 @@ import com.neko.music.service.AccessLogService;
 import com.neko.music.service.AccessLogUserResolver;
 import com.neko.music.service.OperationLogService;
 import com.neko.music.service.UserAuthService;
-import com.neko.music.util.ClientFingerprint;
-import com.neko.music.util.ClientIdentityProtocol;
 import com.neko.music.util.ClientIpResolver;
 import com.neko.music.util.OperationAudit;
-import com.neko.music.util.PowAudit;
 import com.neko.music.util.RequestAuthUtil;
 import com.neko.music.util.RequestCategory;
 import com.neko.music.util.RequestPath;
@@ -41,7 +38,7 @@ import java.util.Set;
  * 访问日志 + 操作日志过滤器。
  *
  * <p>必须注册在过滤器链**最外层**（{@code Main} 里第一个 {@code addFilter}）：这样它能观察到
- * 经过后面所有门禁（限流 / 封禁 / 防爬 / 防重放）之后真实的响应状态码与总耗时——被 403、409、429
+ * 经过后面所有门禁（限流 / 封禁）之后真实的响应状态码与总耗时——被 403、409、429
  * 挡下的请求同样要留痕，否则「谁在试探」这部分恰好缺失。</p>
  *
  * <ul>
@@ -127,12 +124,6 @@ public class RequestAuditFilter implements Filter {
             // 客户端更新
             new OperationRule("/api/admin/releases/upload", Set.of("POST"), "客户端更新", "上传客户端安装包"),
             new OperationRule("/api/admin/releases", Set.of("PUT"), "客户端更新", "更新客户端版本号"),
-            // 客户端接入：应用凭据与安装实例
-            new OperationRule("/api/admin/client-apps", Set.of("POST"), "客户端接入", "创建客户端应用"),
-            new OperationRule("/api/admin/client-apps/", Set.of("POST"), "客户端接入", "轮换客户端密钥"),
-            new OperationRule("/api/admin/client-apps", Set.of("PUT"), "客户端接入", "修改客户端状态"),
-            new OperationRule("/api/admin/client-apps", Set.of("DELETE"), "客户端接入", "停用客户端应用"),
-            new OperationRule("/api/admin/client-instances", Set.of("DELETE"), "客户端接入", "吊销客户端实例"),
             // VIP 价目
             new OperationRule("/api/admin/vip/pricing", Set.of("PUT"), "VIP 定价", "修改 VIP 价目"),
             // 外站补全扫码登录
@@ -140,8 +131,6 @@ public class RequestAuditFilter implements Filter {
             new OperationRule("/api/admin/netease/logout", Set.of("POST"), "外站补全", "退出网易云登录"),
             new OperationRule("/api/admin/qq/qr/key", Set.of("POST"), "外站补全", "申请 QQ 音乐扫码登录"),
             new OperationRule("/api/admin/qq/logout", Set.of("POST"), "外站补全", "退出 QQ 音乐登录"),
-            // 防重放来源标记
-            new OperationRule("/api/admin/replay-marks", Set.of("DELETE"), "防重放标记", "清除来源标记"),
             // 管理员会话
             new OperationRule("/api/admin/login", Set.of("POST"), "管理员登录", "登录"),
             new OperationRule("/api/admin/logout", Set.of("POST"), "管理员登录", "登出"));
@@ -149,11 +138,8 @@ public class RequestAuditFilter implements Filter {
     /** 模块兜底表：没有命中操作规则的后台路径按它归类（只用于模块名）。 */
     private static final List<String[]> ADMIN_MODULES = List.of(
             new String[] { "/api/admin/lyrics-files", "歌词管理" },
-            new String[] { "/api/admin/replay-marks", "防重放标记" },
             new String[] { "/api/admin/settings", "系统设置" },
             new String[] { "/api/admin/releases", "客户端更新" },
-            new String[] { "/api/admin/client-apps", "客户端接入" },
-            new String[] { "/api/admin/client-instances", "客户端接入" },
             new String[] { "/api/admin/netease", "外站补全" },
             new String[] { "/api/admin/qq", "外站补全" },
             new String[] { "/api/admin/vip/pricing", "VIP 定价" },
@@ -217,16 +203,14 @@ public class RequestAuditFilter implements Filter {
         long durationUs = Math.max(0L, elapsedNanos / 1000L);
         String clientIp = resolveClientIp(request);
         String userAgent = request.getHeader("User-Agent");
-        String nekoClient = request.getHeader("X-Neko-Client");
-        String clientType = ClientFingerprint.type(userAgent, nekoClient);
         String token = RequestAuthUtil.extractToken(request);
         boolean authenticated = token != null;
         // 威胁判定也使用已登录用户身份：CGNAT 下同一公网 IP 可能承载大量真实用户，
         // 只有把用户 / 安装实例纳入来源键，才能避免按裸 IP 把邻居一起判定。
         Integer userId = authenticated ? resolveUserId(token) : null;
         ThreatAssessment threat = assessThreat(request, path, category, status, clientIp,
-                userAgent, clientType, nekoClient, userId);
-        logThreat(request, path, status, clientIp, userAgent, clientType, threat);
+                userAgent, userId);
+        logThreat(request, path, status, clientIp, userAgent, threat);
 
         // 威胁判定独立于日志库开关：即使访问日志关闭，应用日志仍应能留下攻击痕迹。
         if (!accessEnabled && !operationEnabled) {
@@ -263,9 +247,6 @@ public class RequestAuditFilter implements Filter {
                                               boolean authenticated, Integer userId, String userName,
                                               Admin admin, ThreatAssessment threat) {
         String userAgent = request.getHeader("User-Agent");
-        String nekoClient = request.getHeader("X-Neko-Client");
-        String clientId = request.getHeader(ClientIdentityProtocol.HEADER_CLIENT_ID);
-        String clientInstanceId = request.getHeader(ClientIdentityProtocol.HEADER_INSTANCE);
         String clientIp = resolveClientIp(request);
         return new AccessLogRecord(
                 occurredAt,
@@ -277,14 +258,8 @@ public class RequestAuditFilter implements Filter {
                 durationUs,
                 responseBytes(response),
                 clientIp,
-                ClientFingerprint.ipSubnet(clientIp),
+                ipSubnet(clientIp),
                 userAgent,
-                ClientFingerprint.type(userAgent, nekoClient),
-                ClientFingerprint.platform(userAgent, nekoClient),
-                ClientFingerprint.version(userAgent, nekoClient),
-                nekoClient,
-                clientId,
-                clientInstanceId,
                 request.getHeader("Referer"),
                 request.getHeader("Origin"),
                 request.getHeader("Accept-Language"),
@@ -297,9 +272,6 @@ public class RequestAuditFilter implements Filter {
                 request.getScheme(),
                 request.getProtocol(),
                 Thread.currentThread().getName(),
-                // PoW 难度与结果由防重放链路与换题 / 兑换接口挂在请求属性上（见 PowAudit）
-                PowAudit.difficulty(request),
-                PowAudit.status(request),
                 // 同一 URL 的两种表示（SEO HTML / SPA 壳）由渲染方挂在请求属性上（见 SeoAudit）
                 SeoAudit.seoRender(request),
                 threat.level(),
@@ -310,14 +282,11 @@ public class RequestAuditFilter implements Filter {
 
     private static ThreatAssessment assessThreat(HttpServletRequest request, String path, String category,
                                                   int status, String clientIp, String userAgent,
-                                                  String clientType, String nekoClient, Integer userId) {
+                                                  Integer userId) {
         try {
             return ThreatDetectionService.shared().assess(new ThreatDetectionService.RequestFacts(
                     System.currentTimeMillis(), request.getMethod(), path, request.getQueryString(),
-                    category, status, clientIp, userAgent, clientType, nekoClient,
-                    request.getHeader(ClientIdentityProtocol.HEADER_CLIENT_ID),
-                    request.getHeader(ClientIdentityProtocol.HEADER_INSTANCE), userId,
-                    PowAudit.status(request)));
+                    category, status, clientIp, userAgent, userId));
         } catch (Exception e) {
             logger.debug("威胁判定失败，按正常处理: {} {}", request.getMethod(), path);
             return ThreatAssessment.normal();
@@ -326,19 +295,19 @@ public class RequestAuditFilter implements Filter {
 
     /** 应用日志只在有风险时输出：正常请求由访问日志表的 threat_level 标记，避免刷屏。 */
     private static void logThreat(HttpServletRequest request, String path, int status,
-                                  String clientIp, String userAgent, String clientType,
+                                  String clientIp, String userAgent,
                                   ThreatAssessment threat) {
         String level = threat.level();
         if (ThreatAssessment.NORMAL.equals(level)) {
             if (logger.isDebugEnabled()) {
-                logger.debug("[安全审计][正常] method={} path={} status={} ip={} client={} score={}",
-                        request.getMethod(), safeLog(path, 300), status, clientIp, clientType, threat.score());
+                logger.debug("[安全审计][正常] method={} path={} status={} ip={} score={}",
+                        request.getMethod(), safeLog(path, 300), status, clientIp, threat.score());
             }
             return;
         }
         String message = "[安全审计][" + (threat.isAttack() ? "攻击" : "疑似攻击") + "]"
-                + " method={} path={} status={} ip={} client={} score={} ua={} reasons={}";
-        Object[] args = {request.getMethod(), safeLog(path, 300), status, clientIp, clientType,
+                + " method={} path={} status={} ip={} score={} ua={} reasons={}";
+        Object[] args = {request.getMethod(), safeLog(path, 300), status, clientIp,
                 threat.score(), safeLog(userAgent, 160), safeLog(threat.reasons(), 400)};
         if (threat.isAttack()) {
             logger.warn(message, args);
@@ -379,8 +348,34 @@ public class RequestAuditFilter implements Filter {
                 durationUs,
                 clientIp,
                 userAgent,
-                ClientFingerprint.platform(userAgent, request.getHeader("X-Neko-Client")),
                 operationDetail(OperationAudit.changes(request), path));
+    }
+
+    /** IPv4 取 /24，IPv6 取前 3 段 /48；无法判定时返回 null。 */
+    private static String ipSubnet(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return null;
+        }
+        if (ip.indexOf(':') >= 0) {
+            String[] parts = ip.split(":");
+            StringBuilder builder = new StringBuilder();
+            int taken = 0;
+            for (String part : parts) {
+                if (part.isEmpty() || taken == 3) {
+                    break;
+                }
+                if (taken > 0) {
+                    builder.append(':');
+                }
+                builder.append(part);
+                taken++;
+            }
+            return taken == 3 ? builder + "::/48" : null;
+        }
+        String[] octets = ip.split("\\.");
+        return octets.length == 4
+                ? octets[0] + "." + octets[1] + "." + octets[2] + ".0/24"
+                : null;
     }
 
     /** 查询串脱敏：把敏感参数的值换成 {@code ***}，其余按原样（含分隔符）保留。 */

@@ -33,7 +33,7 @@ import java.util.Optional;
  *       数据库排序规则如何折叠（大小写 / 全角 / 兼容 / 重音）都不会被拆成多个空桶；计数只与请求
  *       有关、与账号是否存在无关，因此不会重新引出枚举面；</li>
  *   <li>来源请求限流（{@link AuthAbuseLimiter}）——与账号无关的请求速率闸门：脚本用不同用户名平铺
- *       请求时失败计数不会触发，只有它兜得住。防线<b>不依赖</b>前置的反自动化 / 防爬门禁，门禁被
+ *       请求时失败计数不会触发，只有它兜得住。防线<b>不依赖</b>前置门禁，门禁被
  *       绕过时仍独立生效。</li>
  *   <li>来源递增退避封禁（{@link SourceBanService}）——反复失败的来源被临时封禁，且复发代价逐级
  *       加长；同为「只看请求、不看账号存在性」，因此也不构成枚举信号。</li>
@@ -64,7 +64,7 @@ public class AdminLoginHandler extends ApiServlet {
         }
 
         // 与账号无关的来源请求速率闸门：脚本用不同用户名平铺请求时失败计数不会触发，只有它兜得住。
-        // 该防线不依赖前置的防爬 / 反自动化门禁，门禁被绕过时仍独立生效。
+        // 该防线不依赖前置门禁，门禁被绕过时仍独立生效。
         if (enforceAuthAbuseLimit(request, response, AuthAbuseLimiter.Scope.LOGIN)) {
             return;
         }

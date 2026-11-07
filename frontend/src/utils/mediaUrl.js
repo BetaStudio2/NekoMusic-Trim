@@ -2,8 +2,7 @@
 // ------------------------------------------------------------
 // 后端 GET /api/music/file/{id} 返回 JSON：
 //   {"success":true,"data":{"url":"/media/music/..."}}
-// 该接口由通用防重放机制保护（见 utils/replayNonce.js），fetch 拦截器会自动补一次性
-// X-Neko-Nonce，因此这里直接 fetch 即可；重放 / 过期会在服务端被拒（409）。
+// 该接口直接返回可播放地址，由前端按普通 JSON 请求处理。
 //
 // 返回的 /media/music/... 是固定地址、由 CDN 共享缓存，缓存语义不变。
 import API_CONFIG from '@/config/apiConfig.js'

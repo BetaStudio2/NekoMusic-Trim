@@ -152,28 +152,6 @@ public class ConfigManager {
      */
     private List<String> extraClientIpHeaders = new ArrayList<>();
 
-    /**
-     * 是否启用 /api 接口的保守防爬拦截。
-     * true（默认）时会拦截 UA 明确为爬虫/无头浏览器/命令行工具的请求访问 JSON 接口，同时放行浏览器与原生客户端。
-     */
-    private boolean crawlerProtectionEnabled = true;
-
-    /**
-     * 浏览器完整性区分拦截：在防爬基础上，对「非原生客户端、非已知爬虫」的 /api 请求，
-     * 要求其 UA 结构自洽（含 Mozilla/ 与渲染引擎）且具备浏览器特征头，否则拒绝。
-     * 用于拦截未知/小众爬虫（自定义 UA、残缺或仅伪造 Mozilla 前缀）与安全扫描器。
-     */
-    private boolean browserIntegrityEnabled = true;
-
-    /**
-     * 额外放行的客户端 UA 子串（大小写不敏感，至少 {@link #MIN_ALLOWLIST_LENGTH} 个字符）。
-     * 用于登记官方客户端之外的第三方客户端；登记项优先于爬虫 / 扫描器黑名单判定。
-     */
-    private List<String> apiClientAllowlist = new ArrayList<>();
-
-    /** 客户端放行登记的最短长度：登记优先于黑名单，过短的子串等于万能放行。 */
-    private static final int MIN_ALLOWLIST_LENGTH = 6;
-
     /** 本地听歌识曲：服务端声纹索引与短录音保护 */
     private boolean musicRecognitionEnabled = true;
     private long musicRecognitionMaxUploadBytes = 8L * 1024L * 1024L;
@@ -391,7 +369,7 @@ public class ConfigManager {
                     if (loggingNode.has("retention_days")) loggingRetentionDays = loggingNode.get("retention_days").asInt();
                 }
 
-                // 安全/网络：可信客户端 IP 头 + 保守防爬拦截开关
+                // 安全/网络：可信客户端 IP 头
                 JsonNode networkNode = configNode.get("network");
                 if (networkNode != null) {
                     if (networkNode.has("trusted_client_ip_header")) {
@@ -408,31 +386,6 @@ public class ConfigManager {
                                     extraClientIpHeaders.add(name);
                                 }
                             }
-                        });
-                    }
-                    if (networkNode.has("crawler_protection_enabled")) {
-                        crawlerProtectionEnabled = networkNode.get("crawler_protection_enabled").asBoolean();
-                    }
-                    if (networkNode.has("browser_integrity_enabled")) {
-                        browserIntegrityEnabled = networkNode.get("browser_integrity_enabled").asBoolean();
-                    }
-                    JsonNode allowlistNode = networkNode.get("allow_client_user_agents");
-                    if (allowlistNode != null && allowlistNode.isArray()) {
-                        apiClientAllowlist = new ArrayList<>();
-                        allowlistNode.forEach(item -> {
-                            if (item == null || item.isNull()) {
-                                return;
-                            }
-                            String ua = item.asText("").trim();
-                            if (ua.isEmpty()) {
-                                return;
-                            }
-                            // 登记项优先于爬虫黑名单判定，过短的子串（如 "app"）等于万能放行，直接忽略
-                            if (ua.length() < MIN_ALLOWLIST_LENGTH) {
-                                logger.warn("忽略过短的客户端放行登记（至少 {} 字符）: {}", MIN_ALLOWLIST_LENGTH, ua);
-                                return;
-                            }
-                            apiClientAllowlist.add(ua);
                         });
                     }
                 }
@@ -1037,21 +990,6 @@ public class ConfigManager {
     /** {@code auto} 模式下额外优先尝试的自定义客户端 IP 头名列表（可为空）。 */
     public List<String> getExtraClientIpHeaders() {
         return extraClientIpHeaders == null ? List.of() : extraClientIpHeaders;
-    }
-
-    /** 是否启用 /api 接口的保守防爬拦截。 */
-    public boolean isCrawlerProtectionEnabled() {
-        return crawlerProtectionEnabled;
-    }
-
-    /** 是否启用浏览器完整性区分拦截（拦截未知爬虫 / 扫描器）。 */
-    public boolean isBrowserIntegrityEnabled() {
-        return browserIntegrityEnabled;
-    }
-
-    /** 额外放行的客户端 UA 子串列表（大小写不敏感）。 */
-    public List<String> getApiClientAllowlist() {
-        return apiClientAllowlist;
     }
 
     public int getVerificationCodeEmailCooldownSeconds() {

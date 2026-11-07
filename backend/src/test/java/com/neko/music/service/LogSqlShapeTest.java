@@ -78,8 +78,8 @@ class LogSqlShapeTest {
     @Test
     @DisplayName("字段数与表列数一致（防止只改一边）")
     void recordFieldCountsAreStable() {
-        assertEquals(36, AccessLogRecord.class.getRecordComponents().length);
-        assertEquals(16, OperationLogRecord.class.getRecordComponents().length);
+        assertEquals(28, AccessLogRecord.class.getRecordComponents().length);
+        assertEquals(15, OperationLogRecord.class.getRecordComponents().length);
     }
 
     @Test
@@ -100,10 +100,9 @@ class LogSqlShapeTest {
     private static AccessLogRecord sampleRecord() {
         return new AccessLogRecord(
                 1L, "GET", "/api/music/search", "q=x", "api", 200, 12, 34L,
-                "127.0.0.1", "127.0.0.0/24", "NekoMusic-android/1", "official_client", "android", "1",
-                "android+1", "nkc_pub_android_prod", "550e8400-e29b-41d4-a716-446655440000",
+                "127.0.0.1", "127.0.0.0/24", "NekoMusic-android/1",
                 "https://example.com", "https://example.com", "zh-CN", true,
                 7, "登录用户", 7, "admin", "music.example.com", "https", "HTTP/1.1", "jetty-1",
-                24, "verified", true, "normal", 0, null, 1);
+                true, "normal", 0, null, 1);
     }
 }

@@ -1,9 +1,6 @@
 <!--
-  测试期日志：复用 main 的 logback.xml（格式 / 级别一致），只静默 ReplayNonceService 的预期 ERROR ——
-  ReplayNonceServiceTest / ReplayProtectionFilterTest 会故意模拟存储故障来验证「不静默吞异常」，
-  不静默的话打包日志里会出现误导性的 ERROR。
+  测试期日志：复用 main 的 logback.xml（格式 / 级别一致）。
 -->
 <configuration>
     <include resource="logback.xml" />
-    <logger name="com.neko.music.service.ReplayNonceService" level="OFF" />
 </configuration>

@@ -3,8 +3,8 @@
     <header class="access__head">
       <h2 class="access__title">访问日志（安全分析）</h2>
       <p class="access__desc">
-        每个请求一条：访问量、来源 IP 与网段、User-Agent、客户端指纹、已登录用户、状态码、耗时与本次的
-        PoW 难度，并自动标记「正常 / 疑似攻击 / 攻击」（综合高危载荷、短时失败行为与跨网段扫描簇）。
+        每个请求一条：访问量、来源 IP 与网段、User-Agent、已登录用户、状态码、耗时与本次的
+        威胁判定，并自动标记「正常 / 疑似攻击 / 攻击」（综合高危载荷、短时失败行为与跨网段扫描簇）。
         数据落在独立日志库，不参与业务库备份。
       </p>
     </header>
@@ -28,20 +28,12 @@
         <span class="stat__label">今日登录用户</span>
       </NCard>
       <NCard pad="lg" class="stat">
-        <span class="stat__number">{{ stats.todayBots ?? 0 }}</span>
-        <span class="stat__label">今日爬虫 / 扫描</span>
-      </NCard>
-      <NCard pad="lg" class="stat">
         <span class="stat__number">{{ stats.todaySeo ?? 0 }}</span>
         <span class="stat__label">今日 SEO 渲染</span>
       </NCard>
       <NCard pad="lg" class="stat">
         <span class="stat__number">{{ stats.todayErrors ?? 0 }}</span>
         <span class="stat__label">今日异常（≥400）</span>
-      </NCard>
-      <NCard pad="lg" class="stat">
-        <span class="stat__number">{{ stats.todayPowRejected ?? 0 }}</span>
-        <span class="stat__label">今日 PoW 拦截</span>
       </NCard>
       <NCard pad="lg" class="stat stat--danger">
         <span class="stat__number">{{ stats.todayAttacks ?? 0 }}</span>
@@ -100,15 +92,6 @@
         </ul>
       </NCard>
       <NCard pad="lg" class="card">
-        <h2 class="card__title">客户端类型</h2>
-        <ul class="ranking">
-          <li v-for="(count, type) in stats.clientTypes || {}" :key="type">
-            <span class="ranking__key">{{ clientTypeLabel(type) }}</span>
-            <span class="ranking__count">{{ count }}</span>
-          </li>
-        </ul>
-      </NCard>
-      <NCard pad="lg" class="card">
         <h2 class="card__title">威胁判定分布</h2>
         <ul class="ranking">
           <li v-for="(count, level) in stats.threatLevels || {}" :key="level">
@@ -129,14 +112,6 @@
     </div>
 
     <div class="toolbar">
-      <select v-model="accessQuery.clientType" class="select" aria-label="客户端类型">
-        <option value="">全部类型</option>
-        <option v-for="type in CLIENT_TYPES" :key="type" :value="type">{{ clientTypeLabel(type) }}</option>
-      </select>
-      <select v-model="accessQuery.powStatus" class="select" aria-label="PoW 结果">
-        <option value="">全部 PoW 结果</option>
-        <option v-for="item in POW_STATUSES" :key="item.value" :value="item.value">{{ item.label }}</option>
-      </select>
       <select v-model="accessQuery.threatLevel" class="select" aria-label="威胁判定">
         <option value="">全部威胁判定</option>
         <option v-for="item in THREAT_LEVELS" :key="item.value" :value="item.value">{{ item.label }}</option>
@@ -144,23 +119,9 @@
       <NInput v-model="accessQuery.ip" placeholder="来源 IP 含…" clearable class="toolbar__search" />
       <NInput v-model="accessQuery.path" placeholder="路径含…" clearable class="toolbar__search" />
       <NInput
-        v-model="accessQuery.clientId"
-        placeholder="Client ID 精确…"
-        clearable
-        class="toolbar__search"
-        @keyup.enter="loadAccess(1)"
-      />
-      <NInput
-        v-model="accessQuery.clientInstanceId"
-        placeholder="实例 ID 精确…"
-        clearable
-        class="toolbar__search"
-        @keyup.enter="loadAccess(1)"
-      />
-      <NInput
         v-model="accessQuery.keyword"
         icon="search"
-        placeholder="路径 / UA / IP / 用户 / 客户端 ID 关键字…"
+        placeholder="路径 / UA / IP / 用户关键字…"
         clearable
         class="toolbar__search"
         @keyup.enter="loadAccess(1)"
@@ -187,12 +148,8 @@
             <th>请求</th>
             <th>状态</th>
             <th>判定</th>
-            <th>PoW</th>
             <th>耗时</th>
             <th>分类</th>
-            <th>客户端</th>
-            <th>客户端身份</th>
-            <th>平台 / 版本</th>
             <th>来源 IP</th>
             <th>登录用户</th>
             <th>User-Agent</th>
@@ -213,39 +170,11 @@
                 {{ threatLabel(row.threat_level) }}
               </NTag>
             </td>
-            <td class="cell-dim" :title="powTitle(row)">
-              <template v-if="row.pow_status">
-                <span v-if="row.pow_difficulty">难度 {{ row.pow_difficulty }} · </span>{{ powLabel(row.pow_status) }}
-              </template>
-              <template v-else>—</template>
-            </td>
             <td class="cell-dim">{{ formatLatency(row.duration_us) }}</td>
             <td class="cell-dim" :title="renderBranchTitle(row)">
               <span v-if="row.seo_render" class="cell-seo">SEO</span>
               {{ categoryLabel(row.category) }}
             </td>
-            <td>{{ clientTypeLabel(row.client_type) }}</td>
-            <td class="cell-identity">
-              <template v-if="row.client_id || row.client_instance_id">
-                <button
-                  v-if="row.client_id"
-                  type="button"
-                  class="identity__link"
-                  :title="`按 Client ID 精确筛选：${row.client_id}`"
-                  @click="filterByClientId(row.client_id)"
-                >应用 {{ row.client_id }}</button>
-                <button
-                  v-if="row.client_instance_id"
-                  type="button"
-                  class="identity__link identity__instance"
-                  :title="`按实例 ID 精确筛选：${row.client_instance_id}`"
-                  @click="filterByClientInstance(row.client_instance_id)"
-                >实例 {{ row.client_instance_id }}</button>
-                <span v-else class="identity__missing">实例 ID 未上报</span>
-              </template>
-              <span v-else class="cell-dim">—</span>
-            </td>
-            <td class="cell-dim">{{ platformText(row) }}</td>
             <td class="cell-dim">{{ row.client_ip }}</td>
             <td :class="loginUserText(row) === '—' ? 'cell-dim' : 'cell-user'" :title="loginUserTitle(row)">
               {{ loginUserText(row) }}
@@ -256,7 +185,7 @@
             </td>
           </tr>
           <tr v-if="!access.items.length">
-            <td colspan="14" class="cell-empty">暂无记录</td>
+            <td colspan="10" class="cell-empty">暂无记录</td>
           </tr>
         </tbody>
       </table>
@@ -278,7 +207,7 @@
       </NButton>
     </div>
 
-    <!-- 列表只放得下几列；完整 UA / Referer / 网段 / 线程 / PoW 等安全分析字段在这里全给出来 -->
+    <!-- 列表只放得下几列；完整 UA / Referer / 网段 / 线程等安全分析字段在这里全给出来 -->
     <LogDetailModal
       v-model="detailOpen"
       :title="detailTitle"
@@ -330,18 +259,6 @@ ChartJS.register(
 
 const PAGE_SIZE = 50
 
-/** 与后端 ClientFingerprint 的类型保持一致 */
-const CLIENT_TYPES = ['browser', 'official_client', 'third_party', 'bot', 'scanner', 'unknown']
-
-const CLIENT_TYPE_LABELS = {
-  browser: '浏览器',
-  official_client: '官方客户端',
-  third_party: '第三方客户端',
-  bot: '爬虫',
-  scanner: '安全扫描器',
-  unknown: '未知'
-}
-
 const CATEGORY_LABELS = {
   api: '动态接口',
   admin: '管理后台',
@@ -362,33 +279,6 @@ const THREAT_LABELS = Object.fromEntries(THREAT_LEVELS.map((item) => [item.value
 /** 实时流最多在表格顶部保留多少行；再多就丢掉最旧的实时行，避免页面越开越卡。 */
 const LIVE_MAX_ROWS = 200
 
-/** PoW 结果标签：与后端 PowAudit 的词表一致（仅后台展示用）。 */
-const POW_STATUSES = [
-  { value: 'verified', label: '通过（verified）' },
-  { value: 'missing', label: '缺 nonce（missing）' },
-  { value: 'invalid', label: '无效 / 重放（invalid）' },
-  { value: 'expired', label: '挑战过期（expired）' },
-  { value: 'mismatch', label: '来源不匹配（mismatch）' },
-  { value: 'bad_proof', label: '解答不合格（bad_proof）' },
-  { value: 'issued', label: '下发挑战（issued）' },
-  { value: 'exchanged', label: '兑换 nonce（exchanged）' },
-  { value: 'rate_limited', label: '被限额（rate_limited）' },
-  { value: 'marked', label: '加压越界（marked）' },
-  { value: 'error', label: '故障（error）' }
-]
-const POW_LABELS = Object.fromEntries(POW_STATUSES.map((item) => [item.value, item.label]))
-/** 只有这些结果算「没通过」，与后端统计口径一致。 */
-const POW_REJECTED = new Set([
-  'missing',
-  'invalid',
-  'expired',
-  'mismatch',
-  'bad_proof',
-  'rate_limited',
-  'marked',
-  'error'
-])
-
 const error = ref('')
 const loading = ref(false)
 const statsDays = ref(7)
@@ -397,11 +287,7 @@ const access = reactive({ total: 0, page: 1, size: PAGE_SIZE, items: [] })
 const accessQuery = reactive({
   ip: '',
   path: '',
-  clientType: '',
-  clientId: '',
-  clientInstanceId: '',
   keyword: '',
-  powStatus: '',
   threatLevel: ''
 })
 
@@ -423,11 +309,7 @@ const livePaused = computed(() =>
   Boolean(
     accessQuery.ip ||
     accessQuery.path ||
-    accessQuery.clientType ||
-    accessQuery.clientId ||
-    accessQuery.clientInstanceId ||
     accessQuery.keyword ||
-    accessQuery.powStatus ||
     accessQuery.threatLevel
   )
 )
@@ -510,10 +392,6 @@ async function loadAccess(page) {
       size: PAGE_SIZE,
       ip: accessQuery.ip,
       path: accessQuery.path,
-      clientType: accessQuery.clientType,
-      clientId: accessQuery.clientId,
-      clientInstanceId: accessQuery.clientInstanceId,
-      powStatus: accessQuery.powStatus,
       threatLevel: accessQuery.threatLevel,
       keyword: accessQuery.keyword
     })
@@ -595,26 +473,8 @@ function fullPath(row) {
   return row.query ? `${row.path}?${row.query}` : row.path
 }
 
-function clientTypeLabel(value) {
-  return CLIENT_TYPE_LABELS[value] || value || '未知'
-}
-
 function categoryLabel(value) {
   return CATEGORY_LABELS[value] || value || '—'
-}
-
-function filterByClientId(value) {
-  if (!value) return
-  accessQuery.clientId = value
-  accessQuery.clientInstanceId = ''
-  loadAccess(1)
-}
-
-function filterByClientInstance(value) {
-  if (!value) return
-  accessQuery.clientInstanceId = value
-  accessQuery.clientId = ''
-  loadAccess(1)
 }
 
 /**
@@ -661,11 +521,6 @@ function renderBranchTitle(row) {
   return '本次未记录渲染分支：旧数据，或该路径没有 SEO 表示'
 }
 
-function platformText(row) {
-  if (!row.client_platform) return '—'
-  return row.client_version ? `${row.client_platform} / ${row.client_version}` : row.client_platform
-}
-
 function statusVariant(status) {
   if (status >= 500) return 'danger'
   if (status >= 400) return 'warning'
@@ -695,10 +550,6 @@ function threatRowClass(row) {
   return ''
 }
 
-function powLabel(value) {
-  return POW_LABELS[value] || value
-}
-
 function formatBytes(value) {
   const bytes = Number(value) || 0
   if (bytes < 1024) return `${bytes} B`
@@ -710,7 +561,7 @@ function formatBytes(value) {
  * 详情弹窗：把这一条访问日志的全部字段摊开。
  *
  * 表格里只放得下「谁、什么时候、做了什么」；排查爬虫 / 脚本 / 被刷要看的是完整 UA、Referer、
- * Origin、网段、Host、线程与 PoW 难度，这些一个都不能省。
+ * Origin、网段、Host 与线程，这些一个都不能省。
  */
 function openDetail(row) {
   detailTitle.value = row.id ? `访问日志详情 · #${row.id}` : '访问日志详情 · 实时记录'
@@ -733,12 +584,6 @@ function openDetail(row) {
     { label: '响应体大小', value: formatBytes(row.response_bytes) },
     { label: '来源 IP', value: row.client_ip, mono: true },
     { label: '所属网段', value: row.ip_subnet, mono: true },
-    { label: '客户端类型', value: clientTypeLabel(row.client_type) },
-    { label: '客户端平台', value: row.client_platform },
-    { label: '客户端版本', value: row.client_version },
-    { label: 'X-Neko-Client', value: row.neko_client, mono: true },
-    { label: '客户端 ID', value: row.client_id || '未上报（历史记录或非受管客户端）', mono: true },
-    { label: '客户端实例 ID', value: row.client_instance_id || '未上报（历史记录或非受管客户端）', mono: true },
     { label: 'User-Agent', value: row.user_agent, mono: true, block: true },
     { label: 'Referer', value: row.referer, block: true },
     { label: 'Origin', value: row.origin, block: true },
@@ -751,17 +596,9 @@ function openDetail(row) {
     { label: 'Host', value: row.host, mono: true },
     { label: '请求方案', value: row.scheme, mono: true },
     { label: 'HTTP 协议', value: row.protocol, mono: true },
-    { label: '处理线程', value: row.thread, mono: true },
-    { label: 'PoW 难度', value: row.pow_difficulty == null ? '—' : `${row.pow_difficulty} 比特` },
-    { label: 'PoW 结果', value: row.pow_status ? powLabel(row.pow_status) : '未经过防重放挑战' }
+    { label: '处理线程', value: row.thread, mono: true }
   ]
   detailOpen.value = true
-}
-
-function powTitle(row) {
-  if (!row.pow_status) return '本次请求未经过防重放挑战（静态资源 / 无需 nonce 的接口）'
-  if (POW_REJECTED.has(row.pow_status)) return `PoW 未通过：${powLabel(row.pow_status)}`
-  return `PoW：${powLabel(row.pow_status)}`
 }
 </script>
 
@@ -1019,40 +856,6 @@ function powTitle(row) {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--n-text-faint);
-}
-
-.cell-identity {
-  min-width: 230px;
-  max-width: 320px;
-}
-
-.identity__link {
-  display: block;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--n-accent-strong);
-  font-family: var(--n-font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
-  font-size: var(--n-text-xs);
-  line-height: 1.5;
-  text-align: left;
-  overflow-wrap: anywhere;
-  cursor: pointer;
-}
-
-.identity__link:hover {
-  text-decoration: underline;
-}
-
-.identity__instance,
-.identity__missing {
-  color: var(--n-text-faint);
-}
-
-.identity__missing {
-  display: block;
-  font-size: var(--n-text-xs);
 }
 
 .cell-empty {

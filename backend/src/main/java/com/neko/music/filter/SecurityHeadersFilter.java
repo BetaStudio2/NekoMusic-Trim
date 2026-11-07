@@ -11,7 +11,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 /**
- * 通用安全加固过滤器（最外层，先于限流/防爬注册）。
+ * 通用安全加固过滤器（最外层，先于限流注册）。
  *
  * <ul>
  *   <li>禁用 {@code TRACE}/{@code TRACK}（防 XST），命中返回 405 并给出 Allow。</li>

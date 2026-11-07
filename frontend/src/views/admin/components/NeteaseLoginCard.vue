@@ -143,7 +143,7 @@ async function pollOnce(gen) {
     qrState.value = 'pending'
   } catch (e) {
     if (gen !== generation) return
-    // 409 = 防重放 nonce 失效（会自动重试），视为瞬时，继续轮询；
+    // 409 = 当前扫码状态冲突，视为瞬时，继续轮询；
     // 其余明确的业务/服务端错误直接展示并停止，避免像过期那样无声失败。
     if (e?.status && e.status !== 409) {
       stopPolling()

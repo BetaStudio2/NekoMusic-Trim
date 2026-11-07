@@ -104,14 +104,11 @@ class UserQrLoginHandlerTest {
     private static final StubUserAuthService AUTH = new StubUserAuthService();
 
     @Test
-    void watchClientGetsCircularLoginQr() throws Exception {
-        BufferedImage watchQr = createQrImage("NekoMusic-AWatch/1.4.0", "AndroidWatch+1.4.0");
-        assertEquals(320, watchQr.getWidth());
-        assertEquals(320, watchQr.getHeight());
-        assertEquals(0, watchQr.getRGB(0, 0) >>> 24, "手表二维码应使用透明圆形外形");
-
-        BufferedImage pcQr = createQrImage("NekoMusic-PC/1.0", "PC+1.0");
-        assertEquals(255, pcQr.getRGB(0, 0) >>> 24, "PC 二维码应保持方形底");
+    void loginQrUsesUniformSquareImage() throws Exception {
+        BufferedImage qr = createQrImage("NekoMusic-PC/1.0");
+        assertEquals(320, qr.getWidth());
+        assertEquals(320, qr.getHeight());
+        assertEquals(255, qr.getRGB(0, 0) >>> 24);
     }
 
     private static final class Reader {
@@ -263,14 +260,13 @@ class UserQrLoginHandlerTest {
         });
     }
 
-    private static BufferedImage createQrImage(String userAgent, String nekoClient) throws Exception {
+    private static BufferedImage createQrImage(String userAgent) throws Exception {
         Reader reader = new Reader();
         HttpServletRequest request = proxy(HttpServletRequest.class, (p, m, a) -> switch (m.getName()) {
             case "getPathInfo" -> "/create";
             case "getMethod" -> "POST";
             case "getHeader" -> switch (((String) a[0]).toLowerCase()) {
                 case "user-agent" -> userAgent;
-                case "x-neko-client" -> nekoClient;
                 default -> null;
             };
             default -> defaultValue(m);

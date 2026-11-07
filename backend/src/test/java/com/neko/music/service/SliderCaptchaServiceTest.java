@@ -16,17 +16,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SliderCaptchaServiceTest {
 
     private static final String UA = "Mozilla/5.0 TestBrowser";
-    private static final String CLIENT = "web+test";
-
     @Test
     void finalOffsetAloneCannotIssuePass() throws Exception {
         SliderCaptchaService service = new SliderCaptchaService();
-        Map<String, Object> payload = service.createChallengePayload(UA, CLIENT);
+        Map<String, Object> payload = service.createChallengePayload(UA);
         String token = (String) payload.get("captchaToken");
         int secretX = secretX(service, token);
 
         Optional<String> pass = service.verifySlideAndIssuePass(
-                token, secretX, List.of(), UA, CLIENT);
+                token, secretX, List.of(), UA);
 
         assertTrue(pass.isEmpty());
     }
@@ -34,28 +32,28 @@ class SliderCaptchaServiceTest {
     @Test
     void validTraceIssuesPassAndBindsItToSource() throws Exception {
         SliderCaptchaService service = new SliderCaptchaService();
-        Map<String, Object> payload = service.createChallengePayload(UA, CLIENT);
+        Map<String, Object> payload = service.createChallengePayload(UA);
         String token = (String) payload.get("captchaToken");
         int secretX = secretX(service, token);
 
         Optional<String> pass = service.verifySlideAndIssuePass(
-                token, secretX, validTrace(secretX), UA, CLIENT);
+                token, secretX, validTrace(secretX), UA);
 
         assertTrue(pass.isPresent());
-        assertTrue(service.consumePassToken(pass.get(), UA, CLIENT));
+        assertTrue(service.consumePassToken(pass.get(), UA));
     }
 
     @Test
-    void passCannotBeConsumedFromAnotherClient() throws Exception {
+    void passCannotBeConsumedFromAnotherUserAgent() throws Exception {
         SliderCaptchaService service = new SliderCaptchaService();
-        Map<String, Object> payload = service.createChallengePayload(UA, CLIENT);
+        Map<String, Object> payload = service.createChallengePayload(UA);
         String token = (String) payload.get("captchaToken");
         int secretX = secretX(service, token);
 
         String pass = service.verifySlideAndIssuePass(
-                token, secretX, validTrace(secretX), UA, CLIENT).orElseThrow();
+                token, secretX, validTrace(secretX), UA).orElseThrow();
 
-        assertFalse(service.consumePassToken(pass, UA, "web+other"));
+        assertFalse(service.consumePassToken(pass, "OtherAgent/1.0"));
     }
 
     private static List<SliderCaptchaService.DragSample> validTrace(int secretX) {

@@ -29,8 +29,7 @@ public class SliderCaptchaHandler extends ApiServlet {
 
         try {
             SliderCaptchaService svc = Main.getSliderCaptchaService();
-            Map<String, Object> data = svc.createChallengePayload(
-                    request.getHeader("User-Agent"), request.getHeader("X-Neko-Client"));
+            Map<String, Object> data = svc.createChallengePayload(request.getHeader("User-Agent"));
             sendJson(response, true, "ok", data);
         } catch (Exception e) {
             logger.error("生成滑块验证码失败", e);

@@ -14,7 +14,7 @@ import java.util.Deque;
  * <p>为什么：Jetty 的 servlet 映射按**规范化**后的路径匹配，而 {@code getRequestURI()} 返回**原始**
  * URI。于是 {@code /./api/x}、{@code /a/../api/x}、{@code /api;/x}、{@code /%61pi/x} 这些等价写法
  * 会被路由到真实的 {@code /api/*} handler，却在原始字符串上前缀匹配失败 —— 判定「是否受保护」的
- * 过滤器把它们当成非受保护路径直接放行，一次性 nonce 防重放与防爬门禁被整体绕过（CWE-436）。</p>
+ * 过滤器把它们当成非受保护路径直接放行，相关门禁被整体绕过（CWE-436）。</p>
  *
  * <p>本类改用容器已经算好的 {@code servletPath + pathInfo}：它来自与路由同一套解释，任何等价写法
  * 在进入过滤器时都已是同一个规范路径，判定与路由不可能再分叉。取不到映射时（非正常分派）

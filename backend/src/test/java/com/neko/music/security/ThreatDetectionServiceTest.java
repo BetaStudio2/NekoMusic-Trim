@@ -61,71 +61,6 @@ class ThreatDetectionServiceTest {
     }
 
     @Test
-    @DisplayName("单次防重放凭证失效只记低风险，不直接判攻击")
-    void singleReplayFailureIsNotAttack() {
-        ThreatAssessment invalid = assess("POST", "/api/user/favorite", null, null, "api", 409,
-                "203.0.113.14", BROWSER_UA, "browser", "invalid");
-        assertEquals(ThreatAssessment.NORMAL, invalid.level());
-        assertTrue(invalid.reasons().contains("防重放凭证失效"));
-
-        ThreatAssessment missing = assess("POST", "/api/user/favorite", null, null, "api", 409,
-                "203.0.113.16", BROWSER_UA, "browser", "missing");
-        assertEquals(ThreatAssessment.NORMAL, missing.level());
-
-        ThreatAssessment businessConflict = assess("POST", "/api/user/qrlogin/confirm", null, null,
-                "api", 409, "203.0.113.17", BROWSER_UA, "browser", "verified");
-        assertEquals(ThreatAssessment.NORMAL, businessConflict.level());
-        assertTrue(businessConflict.reasons().contains("业务状态冲突"));
-
-        ThreatAssessment dangerousReplay = assess("GET", "/.env", null, null, "other", 409,
-                "203.0.113.19", BROWSER_UA, "browser", "invalid");
-        assertEquals(ThreatAssessment.ATTACK, dangerousReplay.level());
-        assertTrue(dangerousReplay.reasons().contains("扫描"));
-    }
-
-    @Test
-    @DisplayName("全站扫描期间的单次防重放失败仍不被连带判攻击")
-    void singleReplayFailureDuringGlobalAttackStaysNormal() {
-        for (int i = 1; i <= 24; i++) {
-            assess("GET", "/api/probe/" + i, null, null, "api", 404,
-                    "198." + i + ".1.1", BROWSER_UA, "browser", null);
-        }
-
-        ThreatAssessment result = assess("POST", "/api/user/favorite", null, null, "api", 409,
-                "192.0.2.200", BROWSER_UA, "browser", "invalid");
-        assertEquals(ThreatAssessment.NORMAL, result.level());
-        assertEquals(15, result.score());
-    }
-
-    @Test
-    @DisplayName("同一来源持续大量防重放失败升级为攻击")
-    void replayFailureBurstIsAttack() {
-        ThreatAssessment beforeBurst = null;
-        for (int i = 0; i < 79; i++) {
-            beforeBurst = assess("POST", "/api/user/favorite", null, null, "api", 409,
-                    "203.0.113.18", BROWSER_UA, "browser", "invalid");
-        }
-        assertEquals(ThreatAssessment.NORMAL, beforeBurst.level());
-
-        ThreatAssessment burst = assess("POST", "/api/user/favorite", null, null, "api", 409,
-                "203.0.113.18", BROWSER_UA, "browser", "invalid");
-        assertEquals(ThreatAssessment.ATTACK, burst.level());
-        assertTrue(burst.reasons().contains("防重放"));
-    }
-
-    @Test
-    @DisplayName("缺失防重放凭证的高密度失败同样升级为攻击")
-    void missingReplayBurstIsAttack() {
-        ThreatAssessment result = null;
-        for (int i = 0; i < 80; i++) {
-            result = assess("POST", "/api/user/favorite", null, null, "api", 409,
-                    "203.0.113.21", BROWSER_UA, "browser", "missing");
-        }
-        assertEquals(ThreatAssessment.ATTACK, result.level());
-        assertTrue(result.reasons().contains("防重放"));
-    }
-
-    @Test
     @DisplayName("同一来源高频重复请求单一资源判攻击，低于阈值仍正常")
     void singlePathFloodIsAttack() {
         ThreatAssessment beforeFlood = null;
@@ -179,21 +114,6 @@ class ThreatDetectionServiceTest {
         }
         assertEquals(ThreatAssessment.NORMAL, result.level());
         assertEquals(0, result.score());
-    }
-
-    @Test
-    @DisplayName("CGNAT 共享 IP 下少量客户端各自重放失败不会合并成攻击")
-    void cgnatClientsDoNotShareReplayBurst() {
-        ThreatAssessment result = null;
-        String sharedIp = "100.64.23.10";
-        for (int user = 1; user <= 6; user++) {
-            for (int i = 0; i < 20; i++) {
-                result = assess("POST", "/api/user/favorite", null, null, "api", 409,
-                        sharedIp, "NekoMusic-android/20261027", "official_client", "invalid",
-                        "cgnat-instance-" + user, user);
-            }
-        }
-        assertEquals(ThreatAssessment.NORMAL, result.level());
     }
 
     @Test
@@ -350,18 +270,17 @@ class ThreatDetectionServiceTest {
 
     private ThreatAssessment assess(String method, String path, String query, String body,
                                     String category, int status, String ip, String ua,
-                                    String clientType, String powStatus) {
-        return assess(method, path, query, body, category, status, ip, ua, clientType,
-                powStatus, null, null);
+                                    String ignoredClientType, String ignoredLegacyField) {
+        return assess(method, path, query, body, category, status, ip, ua, ignoredClientType,
+                ignoredLegacyField, null, null);
     }
 
     private ThreatAssessment assess(String method, String path, String query, String body,
                                     String category, int status, String ip, String ua,
-                                    String clientType, String powStatus, String clientInstanceId,
+                                    String ignoredClientType, String ignoredLegacyField, String ignoredInstanceId,
                                     Integer userId) {
         now += 1000;
         return service.assess(new ThreatDetectionService.RequestFacts(
-                now, method, path, query, category, status, ip, ua, clientType,
-                "web+1", null, clientInstanceId, userId, powStatus));
+                now, method, path, query, category, status, ip, ua, userId));
     }
 }

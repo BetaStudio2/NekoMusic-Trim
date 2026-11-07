@@ -94,8 +94,7 @@ function installHandler(router) {
 }
 
 /**
- * 安装管理员 401 兜底。须在 installNekoClientHeader() 与 installReplayProtection() 之后调用，
- * 才能拿到这些模块最终交给浏览器的响应。
+ * 安装管理员 401 兜底。须在 installRequestHeaders() 之后调用。
  */
 export function installAdminUnauthorizedHandler(router) {
   if (installed || typeof window === 'undefined' || typeof window.fetch !== 'function') return

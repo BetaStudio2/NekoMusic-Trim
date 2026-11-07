@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
  * 浏览器跳转端点：{@code /sso/nekocore/start}、{@code /oauth/nekocore/callback}
  * 与 {@code /sso/nekocore/forgot-password}。
  *
- * <p>这是 OAuth 浏览器导航，不是 JSON API：不能要求 nonce / 客户端签名。防重放由一次性 state
+ * <p>这是 OAuth 浏览器导航，不是 JSON API；回调使用一次性 state 做请求关联与 CSRF 校验。
  * 保证。回调只跳转到前端完成页并携带一次性 handoff，不把 Token 放进 URL。</p>
  *
  * <p>{@code /oauth/*} 是 NekoAuth 的保留命名空间，生产反向代理会优先把它转给账号中心。

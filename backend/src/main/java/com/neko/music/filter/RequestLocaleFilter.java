@@ -15,7 +15,7 @@ import java.io.IOException;
  * 按 {@code Accept-Language} 决定本次响应的语言，写入 {@link RequestLocale}。
  *
  * <p>必须注册在过滤器链**最外层**（{@code Main} 里紧跟访问日志之后）：文案不只是处理器写的，
- * 限流 / 防封禁 / 防爬几个门禁也会直接写 JSON 错误体，语言得在它们之前就定好。</p>
+ * 限流 / 封禁等门禁也会直接写 JSON 错误体，语言得在它们之前就定好。</p>
  *
  * <p>用 {@code finally} 清理 ThreadLocal：Jetty 线程会复用，不清会把语言串给下一个请求。</p>
  */

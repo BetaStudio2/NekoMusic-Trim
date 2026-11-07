@@ -24,7 +24,7 @@ public final class ServletRegistrar {
         ServletHolder siteResourceHolder = new ServletHolder(new SiteResourceHandler());
         context.addServlet(siteResourceHolder, "/");
 
-        // NekoAuth 统一登录：浏览器跳转端点，不使用 /api 的 nonce / 客户端签名门禁。
+        // NekoAuth 统一登录：浏览器跳转端点，不经过 /api 门禁。
         // /sso 是 NekoMusic 自有命名空间；旧 /oauth/nekocore/* 入口仅作兼容别名。
         ServletHolder nekoAuthSsoStartHolder = new ServletHolder(new NekoAuthOAuthHandler());
         context.addServlet(nekoAuthSsoStartHolder, "/sso/nekocore/start");
@@ -45,22 +45,6 @@ public final class ServletRegistrar {
         ServletHolder nekoAuthSsoPasswordResetHolder = new ServletHolder(new NekoAuthSsoStartHandler());
         context.addServlet(nekoAuthSsoPasswordResetHolder, "/api/user/sso/password-reset-url");
         
-        // 注册防重放 nonce 签发接口（通用机制，自身豁免 nonce 校验）
-        ServletHolder replayNonceHolder = new ServletHolder(new ReplayNonceHandler());
-        context.addServlet(replayNonceHolder, "/api/replay/nonce");
-
-        // 注册防重放挑战签发接口（领取 nonce 的第一步，同样豁免 nonce 校验）
-        ServletHolder replayChallengeHolder = new ServletHolder(new ReplayChallengeHandler());
-        context.addServlet(replayChallengeHolder, "/api/replay/challenge");
-
-        // 客户端实例注册自举：挑战、注册、短期令牌续签均豁免实例签名与 nonce。
-        ServletHolder clientChallengeHolder = new ServletHolder(new ClientChallengeHandler());
-        context.addServlet(clientChallengeHolder, "/api/client/challenge");
-        ServletHolder clientRegisterHolder = new ServletHolder(new ClientRegisterHandler());
-        context.addServlet(clientRegisterHolder, "/api/client/register");
-        ServletHolder clientTokenHolder = new ServletHolder(new ClientTokenHandler());
-        context.addServlet(clientTokenHolder, "/api/client/token");
-
         // 注册搜索音乐API处理器
         ServletHolder searchHolder = new ServletHolder(new MusicSearchHandler());
         context.addServlet(searchHolder, "/api/music/search");
@@ -94,20 +78,10 @@ public final class ServletRegistrar {
         ServletHolder adminStatsHolder = new ServletHolder(new AdminStatsHandler());
         context.addServlet(adminStatsHolder, "/api/admin/stats");
 
-        // 防重放加压越界来源：后台查看当前标记 / 按来源人工放行（加压阶梯无上限，越界即落库）
-        ServletHolder adminReplayMarkHolder = new ServletHolder(new AdminReplayMarkHandler());
-        context.addServlet(adminReplayMarkHolder, "/api/admin/replay-marks");
-        
         // 注册管理员用户管理API处理器
         ServletHolder adminUserManagementHolder = new ServletHolder(new AdminUserManagementHandler());
         context.addServlet(adminUserManagementHolder, "/api/admin/users/*");
 
-        // 第三方客户端凭据 / 安装实例管理（管理端接口，不写入公开 API 文档）
-        ServletHolder adminClientAppsHolder = new ServletHolder(new AdminClientAppsHandler());
-        context.addServlet(adminClientAppsHolder, "/api/admin/client-apps/*");
-        ServletHolder adminClientInstancesHolder = new ServletHolder(new AdminClientInstancesHandler());
-        context.addServlet(adminClientInstancesHolder, "/api/admin/client-instances/*");
-        
         // 注册管理员创建API处理器
         ServletHolder adminCreateHolder = new ServletHolder(new AdminCreateHandler());
         context.addServlet(adminCreateHolder, "/api/admin/create");
