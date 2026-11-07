@@ -141,8 +141,12 @@ async function validateSharedSession() {
 }
 
 async function refreshSharedSessionIfVisible() {
-  if (document.visibilityState !== 'visible' || !getToken()) return
-  await validateSharedSession()
+  if (document.visibilityState !== 'visible') return
+  if (getToken()) {
+    await validateSharedSession()
+  } else {
+    await trySilentLogin()
+  }
 }
 
 /** Auth 登录后留下只读会话提示；子域用标准 OIDC prompt=none 静默换取自己的 token。 */
