@@ -69,6 +69,16 @@ public final class NekoAuthOAuthHandler extends ApiServlet {
     private void handleCallback(HttpServletRequest request, HttpServletResponse response) throws IOException {
         String oauthError = request.getParameter("error");
         if (oauthError != null && !oauthError.isBlank()) {
+            if (oauthService != null) {
+                String silentReturnTo = oauthService
+                        .silentReturnTo(request.getParameter("state"))
+                        .orElse(null);
+                if (silentReturnTo != null) {
+                    logger.debug("NekoAuth 静默登录未复用会话: error={}", oauthError);
+                    response.sendRedirect(silentReturnTo);
+                    return;
+                }
+            }
             String code = "access_denied".equals(oauthError) ? "access_denied" : "authorization_failed";
             logger.info("NekoAuth 授权未完成: error={}", oauthError);
             sendError(response, code, "NekoAuth 授权未完成");

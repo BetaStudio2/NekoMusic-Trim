@@ -40,7 +40,8 @@ public final class NekoAuthSsoStartHandler extends ApiServlet {
             StartRequest startRequest = readStartRequest(request);
             String url = path.endsWith("/password-reset-url")
                     ? oauthService.passwordResetUrl()
-                    : oauthService.authorizationUrl(startRequest.returnTo(), startRequest.client());
+                    : oauthService.authorizationUrl(
+                            startRequest.returnTo(), startRequest.client(), startRequest.silent());
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("url", url);
             sendResponse(response, true, "跳转地址已生成", data);
@@ -56,19 +57,21 @@ public final class NekoAuthSsoStartHandler extends ApiServlet {
     private StartRequest readStartRequest(HttpServletRequest request) throws IOException {
         String raw = readBody(request);
         if (raw == null || raw.isBlank()) {
-            return new StartRequest("/", "web");
+            return new StartRequest("/", "web", false);
         }
         JsonNode body;
         try {
             body = MAPPER.readTree(raw);
         } catch (IOException exception) {
-            return new StartRequest("/", "web");
+            return new StartRequest("/", "web", false);
         }
         String returnTo = body == null ? "" : body.path("returnTo").asText("");
         String client = body == null ? "" : body.path("client").asText("");
+        boolean silent = body != null && body.path("silent").asBoolean(false);
         return new StartRequest(
                 returnTo.isBlank() ? "/" : returnTo,
-                client.isBlank() ? "web" : client);
+                client.isBlank() ? "web" : client,
+                silent);
     }
 
     private static int responseStatusFor(String code) {
@@ -79,6 +82,6 @@ public final class NekoAuthSsoStartHandler extends ApiServlet {
         };
     }
 
-    private record StartRequest(String returnTo, String client) {
+    private record StartRequest(String returnTo, String client, boolean silent) {
     }
 }

@@ -88,6 +88,11 @@ Android / PC 调用 `/api/user/sso/start` 时分别传 `client=android`、`clien
 注册、找回密码和账号资料修改统一跳转 NekoAuth：Web 在当前浏览器中打开，Android 使用应用内
 WebView，PC 使用系统浏览器。
 
+Web 端还支持同父域无感登录：若 NekoAuth 已登录并下发 `nekoauth_session_hint`，NekoMusic 在本地没有
+token 时会自动发起一次 `prompt=none` 的 OIDC 静默授权。Auth 会话和既有授权仍有效时，浏览器无需
+展示登录页或手动确认即可回到原页面；会话无效或尚未授权时静默回到游客态。该流程不共享刷新令牌，
+各子域仍通过各自登记的 OAuth 客户端完成授权。
+
 已有部署升级时，应把 NekoAuth 客户端登记的回调地址与 `oauth.redirect_uri` 一起更新为
 `https://music.nekocore.cn/sso/nekocore/callback`；旧 `/oauth/nekocore/callback` 仍可继续回调，
 但新部署应直接使用规范地址。

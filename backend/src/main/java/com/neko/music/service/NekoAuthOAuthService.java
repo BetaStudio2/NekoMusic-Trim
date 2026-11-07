@@ -30,6 +30,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -85,10 +86,18 @@ public final class NekoAuthOAuthService {
      * @param returnTo 登录成功后的站内相对路径（必须以单个 / 开头）
      */
     public String authorizationUrl(String returnTo) throws OAuthLoginException {
-        return authorizationUrl(returnTo, "web");
+        return authorizationUrl(returnTo, "web", false);
     }
 
     public String authorizationUrl(String returnTo, String client) throws OAuthLoginException {
+        return authorizationUrl(returnTo, client, false);
+    }
+
+    /**
+     * @param silent 为 true 时使用 {@code prompt=none}，仅复用 NekoAuth 已有浏览器会话
+     */
+    public String authorizationUrl(String returnTo, String client, boolean silent)
+            throws OAuthLoginException {
         requireEnabled();
         OidcDiscovery discovery = discovery();
         String clientId = requireConfigured(configManager.getOAuthClientId(), "oauth.client_id");
@@ -105,7 +114,7 @@ public final class NekoAuthOAuthService {
         String stateValue;
         try {
             stateValue = objectMapper.writeValueAsString(new OAuthState(
-                    safeReturnTo, System.currentTimeMillis(), codeVerifier, nonce, safeClient));
+                    safeReturnTo, System.currentTimeMillis(), codeVerifier, nonce, safeClient, silent));
         } catch (IOException exception) {
             throw new OAuthLoginException("oauth_unavailable", "无法创建登录会话", exception);
         }
@@ -123,7 +132,34 @@ public final class NekoAuthOAuthService {
         query.put("nonce", nonce);
         query.put("code_challenge", pkceChallenge(codeVerifier));
         query.put("code_challenge_method", "S256");
+        if (silent) {
+            query.put("prompt", "none");
+        }
         return discovery.authorizationEndpoint() + "?" + encodeForm(query);
+    }
+
+    /**
+     * 消费静默登录的 state。NekoAuth 无法复用现有会话时会回调
+     * {@code login_required} / {@code consent_required}；此时安静返回原页面，不展示登录失败页。
+     */
+    public Optional<String> silentReturnTo(String state) {
+        if (state == null || state.isBlank() || state.length() > MAX_STATE_LENGTH) {
+            return Optional.empty();
+        }
+        String stateJson = redisService.getDel(STATE_PREFIX + state);
+        if (stateJson == null || stateJson.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            OAuthState stored = objectMapper.readValue(stateJson, OAuthState.class);
+            long ageMs = System.currentTimeMillis() - stored.issuedAt();
+            if (!stored.silent() || ageMs < 0 || ageMs > STATE_TTL_SECONDS * 1000L) {
+                return Optional.empty();
+            }
+            return Optional.of(normalizeReturnTo(stored.returnTo()));
+        } catch (IOException | OAuthLoginException exception) {
+            return Optional.empty();
+        }
     }
 
     /** NekoAuth 找回密码页地址；不依赖 OAuth 客户端配置，避免入口被登录开关锁死。 */
@@ -758,7 +794,7 @@ public final class NekoAuthOAuthService {
     }
 
     private record OAuthState(String returnTo, long issuedAt, String codeVerifier, String nonce,
-                              String client) {
+                              String client, boolean silent) {
     }
 
     private record OidcDiscovery(String issuer, URI authorizationEndpoint, URI tokenEndpoint,

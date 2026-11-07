@@ -131,6 +131,9 @@ cd frontend && npm run build    # 产物输出到 ../backend/src/main/resources/
   修改统一打开 NekoAuth 页面。Android 使用应用内 WebView，Web 使用当前浏览器，PC 使用系统浏览器。
 - 用户头像以 NekoAuth 为唯一权威源。NekoMusic 的 `/api/user/avatar/*` 只作兼容代理，后端的
   `/api/user/avatar/upload` 也只转发到 Auth，不得再写本地头像路径或新增本地头像文件。
+- Web 端可使用 NekoAuth 的 `nekoauth_session_hint` 判断是否需要尝试 `prompt=none` 静默授权；该
+  Cookie 只能作为登录提示，不得承载或替代访问令牌、刷新令牌，也不得把 Auth 的 HttpOnly 刷新 Cookie
+  扩展到父域。
 
 ### API 文档脱敏
 
