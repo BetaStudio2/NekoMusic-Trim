@@ -900,7 +900,7 @@ public class NeteaseSearchFillService {
         try {
             NeteaseCloudMusicClient.LyricApiPayload payload = neteaseClient.fetchLyricPayload(songId);
             lrc = payload.primaryLrc();
-            fullOriginalLyrics = payload.lrcLyricRaw();
+            fullOriginalLyrics = payload.rawMain();
         } catch (IOException e) {
             logger.warn("获取歌词失败 songId={}: {}", songId, e.getMessage());
         }

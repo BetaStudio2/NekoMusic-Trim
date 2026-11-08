@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.neko.music.config.ConfigManager;
 import com.neko.music.util.HttpTransport;
+import com.neko.music.util.NeteaseLyricParser;
 import com.neko.music.util.OutboundUrlGuard;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,7 +116,7 @@ public class NeteaseCloudMusicClient {
     public record NeteaseSongCandidate(long id, String title, String artist, String album) {}
     public record SongPlayUrl(String url, String type, int durationMs, String level) {}
     public record SongDetail(String title, String artist, String album, String coverUrl, int durationMs) {}
-    public record LyricApiPayload(String primaryLrc, String lrcLyricRaw) {}
+    public record LyricApiPayload(String primaryLrc, String rawMain) {}
     /** 扫码轮询结果：code 800 过期 / 801 待扫码 / 802 待确认 / 803 已确认（cookie 已下发）。 */
     public record QrLoginCheck(int code, String cookie, String nickname, String avatarUrl) {}
     /** 当前登录账号资料。 */
@@ -463,16 +464,30 @@ public class NeteaseCloudMusicClient {
         return fetchLyricPayload(songId).primaryLrc();
     }
 
+    /**
+     * 公共歌词读取入口：普通逐行 LRC、新版 YRC、翻译均复用同一个 lyric_new 响应。
+     * 当前只向下游输出行级 LRC，字级时间轴解析留待后续数据模型扩展。
+     */
     public LyricApiPayload fetchLyricPayload(long songId) throws IOException {
         JsonNode root = fetchLyricRaw(songId);
-        String raw = textOrEmpty(root.path("lrc").path("lyric"));
-        return new LyricApiPayload(raw.isBlank() ? textOrEmpty(root.path("tlyric").path("lyric")) : raw, raw);
+        NeteaseLyricParser.ParsedLyrics parsed = NeteaseLyricParser.parse(root);
+        return new LyricApiPayload(parsed.lrc(), parsed.rawMain());
     }
 
     public JsonNode fetchLyricRaw(long songId) throws IOException {
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("id", songId); data.put("tv", -1); data.put("lv", -1); data.put("rv", -1); data.put("kv", -1);
-        return postApi("/api/song/lyric?_nmclfl=1", data);
+        data.put("id", songId);
+        data.put("cp", false);
+        data.put("e_r", false);
+        data.put("tv", 0);
+        data.put("lv", 0);
+        data.put("rv", 0);
+        data.put("kv", 0);
+        data.put("yv", 0);
+        data.put("ytv", 0);
+        data.put("yrv", 0);
+        HttpResponse<String> response = postEapiResponse("/api/song/lyric/v1", data);
+        return objectMapper.readTree(decryptEapi(response.body()));
     }
 
     /** 获取网易云歌单歌曲，响应兼容 NeteaseCloudMusicApi 的 /playlist/track/all。 */
