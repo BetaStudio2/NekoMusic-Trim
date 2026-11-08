@@ -7,6 +7,7 @@
 export { default as NButton } from './NButton.vue'
 export { default as NCard } from './NCard.vue'
 export { default as NInput } from './NInput.vue'
+export { default as NSelect } from './NSelect.vue'
 export { default as NTag } from './NTag.vue'
 export { default as NSpinner } from './NSpinner.vue'
 export { default as NModal } from './NModal.vue'

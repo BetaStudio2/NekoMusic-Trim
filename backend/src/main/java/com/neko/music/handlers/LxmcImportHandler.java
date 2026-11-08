@@ -39,6 +39,7 @@ public final class LxmcImportHandler extends HttpServlet {
     private static final Logger logger = LoggerFactory.getLogger(LxmcImportHandler.class);
     private static final long MULTIPART_OVERHEAD_ALLOWANCE = 1024L * 1024L;
     private static final int MAX_PLAYLIST_ID_LENGTH = 128;
+    private static final String ALL_PLAYLISTS = "all";
     private static final LxmcPlaylistParser PARSER = new LxmcPlaylistParser();
 
     @Override
@@ -108,8 +109,8 @@ public final class LxmcImportHandler extends HttpServlet {
             writeError(response, HttpServletResponse.SC_BAD_REQUEST, "lxmc.playlist_required");
             return;
         }
-        Optional<LxmcPlaylistParser.Playlist> selected = selectPlaylist(document, requestedPlaylistId);
-        if (selected.isEmpty()) {
+        List<LxmcPlaylistParser.Playlist> selectedPlaylists = selectPlaylists(document, requestedPlaylistId);
+        if (selectedPlaylists.isEmpty()) {
             writeError(response, HttpServletResponse.SC_NOT_FOUND, "lxmc.playlist_not_found");
             return;
         }
@@ -150,7 +151,8 @@ public final class LxmcImportHandler extends HttpServlet {
         ExternalImportService.ImportTarget importTarget = new ExternalImportService.ImportTarget(
                 userId, target.playlistId(), target.playlistName(), target.created());
         ExternalImportService.Listener listener = new ExternalImportSseListener(asyncContext, writer);
-        List<ExternalImportService.Track> tracks = selected.get().tracks().stream()
+        List<ExternalImportService.Track> tracks = selectedPlaylists.stream()
+                .flatMap(playlist -> playlist.tracks().stream())
                 .map(track -> new ExternalImportService.Track(
                         track.sourceId(), track.title(), track.artist()))
                 .toList();
@@ -162,17 +164,20 @@ public final class LxmcImportHandler extends HttpServlet {
         return path != null && path.endsWith("/inspect");
     }
 
-    private static Optional<LxmcPlaylistParser.Playlist> selectPlaylist(
+    static List<LxmcPlaylistParser.Playlist> selectPlaylists(
             LxmcPlaylistParser.Document document, String requestedPlaylistId) {
+        if (ALL_PLAYLISTS.equals(requestedPlaylistId)) {
+            return document.playlists();
+        }
         if (requestedPlaylistId != null) {
             return document.playlists().stream()
                     .filter(playlist -> requestedPlaylistId.equals(playlist.id()))
-                    .findFirst();
+                    .toList();
         }
         if (document.playlists().size() == 1) {
-            return Optional.of(document.playlists().get(0));
+            return List.of(document.playlists().get(0));
         }
-        return Optional.empty();
+        return List.of();
     }
 
     private static void writeInspectResponse(HttpServletResponse response, LxmcPlaylistParser.Document document)

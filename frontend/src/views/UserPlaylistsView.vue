@@ -125,22 +125,18 @@
 
       <template v-if="lxmcPlaylists.length">
         <div class="field">
-          <label class="field__label" for="lxmc-playlist">{{ $t('playlists.lxmc.sourcePlaylist') }}</label>
-          <select
-            id="lxmc-playlist"
+          <span class="field__label">{{ $t('playlists.lxmc.sourcePlaylist') }}</span>
+          <NSelect
             v-model="importForm.playlistId"
-            class="lxmc-select"
+            :options="sourcePlaylistOptions"
+            :aria-label="$t('playlists.lxmc.sourcePlaylist')"
             :disabled="importing"
             @change="handleSourcePlaylistChange"
-          >
-            <option v-for="playlist in lxmcPlaylists" :key="playlist.id" :value="playlist.id">
-              {{ playlist.name || playlist.id }} · {{ $t('track.songCount', { count: playlist.trackCount }) }}
-            </option>
-          </select>
-          <div v-if="selectedSourcePlaylist" class="lxmc-sources">
+          />
+          <div v-if="selectedSourceSummary" class="lxmc-sources">
             <span class="lxmc-sources__label">{{ $t('playlists.lxmc.sources') }}</span>
             <NTag
-              v-for="(count, source) in selectedSourcePlaylist.sources"
+              v-for="(count, source) in selectedSourceSummary.sources"
               :key="source"
               size="sm"
               variant="default"
@@ -182,24 +178,22 @@
             :placeholder="$t('playlists.lxmc.targetNamePlaceholder')"
             :disabled="importing"
           />
-          <select
+          <NSelect
             v-else
             v-model="importForm.targetPlaylistId"
-            class="lxmc-select lxmc-target-name"
+            class="lxmc-target-name"
+            :options="targetPlaylistOptions"
+            :placeholder="$t('playlists.lxmc.selectTarget')"
+            :aria-label="$t('playlists.lxmc.targetExisting')"
             :disabled="importing"
-          >
-            <option value="" disabled>{{ $t('playlists.lxmc.selectTarget') }}</option>
-            <option v-for="playlist in playlists" :key="playlist.id" :value="String(playlist.id)">
-              {{ playlist.name }}
-            </option>
-          </select>
+          />
         </div>
       </template>
 
       <div v-if="importing || importSummary || importError" class="lxmc-progress">
         <div class="lxmc-progress__head">
           <span>{{ importError ? $t('playlists.lxmc.failed') : importSummary ? $t('playlists.lxmc.done') : $t('playlists.lxmc.importing') }}</span>
-          <span>{{ importProgress.finished }} / {{ importProgress.total || selectedSourcePlaylist?.trackCount || 0 }}</span>
+          <span>{{ importProgress.finished }} / {{ importProgress.total || selectedTrackCount }}</span>
         </div>
         <div class="lxmc-progress__bar" role="progressbar" :aria-valuenow="importPercent" aria-valuemin="0" aria-valuemax="100">
           <span :style="{ width: `${importPercent}%` }" />
@@ -255,7 +249,7 @@ import { getUser } from '@/utils/userStore.js'
 import { avatarUrl } from '@/utils/userAvatar.js'
 import { useToast } from '@/composables/useToast'
 import NIcon from '@/icons/NIcon.vue'
-import { NButton, NCard, NInput, NModal, NSpinner, NTag } from '@/ui'
+import { NButton, NCard, NInput, NModal, NSelect, NSpinner, NTag } from '@/ui'
 import { PageShell, AmbientBackdrop } from '@/layouts'
 import { t } from '@/i18n'
 
@@ -295,19 +289,64 @@ const importForm = ref({
 })
 const importFinishedIndexes = new Set()
 let importAbortController = null
+const ALL_PLAYLISTS = 'all'
 
 const selectedSourcePlaylist = computed(() =>
   lxmcPlaylists.value.find((playlist) => playlist.id === importForm.value.playlistId) || null
 )
 
+const sourcePlaylistOptions = computed(() => {
+  const totalTracks = lxmcPlaylists.value.reduce((sum, playlist) => sum + Number(playlist.trackCount || 0), 0)
+  return [
+    {
+      value: ALL_PLAYLISTS,
+      label: t('playlists.lxmc.allPlaylists'),
+      description: t('playlists.lxmc.allPlaylistsMeta', {
+        count: lxmcPlaylists.value.length,
+        tracks: totalTracks,
+      }),
+    },
+    ...lxmcPlaylists.value.map((playlist) => ({
+      value: playlist.id,
+      label: playlist.name || playlist.id,
+      description: t('track.songCount', { count: playlist.trackCount }),
+    })),
+  ]
+})
+
+const targetPlaylistOptions = computed(() =>
+  playlists.value.map((playlist) => ({
+    value: String(playlist.id),
+    label: playlist.name,
+    description: t('track.songCount', { count: playlist.musicCount || 0 }),
+  })),
+)
+
+const selectedSourceSummary = computed(() => {
+  if (importForm.value.playlistId === ALL_PLAYLISTS) {
+    const sources = {}
+    let trackCount = 0
+    for (const playlist of lxmcPlaylists.value) {
+      trackCount += Number(playlist.trackCount || 0)
+      for (const [source, count] of Object.entries(playlist.sources || {})) {
+        sources[source] = (sources[source] || 0) + Number(count || 0)
+      }
+    }
+    return { trackCount, sources }
+  }
+  return selectedSourcePlaylist.value
+})
+
+const selectedTrackCount = computed(() => Number(selectedSourceSummary.value?.trackCount || 0))
+
 const importPercent = computed(() => {
-  const total = Number(importProgress.value.total || selectedSourcePlaylist.value?.trackCount || 0)
+  const total = Number(importProgress.value.total || selectedTrackCount.value || 0)
   if (!total) return importSummary.value ? 100 : 0
   return Math.min(100, Math.round((importProgress.value.finished * 100) / total))
 })
 
 const canStartImport = computed(() => {
-  if (!importFile.value || !selectedSourcePlaylist.value || parsingFile.value || importing.value) {
+  if (!importFile.value || !selectedSourceSummary.value || parsingFile.value || importing.value) {
     return false
   }
   if (importForm.value.targetMode === 'existing') {
@@ -651,10 +690,10 @@ const inspectImportFile = async (file) => {
 }
 
 const handleSourcePlaylistChange = () => {
-  const playlist = selectedSourcePlaylist.value
-  if (!playlist) return
   if (importForm.value.targetMode === 'new') {
-    importForm.value.targetPlaylistName = sourcePlaylistName(playlist)
+    importForm.value.targetPlaylistName = importForm.value.playlistId === ALL_PLAYLISTS
+      ? t('playlists.lxmc.allTargetName')
+      : sourcePlaylistName(selectedSourcePlaylist.value)
   }
   importProgress.value = emptyImportProgress()
 }
@@ -679,13 +718,13 @@ function statusLabel(status) {
 }
 
 const startLxmcImport = async () => {
-  if (!canStartImport.value || !selectedSourcePlaylist.value) return
+  if (!canStartImport.value || !selectedSourceSummary.value) return
 
   resetImportResult()
   importing.value = true
   importProgress.value = {
     ...emptyImportProgress(),
-    total: selectedSourcePlaylist.value.trackCount || 0
+    total: selectedTrackCount.value
   }
   const controller = new AbortController()
   importAbortController = controller
@@ -693,7 +732,7 @@ const startLxmcImport = async () => {
   try {
     const formData = new FormData()
     formData.append('file', importFile.value, importFile.value.name)
-    formData.append('playlistId', selectedSourcePlaylist.value.id)
+    formData.append('playlistId', importForm.value.playlistId)
     if (importForm.value.targetMode === 'existing') {
       formData.append('targetPlaylistId', importForm.value.targetPlaylistId)
     } else {
@@ -1092,23 +1131,6 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.lxmc-select {
-  width: 100%;
-  height: 42px;
-  padding: 0 var(--n-space-3);
-  border: 1px solid var(--n-line);
-  border-radius: var(--n-radius-control);
-  background: var(--n-surface-soft);
-  color: var(--n-text);
-  font: inherit;
-  outline: none;
-}
-
-.lxmc-select:focus {
-  border-color: var(--n-accent-line);
-  box-shadow: 0 0 0 3px rgba(95, 208, 224, 0.12);
 }
 
 .lxmc-sources {
