@@ -12,6 +12,7 @@ const year = new Date().getFullYear()
 
 // label 存键名，渲染时再取文案：切语言后页脚立即跟着变
 const links = computed(() => [
+  { label: t('footer.lxmusicImport'), to: '/lxmusic', icon: 'file-up' },
   { label: t('footer.downloadClient'), to: '/download', icon: 'download' },
   { label: t('footer.about'), to: '/about', icon: 'info' },
   { label: t('footer.privacy'), to: '/privacy', icon: 'shield-check' },

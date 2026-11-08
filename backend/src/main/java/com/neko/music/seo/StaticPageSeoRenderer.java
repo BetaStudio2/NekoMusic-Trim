@@ -20,7 +20,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 静态路由（首页 / 下载 / 关于 / 隐私 / 排行榜 / 最新）的服务端 SEO HTML。
+ * 静态路由（首页 / 落雪导入 / 下载 / 关于 / 隐私 / 排行榜 / 最新）的服务端 SEO HTML。
  *
  * <p>
  * 与 {@link MusicDetailPageRenderer} 一样，只在请求来自爬虫 / 链接预览 / AI 抓取器 时由
@@ -43,7 +43,7 @@ public final class StaticPageSeoRenderer {
     private static final String SITE_ICON_PATH = "/icons/icon-512.png";
 
     private static final Set<String> STATIC_PAGES = Set.of(
-            "/", "/download", "/about", "/privacy", "/ranking", "/latest", "/search");
+            "/", "/lxmusic", "/download", "/about", "/privacy", "/ranking", "/latest", "/search");
 
     public static boolean isStaticPage(String path) {
         return STATIC_PAGES.contains(normalizePath(path));
@@ -90,6 +90,8 @@ public final class StaticPageSeoRenderer {
         return switch (path) {
             case "/" ->
                 homePage();
+            case "/lxmusic" ->
+                lxmusicPage();
             case "/download" ->
                 downloadPage(base);
             case "/about" ->
@@ -203,7 +205,8 @@ public final class StaticPageSeoRenderer {
                         "高品质音频：支持高码率流媒体播放。",
                         "歌词与分享：歌词同步，一键分享播放链接。",
                         "多端一致：Web、Android、Windows、Linux、macOS 体验一致。",
-                        "歌单迁入：Android / PC 客户端可从网易云音乐、QQ 音乐、酷狗音乐导入歌单。")),
+                        "落雪歌单导入：Web 可直接上传落雪音乐 LX Music 导出的 LXMC / .lxmc 文件并匹配导入歌单。",
+                        "其它歌单迁入：Android / PC 客户端可从网易云音乐、QQ 音乐、酷狗音乐导入歌单。")),
                 bullets("支持的平台", List.of(
                         "Web 播放器（无需安装）",
                         "Android 客户端（.apk）",
@@ -213,14 +216,21 @@ public final class StaticPageSeoRenderer {
                 paragraph("完全免费与开源",
                         "Neko歌姬计划是独立开发的开源项目，遵循 AGPL-3.0 协议，代码托管在 GitHub。",
                         "平台不收费、无强制订阅、无广告弹窗；客户端行为可自行查阅源码。"),
+                paragraph("落雪音乐 LX Music 歌单导入",
+                        "登录 Web 播放器后进入「我的歌单」，点击「导入落雪歌单」，上传落雪音乐（LX Music）导出的 LXMC / .lxmc 文件。"
+                        + "Neko 会自动解析文件内的歌单，在服务器后台按曲名与歌手匹配曲库并导入到目标歌单。",
+                        "落雪歌单迁移支持多歌单文件选择、来源顺序保留和后台处理；导入结果也会写入站内消息。"),
                 paragraph("从其它音乐平台迁入歌单",
                         "在 Android 或桌面客户端内使用「导入外部歌单」：粘贴网易云音乐 / QQ 音乐 / 酷狗音乐的歌单分享链接或歌单 ID，"
                         + "客户端会拉取曲目列表并在 Neko 曲库中按歌名与歌手匹配后导入。详细步骤见下载页。"));
         List<Faq> faqs = List.of(
                 new Faq("Neko歌姬计划是免费的吗？",
                         "是的。Neko歌姬计划完全免费，没有强制订阅费用，也不含广告弹窗；项目为开源软件。"),
+                new Faq("如何导入落雪音乐 LX Music 的歌单？",
+                        "登录 Web 播放器，在首页点击「立即导入 LXMC」，或进入「我的歌单」点击「导入落雪歌单」，"
+                        + "上传落雪音乐导出的 LXMC / .lxmc 文件，然后选择文件内歌单和目标歌单即可。"),
                 new Faq("如何从网易云音乐、QQ 音乐或酷狗音乐导入歌单？",
-                        "在 Android 或桌面客户端内选择「导入外部歌单」，粘贴歌单分享链接或歌单 ID，客户端会拉取曲目并匹配站内曲库后导入。Web 播放器暂不支持该流程。"),
+                        "在 Android 或桌面客户端内选择「导入外部歌单」，粘贴歌单分享链接或歌单 ID，客户端会拉取曲目并匹配站内曲库后导入。"),
                 new Faq("支持哪些平台？",
                         "提供 Web 播放器，以及 Android、Windows、Linux、macOS 客户端。"),
                 new Faq("需要注册账号吗？",
@@ -229,15 +239,58 @@ public final class StaticPageSeoRenderer {
                         "是。源码托管在 GitHub（FantasyNetworkCN/NekoMusic 等仓库），遵循 AGPL-3.0 协议。"));
         String androidVer = publishedRelease().map(AppReleaseService.AppRelease::androidVer).orElse("");
         return new Page("/",
-                "Neko歌姬计划（原Neko云音乐）- 完全免费的在线音乐播放平台 | Neko Music",
-                "Neko歌姬计划是免费、开源、无广告的在线音乐播放平台，支持搜索、播放、收藏与歌单；"
-                + "Android / PC 客户端可从网易云、QQ 音乐、酷狗迁入歌单，多端同步。",
+                "Neko歌姬计划（原Neko云音乐）- 落雪音乐 LXMC 歌单导入与免费在线音乐 | Neko Music",
+                "Neko歌姬计划是免费、开源、无广告的在线音乐播放平台；支持落雪音乐 LX Music 导出的 LXMC / .lxmc 文件歌单导入，"
+                + "也可从网易云、QQ 音乐、酷狗迁入歌单，多端同步。",
                 "Neko歌姬计划,Neko云音乐,Neko Music,免费音乐,在线音乐,免费听歌,开源音乐,无广告音乐,"
+                + "落雪音乐,LX Music,LxMusic,LXMC,lxmc,落雪歌单导入,落雪音乐歌单迁移,"
                 + "网易云歌单迁移,QQ音乐歌单迁移,酷狗歌单迁移",
                 "Neko歌姬计划 - 免费开源的在线音乐播放平台",
-                "完全免费、开源、无广告：搜索、播放、收藏、歌单与多端同步，"
-                + "Android / PC 客户端支持从网易云音乐、QQ 音乐、酷狗音乐迁入歌单。",
+                "完全免费、开源、无广告：搜索、播放、收藏、歌单与多端同步；"
+                + "Web 支持导入落雪音乐 LX Music 的 LXMC / .lxmc 歌单文件，客户端支持网易云、QQ 音乐、酷狗歌单迁入。",
                 "首页 Home", sections, faqs, true, false, androidVer, List.of());
+    }
+
+    private Page lxmusicPage() {
+        List<Section> sections = List.of(
+                paragraph("落雪音乐 LX Music 歌单导入",
+                        "落雪音乐（LX Music）可以将用户整理好的歌单导出为 LXMC / .lxmc 文件。Neko歌姬计划提供网页端直接导入："
+                        + "上传文件后自动识别其中的歌单，选择目标歌单，再由服务器匹配站内曲库并完成迁移。",
+                        "整个过程无需安装 Neko 客户端，也无需把 LXMC 文件手动转换成 CSV、文本列表或逐首复制歌曲信息。"),
+                bullets("支持能力", List.of(
+                        "读取落雪音乐 LX Music 导出的 LXMC / .lxmc 歌单文件。",
+                        "文件包含多个歌单时，可先选择需要迁移的那一个。",
+                        "按曲名与歌手自动匹配 Neko 曲库，并尝试补全未命中的曲目。",
+                        "保留成功曲目的来源顺序，写入已有目标歌单或新建歌单。",
+                        "导入在服务器后台执行，离开进度页面后任务仍可继续。")),
+                bullets("导入步骤", List.of(
+                        "在落雪音乐中导出需要迁移的歌单，得到 .lxmc 文件。",
+                        "登录 Neko歌姬计划，打开本页或「我的歌单」。",
+                        "点击「导入落雪歌单」并上传 LXMC 文件。",
+                        "选择文件内歌单及目标歌单，等待后台匹配完成。")),
+                paragraph("兼容说明",
+                        "导入结果取决于站内曲库以及服务端能否补全对应音频；未找到的曲目会被标记为失败，但不会中断其余曲目导入。",
+                        "Neko歌姬计划是独立开源音乐平台，与落雪音乐官方无隶属关系，仅提供对 LXMC 导出文件的兼容导入能力。"));
+        List<Faq> faqs = List.of(
+                new Faq("LXMC 文件是什么？",
+                        "LXMC 是落雪音乐（LX Music）用于导出歌单的文件格式，通常带有 .lxmc 扩展名。Neko歌姬计划可以直接读取并解析其中的歌单。"),
+                new Faq("如何把落雪音乐歌单导入 Neko歌姬计划？",
+                        "登录 Web 播放器后打开「我的歌单」，点击「导入落雪歌单」，上传 LXMC 文件，选择文件内歌单和目标歌单后开始匹配导入。"),
+                new Faq("导入落雪歌单需要安装客户端吗？",
+                        "不需要。落雪 LXMC 歌单导入直接在 Web 端完成；Android 与 PC 客户端主要用于其它外部音乐平台的歌单迁移。"),
+                new Faq("为什么 LXMC 歌单里有些歌曲没有导入？",
+                        "站内曲库没有对应音频且服务端无法补全时，该曲目会显示失败。导入任务会继续处理剩余曲目。"),
+                new Faq("Neko歌姬计划与落雪音乐是什么关系？",
+                        "两者没有隶属或合作关系。Neko歌姬计划是独立开源音乐平台，仅支持导入落雪音乐导出的歌单文件。"));
+        return new Page("/lxmusic",
+                "落雪音乐 LX Music 歌单导入 - LXMC 文件迁移 | Neko歌姬计划",
+                "在线导入落雪音乐（LX Music）导出的 LXMC / .lxmc 歌单文件。上传后自动解析文件内歌单，选择目标歌单，"
+                        + "由 Neko 服务器匹配曲库并后台完成落雪歌单迁移。免费、无需安装客户端。",
+                "落雪音乐,落雪音乐歌单导入,落雪歌单迁移,LX Music,LxMusic,LXMC,lxmc,lxmc文件,"
+                        + "落雪音乐LXMC,落雪音乐怎么导入歌单,LX Music歌单导入,歌单迁移,Neko歌姬计划",
+                "落雪音乐 LX Music 歌单导入",
+                "上传落雪音乐导出的 LXMC / .lxmc 文件，自动识别歌单、匹配曲库并在后台完成迁移。",
+                "落雪导入 LX Music", sections, faqs, false, true, "", List.of());
     }
 
     private Page searchPage(String base) {
@@ -291,6 +344,7 @@ public final class StaticPageSeoRenderer {
         List<Section> sections = List.of(
                 bullets("安装包下载", packages),
                 bullets("歌单迁入步骤", List.of(
+                        "落雪音乐用户：在 Web 端「我的歌单」上传 LXMC / .lxmc 文件，选择目标歌单后匹配导入。",
                         "在网易云音乐 / QQ 音乐 / 酷狗音乐复制歌单分享链接，或记下歌单 ID。",
                         "安装并打开本页提供的 Android / Windows / Linux / macOS 客户端。",
                         "在客户端内找到「导入外部歌单」，粘贴链接或 ID，选择目标歌单并开始匹配导入。",
@@ -314,6 +368,8 @@ public final class StaticPageSeoRenderer {
                         "提供 Android、Windows、Linux（Debian 系 / Arch 系）与 macOS 客户端，另有免安装的 Web 播放器。"),
                 new Faq("如何导入网易云 / QQ 音乐 / 酷狗歌单？",
                         "在客户端内使用「导入外部歌单」，粘贴歌单分享链接或歌单 ID，客户端会按歌名与歌手匹配站内曲库后导入。"),
+                new Faq("如何导入落雪音乐 LX Music 的 LXMC 歌单？",
+                        "落雪 LXMC 歌单在 Web 端导入：登录后进入「我的歌单」，点击「导入落雪歌单」，上传 .lxmc 文件并选择目标歌单。"),
                 new Faq("安装时被系统拦截怎么办？",
                         "在系统设置中允许来自该开发者的应用；请务必从本站下载安装包。"),
                 new Faq("客户端是开源的吗？",
@@ -321,9 +377,9 @@ public final class StaticPageSeoRenderer {
         return new Page("/download",
                 "下载客户端 - Neko歌姬计划 | Android / Windows / Linux / macOS 免费音乐应用",
                 "下载 Neko 云音乐 Android / Windows / Linux / macOS 客户端：完全免费、开源透明，"
-                + "支持从网易云音乐、QQ 音乐、酷狗音乐迁入歌单。",
+                + "Web 支持落雪音乐 LX Music LXMC / .lxmc 歌单导入，客户端支持从网易云音乐、QQ 音乐、酷狗音乐迁入歌单。",
                 "Neko歌姬计划下载,APP下载,免费音乐APP,Android音乐,PC下载,桌面音乐,"
-                + "网易云导入歌单,QQ音乐导入歌单,酷狗导入歌单,Linux音乐播放器,macOS音乐",
+                + "落雪音乐,LX Music,LXMC,lxmc,落雪歌单导入,网易云导入歌单,QQ音乐导入歌单,酷狗导入歌单,Linux音乐播放器,macOS音乐",
                 "下载 Neko 云音乐客户端",
                 "选择你的平台，一键获取安装包：完全免费、开源透明，Android / PC 客户端支持从网易云音乐、QQ 音乐、酷狗音乐迁入歌单。",
                 "下载 Download", sections, faqs, true, true, pcVer, List.of());
@@ -499,7 +555,7 @@ public final class StaticPageSeoRenderer {
                 graph.add(softwareAppNode(page, base));
             }
             if (page.howTo()) {
-                graph.add(howToNode(base));
+                graph.add(howToNode(page, base));
             }
             if (!page.faqs().isEmpty()) {
                 graph.add(faqNode(page, pageUrl));
@@ -570,18 +626,30 @@ public final class StaticPageSeoRenderer {
         return list;
     }
 
-    private static ObjectNode howToNode(String base) {
+    private static ObjectNode howToNode(Page page, String base) {
         ObjectNode howTo = JSON.createObjectNode();
         howTo.put("@type", "HowTo");
-        howTo.put("@id", base + "/download#howto");
-        howTo.put("name", "从网易云音乐 / QQ 音乐 / 酷狗音乐迁入歌单");
-        howTo.put("description", "在 Neko 客户端内导入外部歌单的步骤。");
-        String[][] steps = {
-            {"复制歌单链接或 ID", "在网易云音乐 / QQ 音乐 / 酷狗音乐复制歌单分享链接，或记下歌单 ID。"},
-            {"安装并打开客户端", "安装 Neko歌姬计划提供的 Android / Windows / Linux / macOS 客户端。"},
-            {"使用「导入外部歌单」", "在客户端内选择「导入外部歌单」，粘贴链接或 ID 并选择目标歌单。"},
-            {"等待匹配完成", "客户端会按歌名与歌手匹配站内曲库并导入曲目。"}
-        };
+        boolean lxmusic = "/lxmusic".equals(page.path());
+        howTo.put("@id", base + page.path() + "#howto");
+        howTo.put("name", lxmusic
+                ? "导入落雪音乐 LX Music 的 LXMC 歌单"
+                : "从网易云音乐 / QQ 音乐 / 酷狗音乐迁入歌单");
+        howTo.put("description", lxmusic
+                ? "在 Neko歌姬计划 Web 端上传 LXMC 文件并匹配导入落雪歌单的步骤。"
+                : "在 Neko 客户端内导入外部歌单的步骤。");
+        String[][] steps = lxmusic
+                ? new String[][]{
+                    {"导出 LXMC 文件", "在落雪音乐中将需要迁移的歌单导出为 LXMC / .lxmc 文件。"},
+                    {"登录并打开我的歌单", "登录 Neko歌姬计划 Web 播放器，进入「我的歌单」。"},
+                    {"上传并选择歌单", "点击「导入落雪歌单」，上传文件并选择文件内歌单与目标歌单。"},
+                    {"等待后台匹配", "服务器会匹配站内曲库并将会员曲目按来源顺序导入目标歌单。"}
+                }
+                : new String[][]{
+                    {"复制歌单链接或 ID", "在网易云音乐 / QQ 音乐 / 酷狗音乐复制歌单分享链接，或记下歌单 ID。"},
+                    {"安装并打开客户端", "安装 Neko歌姬计划提供的 Android / Windows / Linux / macOS 客户端。"},
+                    {"使用「导入外部歌单」", "在客户端内选择「导入外部歌单」，粘贴链接或 ID 并选择目标歌单。"},
+                    {"等待匹配完成", "客户端会按歌名与歌手匹配站内曲库并导入曲目。"}
+                };
         ArrayNode stepArray = howTo.putArray("step");
         for (int i = 0; i < steps.length; i++) {
             ObjectNode step = JSON.createObjectNode();
@@ -677,6 +745,7 @@ public final class StaticPageSeoRenderer {
         sb.append("<a class=\"skip-link\" href=\"#main-content\">Skip to content / 跳到正文</a>\n");
         sb.append("<header>\n<nav aria-label=\"Main navigation\">\n");
         sb.append(link(base + "/", "首页 Home")).append(" | ")
+                .append(link(base + "/lxmusic", "落雪导入 LX Music")).append(" | ")
                 .append(link(base + "/download", "下载 Download")).append(" | ")
                 .append(link(base + "/ranking", "排行榜 Ranking")).append(" | ")
                 .append(link(base + "/latest", "最新 Latest")).append(" | ")
@@ -701,15 +770,23 @@ public final class StaticPageSeoRenderer {
         if (!page.faqs().isEmpty()) {
             appendFaq(sb, page.faqs());
         }
-        sb.append("<p class=\"actions\">")
-                .append("<a class=\"cta\" href=\"").append(esc(base + "/download")).append("\">下载客户端 Download</a> ")
-                .append("<a href=\"").append(esc(base + "/")).append("\">打开 Web 播放器</a></p>\n");
+        if ("/lxmusic".equals(page.path())) {
+            sb.append("<p class=\"actions\">")
+                    .append("<a class=\"cta\" href=\"").append(esc(base + "/playlists?import=lxmc"))
+                    .append("\">导入落雪歌单 Import LXMC</a> ")
+                    .append("<a href=\"").append(esc(base + "/playlists")).append("\">打开我的歌单</a></p>\n");
+        } else {
+            sb.append("<p class=\"actions\">")
+                    .append("<a class=\"cta\" href=\"").append(esc(base + "/download")).append("\">下载客户端 Download</a> ")
+                    .append("<a href=\"").append(esc(base + "/")).append("\">打开 Web 播放器</a></p>\n");
+        }
         sb.append("</main>\n");
         sb.append("<footer>\n");
         sb.append("<p>© ").append(Year.now().getValue()).append(" ").append(SITE_NAME_ZH)
                 .append(" (").append(SITE_NAME_EN).append(")")
                 .append(" · 免费开源在线音乐 / Free open-source online music</p>\n");
         sb.append("<p>").append(link(base + "/about", "关于 About")).append(" · ")
+                .append(link(base + "/lxmusic", "落雪导入 LX Music")).append(" · ")
                 .append(link(base + "/privacy", "隐私政策 Privacy")).append(" · ")
                 .append(link(base + "/download", "下载 Download")).append(" · ")
                 .append("<a href=\"").append(REPO).append("\" rel=\"noopener noreferrer\">GitHub</a> · ")

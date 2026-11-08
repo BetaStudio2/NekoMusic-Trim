@@ -372,6 +372,30 @@ onUnmounted(() => {
       </button>
     </section>
 
+    <!-- ==================== 落雪 LXMC 导入入口 ==================== -->
+    <section class="lxmc-entry" :aria-label="$t('home.lxmcTitle')">
+      <div class="lxmc-entry__icon">
+        <NIcon name="file-up" :size="30" />
+        <span>.lxmc</span>
+      </div>
+      <div class="lxmc-entry__copy">
+        <span class="lxmc-entry__badge">
+          <NIcon name="sparkles" :size="13" />
+          {{ $t('home.lxmcBadge') }}
+        </span>
+        <h2>{{ $t('home.lxmcTitle') }}</h2>
+        <p>{{ $t('home.lxmcDesc') }}</p>
+      </div>
+      <div class="lxmc-entry__actions">
+        <NButton variant="primary" icon="file-up" to="/playlists?import=lxmc">
+          {{ $t('home.lxmcImport') }}
+        </NButton>
+        <NButton variant="ghost" size="sm" icon-after="chevron-right" to="/lxmusic">
+          {{ $t('home.lxmcLearn') }}
+        </NButton>
+      </div>
+    </section>
+
     <!-- ==================== 动作卡 ==================== -->
     <section class="quick" :aria-label="$t('home.quickAria')">
       <NCard
@@ -785,6 +809,93 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ==================== 落雪 LXMC 入口 ==================== */
+.lxmc-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--n-space-5);
+  margin-bottom: clamp(24px, 3.5vw, 36px);
+  padding: clamp(18px, 2.8vw, 26px);
+  border: 1px solid rgba(95, 208, 224, 0.32);
+  border-radius: var(--n-radius-lg);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 86% 10%, rgba(95, 208, 224, 0.18), transparent 34%),
+    linear-gradient(110deg, rgba(95, 208, 224, 0.14), rgba(10, 20, 25, 0.9));
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.22);
+}
+
+.lxmc-entry::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.035), transparent);
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+
+.lxmc-entry__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border: 1px solid var(--n-accent-line);
+  border-radius: 20px;
+  background: rgba(4, 12, 16, 0.52);
+  color: var(--n-accent-strong);
+}
+
+.lxmc-entry__icon span {
+  position: absolute;
+  right: -8px;
+  bottom: -7px;
+  padding: 2px 7px;
+  border-radius: var(--n-radius-xs);
+  background: var(--n-accent);
+  color: var(--n-text-inverse);
+  font-size: 10px;
+  font-weight: var(--n-weight-bold);
+  letter-spacing: 0.03em;
+}
+
+.lxmc-entry__copy {
+  min-width: 0;
+}
+
+.lxmc-entry__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--n-accent-strong);
+  font-size: var(--n-text-xs);
+  font-weight: var(--n-weight-semibold);
+}
+
+.lxmc-entry h2 {
+  margin: var(--n-space-1) 0 2px;
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  font-weight: var(--n-weight-bold);
+  letter-spacing: -0.02em;
+}
+
+.lxmc-entry p {
+  margin: 0;
+  color: var(--n-text-muted);
+  font-size: var(--n-text-sm);
+  line-height: var(--n-leading-normal);
+}
+
+.lxmc-entry__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--n-space-2);
 }
 
 /* ==================== 动作卡 ==================== */
@@ -1203,6 +1314,16 @@ onUnmounted(() => {
   .playlist-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .lxmc-entry {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .lxmc-entry__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-left: calc(76px + var(--n-space-5));
+  }
 }
 
 /* ==================== 手机竖屏：横向卡片栏 ====================
@@ -1243,6 +1364,26 @@ onUnmounted(() => {
 
   .quick__card {
     gap: var(--n-space-3);
+  }
+
+  .lxmc-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .lxmc-entry__icon {
+    width: 62px;
+    height: 62px;
+  }
+
+  .lxmc-entry__actions {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: stretch;
+    padding-left: 0;
+  }
+
+  .lxmc-entry__actions :deep(.n-btn) {
+    width: 100%;
   }
 
   /* Hero 动作区：900px 断点给按钮加的 flex:1 1 auto 会在窄屏把

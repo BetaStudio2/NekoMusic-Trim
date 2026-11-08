@@ -123,6 +123,7 @@ public class SitemapHandler extends HttpServlet {
 
         // 固定页没有可靠的更新时间，宁可不写 lastmod，也不要每次请求都伪造“今天更新”。
         appendUrl(sb, base + "/", null, "weekly", "1.0", null);
+        appendUrl(sb, base + "/lxmusic", null, "weekly", "0.95", null);
         appendUrl(sb, base + "/search", null, "weekly", "0.9", null);
         appendUrl(sb, base + "/ranking", null, "daily", "0.85", null);
         appendUrl(sb, base + "/latest", null, "daily", "0.85", null);

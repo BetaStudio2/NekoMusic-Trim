@@ -46,7 +46,7 @@
 
 ## 4. 从落雪 / 网易云 / QQ 音乐 / 酷狗迁入歌单
 
-1. 落雪音乐用户在 Web 登录后进入「我的歌单」，点击「导入落雪歌单」，上传落雪导出的 `.lxmc` 文件，选择文件内歌单和目标歌单后开始匹配导入。
+1. 落雪音乐用户在 Web 登录后进入「我的歌单」，或打开 [落雪音乐 LX Music 歌单导入页](https://music.nekocore.cn/lxmusic)，上传落雪导出的 LXMC / `.lxmc` 文件，选择文件内歌单和目标歌单后开始匹配导入。
 2. 网易云 / QQ 音乐 / 酷狗用户可在 Android / Windows / Linux / macOS 客户端内找到「导入外部歌单」，粘贴歌单分享链接或歌单 ID，选择目标歌单并开始匹配导入。
 3. 服务端会按歌名与歌手匹配站内曲库，并将命中的曲目按来源顺序加入目标歌单。
 
@@ -78,7 +78,7 @@
 - 允许搜索引擎与 AI 抓取器抓取公开页面。
 - 结构化数据：Organization、WebSite、WebPage、CollectionPage、BreadcrumbList、ItemList、FAQPage、SoftwareApplication、HowTo、MusicRecording、AudioObject、MusicPlaylist。
 - 站点地图：索引文件下分固定页、歌曲页、歌单页三个子图，并为歌曲页附带封面图片条目。
-- 主要公开页面：`/`、`/download`、`/ranking`、`/latest`、`/about`、`/privacy`、`/detail/{id}`、`/playlist/{id}`。
-- 无 JS 抓取：对搜索引擎、链接预览与 AI 抓取器，`/`、`/download`、`/detail/{id}`、`/playlist/{id}` 等服务端直接返回含正文与 JSON-LD 的 HTML；普通浏览器加载 SPA。
+- 主要公开页面：`/`、`/lxmusic`、`/download`、`/ranking`、`/latest`、`/about`、`/privacy`、`/detail/{id}`、`/playlist/{id}`。
+- 无 JS 抓取：对搜索引擎、链接预览与 AI 抓取器，`/`、`/lxmusic`、`/download`、`/detail/{id}`、`/playlist/{id}` 等服务端直接返回含正文与 JSON-LD 的 HTML；普通浏览器加载 SPA。
 
 最后更新：2026 年。

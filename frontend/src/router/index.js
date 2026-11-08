@@ -55,9 +55,23 @@ const router = createRouter({
       meta: {
         title: '首页 - Neko歌姬计划 | 完全免费的音乐平台',
         description:
-          'Neko歌姬计划 - 完全免费的在线音乐播放平台；Android / PC 客户端支持从网易云、QQ 音乐、酷狗迁入歌单（粘贴链接或歌单 ID，匹配站内曲库）。开源、搜索与播放免费使用。',
+          'Neko歌姬计划 - 完全免费的在线音乐播放平台；支持落雪音乐 LX Music 导出的 LXMC 文件歌单导入，也可在 Android / PC 客户端从网易云、QQ 音乐、酷狗迁入歌单。开源、搜索与播放免费使用。',
         keywords:
-          'Neko歌姬计划,免费音乐,在线音乐,音乐播放,免费听歌,永久免费,无广告音乐,网易云歌单迁移,QQ音乐歌单迁移,酷狗歌单迁移,开源音乐'
+          'Neko歌姬计划,免费音乐,在线音乐,音乐播放,免费听歌,永久免费,无广告音乐,落雪音乐,LX Music,LxMusic,LXMC,lxmc,落雪歌单导入,落雪音乐歌单迁移,网易云歌单迁移,QQ音乐歌单迁移,酷狗歌单迁移,开源音乐'
+      }
+    },
+    {
+      path: '/lxmusic',
+      alias: ['/lxmc', '/luoxue-music'],
+      name: 'lxmusic',
+      component: () => import('@/views/LxmusicImportView.vue'),
+      meta: {
+        canonicalPath: '/lxmusic',
+        title: '落雪音乐 LX Music 歌单导入 - LXMC 文件迁移 | Neko歌姬计划',
+        description:
+          '在线导入落雪音乐（LX Music）导出的 LXMC / .lxmc 歌单文件。上传后自动解析文件内歌单，选择目标歌单，由 Neko 服务器匹配曲库并后台完成落雪歌单迁移。免费、无需安装客户端。',
+        keywords:
+          '落雪音乐,落雪音乐歌单导入,落雪歌单迁移,LX Music,LxMusic,LXMC,lxmc,lxmc文件,落雪音乐LXMC,落雪音乐怎么导入歌单,LX Music歌单导入,歌单迁移,Neko歌姬计划'
       }
     },
     {
@@ -87,8 +101,8 @@ const router = createRouter({
       meta: {
         title: '下载客户端 - Neko歌姬计划 | 免费音乐应用',
         description:
-          '下载 Neko 云音乐 Android / PC 客户端；支持从网易云音乐、QQ 音乐、酷狗音乐迁入歌单（链接或 ID）。完全免费、开源透明，多端一致体验。',
-        keywords: 'Neko歌姬计划下载,APP下载,免费音乐APP,移动音乐,PC下载,桌面音乐,网易云导入歌单,QQ音乐导入歌单,酷狗音乐导入歌单'
+          '下载 Neko 云音乐 Android / PC 客户端；Web 支持导入落雪音乐 LX Music 的 LXMC / .lxmc 歌单，客户端支持从网易云音乐、QQ 音乐、酷狗音乐迁入歌单。完全免费、开源透明，多端一致体验。',
+        keywords: 'Neko歌姬计划下载,APP下载,免费音乐APP,移动音乐,PC下载,桌面音乐,落雪音乐,LX Music,LXMC,lxmc,落雪歌单导入,网易云导入歌单,QQ音乐导入歌单,酷狗音乐导入歌单'
       }
     },
 
@@ -425,6 +439,7 @@ const NOINDEX_PREFIXES = [
  */
 const ROUTE_TITLE_KEYS = {
   home: 'route.home',
+  lxmusic: 'route.lxmusic',
   about: 'route.about',
   privacy: 'route.privacy',
   download: 'route.download',
@@ -470,12 +485,13 @@ router.beforeEach((to) => {
 
   const isNotFound = to.name === 'not-found'
   const isPrivate = NOINDEX_PREFIXES.some((p) => to.path === p || to.path.startsWith(`${p}/`))
-  const url = `${SITE_ORIGIN}${to.path === '/' ? '/' : to.path}`
+  const canonicalPath = to.meta.canonicalPath || to.path
+  const url = `${SITE_ORIGIN}${canonicalPath === '/' ? '/' : canonicalPath}`
   applyPageSeo({
     title,
     description,
     keywords,
-    path: to.path,
+    path: canonicalPath,
     robots: isNotFound ? NOT_FOUND_ROBOTS : isPrivate ? PRIVATE_ROBOTS : DEFAULT_ROBOTS,
     // 每条路由注入一个 WebPage 实体；与 index.html 中的 @graph 通过 @id 合并。
     jsonLd: {

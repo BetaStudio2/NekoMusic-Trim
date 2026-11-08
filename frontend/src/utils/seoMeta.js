@@ -13,9 +13,9 @@ export const PRIVATE_ROBOTS = 'noindex, nofollow'
 export const NOT_FOUND_ROBOTS = 'noindex, follow'
 
 export const DEFAULT_DESCRIPTION =
-  'Neko歌姬计划 - 完全免费的在线音乐播放平台，提供海量免费音乐资源、高品质音频播放、个性化收藏等功能。无需付费，永久免费。'
+  'Neko歌姬计划 - 完全免费的在线音乐播放平台，支持落雪音乐 LX Music LXMC 歌单导入、海量音乐搜索、高品质播放与个性化收藏。无需付费，永久免费。'
 export const DEFAULT_KEYWORDS =
-  'Neko歌姬计划,免费音乐,在线音乐,音乐播放,音乐搜索,音乐收藏,免费听歌,高品质音乐,无广告音乐,永久免费'
+  'Neko歌姬计划,免费音乐,在线音乐,音乐播放,音乐搜索,音乐收藏,免费听歌,高品质音乐,无广告音乐,永久免费,落雪音乐,LX Music,LxMusic,LXMC,lxmc,落雪歌单导入'
 
 function upsertMeta(attr, key, content) {
   if (content === undefined || content === null || content === '') return

@@ -247,7 +247,7 @@
 
 <script setup>
 import { computed, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import API_CONFIG from '@/config/apiConfig.js'
 import { openAuthDialog } from '@/composables/useAuthDialog'
 import { applyVipFromPlaylistsResponse } from '@/utils/userVip.js'
@@ -261,6 +261,7 @@ import { t } from '@/i18n'
 
 const toast = useToast()
 const router = useRouter()
+const route = useRoute()
 
 // 响应式数据
 const playlists = ref([])
@@ -823,8 +824,15 @@ function emitSseBlock(block, onEvent) {
   }
 }
 
-onMounted(() => {
-  fetchPlaylists()
+onMounted(async () => {
+  if (route.query.import === 'lxmc' && !getToken()) {
+    openAuthDialog('login')
+    return
+  }
+  await fetchPlaylists()
+  if (route.query.import !== 'lxmc') return
+  router.replace({ path: '/playlists' })
+  openImportDialog()
 })
 </script>
 

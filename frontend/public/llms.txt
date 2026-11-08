@@ -1,6 +1,6 @@
 # Neko歌姬计划 (Neko Music)
 
-> Neko歌姬计划（原 Neko 云音乐）是一个完全免费、开源、无广告的在线音乐播放平台，提供音乐搜索、免费在线播放、收藏与歌单，支持 Web 与 Android / Windows / Linux / macOS 客户端，并可从网易云音乐、QQ 音乐、酷狗音乐迁入歌单。
+> Neko歌姬计划（原 Neko 云音乐）是一个完全免费、开源、无广告的在线音乐播放平台，提供音乐搜索、免费在线播放、收藏与歌单，支持 Web 与 Android / Windows / Linux / macOS 客户端；Web 可直接导入落雪音乐 LX Music 导出的 LXMC / `.lxmc` 歌单，客户端也可从网易云音乐、QQ 音乐、酷狗音乐迁入歌单。
 
 ## 基本信息
 
@@ -9,12 +9,14 @@
 - 定价：完全免费，无订阅费用，无广告
 - 开源协议：AGPL-3.0
 - 支持平台：Web、Android、Windows、Linux、macOS
-- 歌单迁入：支持从网易云音乐、QQ 音乐、酷狗音乐导入（粘贴歌单分享链接或歌单 ID）
+- 落雪歌单导入：支持落雪音乐（LX Music）导出的 LXMC / `.lxmc` 文件，自动解析、匹配曲库并后台导入
+- 其它歌单迁入：支持从网易云音乐、QQ 音乐、酷狗音乐导入（粘贴歌单分享链接或歌单 ID）
 - 主要语言：简体中文、English
 
 ## 主要页面
 
 - [首页 / Web 播放器](https://music.nekocore.cn/)：在线搜索、播放、收藏与歌单。
+- [落雪音乐 LX Music 歌单导入](https://music.nekocore.cn/lxmusic)：上传 LXMC / `.lxmc` 文件，选择目标歌单后自动匹配导入。
 - [下载客户端](https://music.nekocore.cn/download)：Android / Windows / Linux / macOS 安装包，以及歌单迁入步骤与系统要求。
 - [热门排行榜](https://music.nekocore.cn/ranking)：按站内播放次数排序的热门曲目。
 - [最新音乐](https://music.nekocore.cn/latest)：最近上传到站内的曲目。
@@ -36,7 +38,8 @@
 - Neko歌姬计划是免费的吗？是，完全免费且无广告，项目开源。
 - Neko云音乐和网易云什么关系？没有任何关系，网易云属第三方平台。
 - 支持哪些平台？Web 播放器，以及 Android、Windows、Linux、macOS 客户端。
-- 如何迁入歌单？在 Android / PC 客户端内使用「导入外部歌单」，粘贴网易云音乐 / QQ 音乐 / 酷狗音乐的歌单链接或 ID。
+- 如何导入落雪音乐歌单？在 Web 登录后打开「我的歌单」，点击「导入落雪歌单」，上传落雪音乐导出的 LXMC / `.lxmc` 文件并选择目标歌单。
+- 如何迁入其它歌单？在 Android / PC 客户端内使用「导入外部歌单」，粘贴网易云音乐 / QQ 音乐 / 酷狗音乐的歌单链接或 ID。
 - 需要注册吗？浏览与搜索无需登录；收藏、歌单与多端同步需要账号。
 - 是开源项目吗？是，遵循 AGPL-3.0，源码托管于 GitHub。
 

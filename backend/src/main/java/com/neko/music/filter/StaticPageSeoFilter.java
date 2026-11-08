@@ -19,7 +19,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 为静态路由（首页 / 下载 / 关于 / 隐私 / 排行榜 / 最新）的爬虫请求返回服务端 HTML。
+ * 为静态路由（首页 / 落雪导入 / 下载 / 关于 / 隐私 / 排行榜 / 最新）的爬虫请求返回服务端 HTML。
  *
  * <p>普通浏览器直接放行到 SPA；只有爬虫 / 链接预览 / AI 抓取器会拿到
  * {@link StaticPageSeoRenderer} 生成的完整正文与 JSON-LD。需在 {@code Main} 中显式注册
