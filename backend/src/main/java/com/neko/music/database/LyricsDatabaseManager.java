@@ -1,6 +1,7 @@
 package com.neko.music.database;
 
 import com.neko.music.util.LyricsPlainTextExtractor;
+import com.neko.music.util.LyricsPlaceholderFilter;
 import com.neko.music.util.LrcValidator;
 import com.neko.music.util.NekoLyrics;
 import org.slf4j.Logger;
@@ -181,7 +182,9 @@ public class LyricsDatabaseManager {
             plain = NekoLyrics.plainText(document);
             placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
         } else {
-            content = LrcValidator.normalizeDuplicateTimestampTranslations(content);
+            content = LrcValidator.normalizeDuplicateTimestampTranslations(
+                    LyricsPlaceholderFilter.filterLrc(content));
+            content = LyricsPlaceholderFilter.filterLrc(content);
             plain = LyricsPlainTextExtractor.fromLrc(content);
             placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
         }

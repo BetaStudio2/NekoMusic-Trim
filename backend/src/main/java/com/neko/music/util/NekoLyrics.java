@@ -72,7 +72,16 @@ public final class NekoLyrics {
         if (lines == null || lines.isEmpty()) {
             return new Document(VERSION, List.of());
         }
-        List<Line> sorted = new ArrayList<>(lines);
+        List<Line> filtered = new ArrayList<>(lines.size());
+        for (Line line : lines) {
+            if (line != null && !LyricsPlaceholderFilter.isSlashPlaceholder(line.text())) {
+                filtered.add(line);
+            }
+        }
+        if (filtered.isEmpty()) {
+            return new Document(VERSION, List.of());
+        }
+        List<Line> sorted = new ArrayList<>(filtered);
         sorted.sort(Comparator.comparingLong(Line::startMs)
                 .thenComparingLong(Line::endMs));
         List<Line> normalized = new ArrayList<>(sorted.size());
@@ -87,8 +96,8 @@ public final class NekoLyrics {
                     line.startMs(),
                     end,
                     line.text(),
-                    blankToNull(line.translation()),
-                    blankToNull(line.romanization()),
+                    optionalText(line.translation()),
+                    optionalText(line.romanization()),
                     line.background(),
                     normalizeWords(line.words(), end)
             ));
@@ -129,7 +138,8 @@ public final class NekoLyrics {
 
     public static String toLrc(String content, String format) {
         if (!isNekoFormat(format) && !looksLikeNekoJson(content)) {
-            return content == null ? "" : content;
+            String filtered = LyricsPlaceholderFilter.filterLrc(content);
+            return filtered == null ? "" : filtered;
         }
         return deserialize(content).map(NekoLyrics::toLrc).orElse("");
     }
@@ -140,11 +150,14 @@ public final class NekoLyrics {
         }
         StringBuilder out = new StringBuilder();
         for (Line line : document.lines()) {
-            if (line.text().isBlank()) {
+            if (line.text().isBlank()
+                    || LyricsPlaceholderFilter.isSlashPlaceholder(line.text())) {
                 continue;
             }
             out.append(formatTimestamp(line.startMs())).append(line.text()).append('\n');
-            if (line.translation() != null && !line.translation().isBlank()) {
+            if (line.translation() != null
+                    && !line.translation().isBlank()
+                    && !LyricsPlaceholderFilter.isSlashPlaceholder(line.translation())) {
                 out.append("{\"").append(escapeTranslation(line.translation())).append("\"}\n");
             }
         }
@@ -157,7 +170,8 @@ public final class NekoLyrics {
         }
         StringBuilder out = new StringBuilder();
         for (Line line : document.lines()) {
-            if (line.text().isBlank()) {
+            if (line.text().isBlank()
+                    || LyricsPlaceholderFilter.isSlashPlaceholder(line.text())) {
                 continue;
             }
             if (!out.isEmpty()) {
@@ -201,5 +215,10 @@ public final class NekoLyrics {
 
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static String optionalText(String value) {
+        String cleaned = blankToNull(value);
+        return LyricsPlaceholderFilter.isSlashPlaceholder(cleaned) ? null : cleaned;
     }
 }

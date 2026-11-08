@@ -3,6 +3,7 @@ package com.neko.music.handlers;
 import com.neko.music.model.ErrorResponse;
 import com.neko.music.Main;
 import com.neko.music.util.NekoLyrics;
+import com.neko.music.util.LyricsPlaceholderFilter;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -135,7 +136,8 @@ public class MusicInfoHandler extends HttpServlet {
         if (lyricsContent == null) {
             return "";
         }
-        return LRC_TIMESTAMP.matcher(lyricsContent).replaceAll("[$1:$2.$3]");
+        String filtered = LyricsPlaceholderFilter.filterLrc(lyricsContent);
+        return LRC_TIMESTAMP.matcher(filtered).replaceAll("[$1:$2.$3]");
     }
 
     // 音乐对象：只读数据载体。
