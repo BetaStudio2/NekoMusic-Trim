@@ -608,10 +608,6 @@ public class Main {
         return neteaseSearchFillService;
     }
 
-    public static LyricsBackfillService getLyricsBackfillService() {
-        return lyricsBackfillService;
-    }
-
     public static ExternalImportService getExternalImportService() {
         return externalImportService;
     }

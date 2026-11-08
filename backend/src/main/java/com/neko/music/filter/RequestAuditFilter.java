@@ -107,8 +107,6 @@ public class RequestAuditFilter implements Filter {
             // 歌词
             new OperationRule("/api/admin/lyrics-files", Set.of("PUT"), "歌词管理", "修改歌词"),
             new OperationRule("/api/admin/lyrics-files", Set.of("DELETE"), "歌词管理", "删除歌词"),
-            new OperationRule("/api/admin/lyrics-backfill/start", Set.of("POST"), "歌词管理", "迁移逐字歌词"),
-            new OperationRule("/api/admin/lyrics-backfill/cancel", Set.of("POST"), "歌词管理", "取消逐字迁移"),
             // 音乐：/api/music 同时承载公开接口，这里只登记写方法；听歌识曲 /api/music/recognize 不在其列
             new OperationRule("/api/music/upload", Set.of("POST"), "音乐管理", "上传音乐"),
             new OperationRule("/api/music/upload", Set.of("PUT"), "音乐管理", "修改音乐"),
