@@ -21,10 +21,11 @@ public final class SsePaths {
             "/api/user/qrlogin/status",        // 扫码登录状态流：EventSource，浏览器自动重连
             "/api/user/notifications/stream",  // 站内消息实时推送：EventSource，无法自定义请求头
             "/api/admin/logs/access/stream",   // 后台访问日志实时流：同为 EventSource，仅靠管理端令牌鉴权
-            "/loser/netease/pull",             // 歌单导入进度流：四家音源统一的 SSE 长连接
+            "/loser/netease/pull",             // 歌单导入进度流：统一格式的 SSE 长连接
             "/loser/qq/pull",
             "/loser/kugou/pull",
-            "/loser/qishui/pull");
+            "/loser/qishui/pull",
+            "/loser/lxmc/pull");
 
     private SsePaths() {
     }

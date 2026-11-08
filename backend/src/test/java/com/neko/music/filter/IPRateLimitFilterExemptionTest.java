@@ -19,7 +19,8 @@ class IPRateLimitFilterExemptionTest {
             "/loser/netease/pull",
             "/loser/qq/pull",
             "/loser/kugou/pull",
-            "/loser/qishui/pull"};
+            "/loser/qishui/pull",
+            "/loser/lxmc/pull"};
 
     @Test
     void sseStreamsAreExempt() {

@@ -294,6 +294,22 @@ public final class ServletRegistrar {
         ServletHolder qishuiDetailHolder = new ServletHolder(new QishuiPlaylistDetailHandler());
         context.addServlet(qishuiDetailHolder, "/loser/qishui/getSongListDetail");
 
+        // 落雪 .lxmc 文件：先解析歌单列表，再上传同一文件按所选歌单发起后台匹配导入
+        long lxmcMaxBytes = com.neko.music.service.LxmcPlaylistParser.MAX_COMPRESSED_BYTES;
+        jakarta.servlet.MultipartConfigElement lxmcMultipartConfig =
+                new jakarta.servlet.MultipartConfigElement(
+                        System.getProperty("java.io.tmpdir"),
+                        lxmcMaxBytes,
+                        lxmcMaxBytes + 1024L * 1024L,
+                        64 * 1024
+                );
+        ServletHolder lxmcInspectHolder = new ServletHolder(new LxmcImportHandler());
+        lxmcInspectHolder.getRegistration().setMultipartConfig(lxmcMultipartConfig);
+        context.addServlet(lxmcInspectHolder, "/loser/lxmc/inspect");
+        ServletHolder lxmcImportHolder = new ServletHolder(new LxmcImportHandler());
+        lxmcImportHolder.getRegistration().setMultipartConfig(lxmcMultipartConfig);
+        context.addServlet(lxmcImportHolder, "/loser/lxmc/pull");
+
         // 网易云常用只读接口（兼容 NeteaseCloudMusicApi 路径），需要用户令牌
         ServletHolder neteaseCloudMusicHolder = new ServletHolder(new NeteaseCloudMusicHandler());
         context.addServlet(neteaseCloudMusicHolder, "/loser/netease/*");

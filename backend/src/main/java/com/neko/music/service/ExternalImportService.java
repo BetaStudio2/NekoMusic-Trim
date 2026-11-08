@@ -24,12 +24,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 外部歌单导入：把网易云 / QQ / 酷狗 / 汽水歌单的曲目入库并加入用户指定的歌单，SSE 进度由上层推送。
+ * 外部歌单导入：把网易云 / QQ / 酷狗 / 汽水 / 落雪歌单的曲目入库并加入用户指定的歌单，
+ * SSE 进度由上层推送。
  *
  * <ul>
  *   <li>网易云：按歌曲 ID 直接下载原曲入库（不经过站内搜索匹配）。</li>
- *   <li>QQ / 酷狗 / 汽水：歌单只提供元数据，因此先在站内曲库匹配，匹配不到再按「歌名 + 歌手」
- *       从网易云补全下载。</li>
+ *   <li>QQ / 酷狗 / 汽水 / 落雪：歌单只提供元数据，因此先在站内曲库匹配，匹配不到再按
+ *       「歌名 + 歌手」从网易云补全下载。</li>
  * </ul>
  */
 public class ExternalImportService {
@@ -39,6 +40,7 @@ public class ExternalImportService {
     public static final String SOURCE_QQ = "qq";
     public static final String SOURCE_KUGOU = "kugou";
     public static final String SOURCE_QISHUI = "qishui";
+    public static final String SOURCE_LXMC = "lxmc";
 
     public static final String STATUS_IMPORTED = "imported";
     public static final String STATUS_EXISTED = "existed";
@@ -152,6 +154,12 @@ public class ExternalImportService {
     /** 汽水音乐歌单导入。 */
     public void startQishuiImport(String playlistInput, ImportTarget target, Listener listener) {
         submit(target, () -> runQishuiImport(playlistInput, target, listener), listener);
+    }
+
+    /** 落雪音乐 .lxmc 文件中已解析出的单个歌单导入。 */
+    public void startLxmcImport(List<Track> tracks, ImportTarget target, Listener listener) {
+        submit(target, () -> runMatchedImport(SOURCE_LXMC, "落雪歌单为空或不可访问", tracks, target, listener),
+                listener);
     }
 
     public void shutdown() {
@@ -643,6 +651,7 @@ public class ExternalImportService {
             case SOURCE_QQ -> "QQ 音乐";
             case SOURCE_KUGOU -> "酷狗音乐";
             case SOURCE_QISHUI -> "汽水音乐";
+            case SOURCE_LXMC -> "落雪";
             default -> "外部";
         };
     }
