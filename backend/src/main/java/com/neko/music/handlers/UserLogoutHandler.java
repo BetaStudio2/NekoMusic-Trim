@@ -52,8 +52,9 @@ public class UserLogoutHandler extends ApiServlet {
         try {
             boolean authSessionRevoked = false;
             SharedWebSessionService sharedSessions = Main.getSharedWebSessionService();
-            if (!token.isEmpty() && sharedSessions != null
-                    && sharedSessions.isSharedSessionToken(token)) {
+            boolean sharedBrowserLogout = sharedSessions != null
+                    && sharedSessions.isSharedSessionToken(token);
+            if (sharedBrowserLogout) {
                 for (String cookieHeader : sharedSessions.revoke(token)) {
                     response.addHeader("Set-Cookie", cookieHeader);
                     authSessionRevoked = true;
@@ -65,7 +66,11 @@ public class UserLogoutHandler extends ApiServlet {
             // 共享会话令牌映射即使因 Redis 重启丢失，浏览器仍可能带着 Auth
             // 父域 Cookie。登出必须以 Auth 会话为准，不能只清掉 Music 本地令牌。
             NekoAuthAccountService authService = Main.getNekoAuthAccountService();
-            if (!authSessionRevoked && authService != null && !ssoSession.isBlank()) {
+            // 原生客户端的普通退出只吊销本机 OAuth Token；即使请求意外携带了
+            // 浏览器 Cookie，也不能撤销整条 Auth 会话族。
+            boolean browserCookieLogout = sharedBrowserLogout || token.isEmpty();
+            if (browserCookieLogout && !authSessionRevoked
+                    && authService != null && !ssoSession.isBlank()) {
                 for (String cookieHeader : authService.logoutSharedSession(ssoSession)) {
                     response.addHeader("Set-Cookie", cookieHeader);
                 }
