@@ -116,6 +116,10 @@ public final class ServletRegistrar {
         // 注册管理员歌词文件管理API处理器
         ServletHolder adminLyricsFileHolder = new ServletHolder(new AdminLyricsFileHandler());
         context.addServlet(adminLyricsFileHolder, "/api/admin/lyrics-files/*");
+
+        // 历史歌词逐字迁移（后台管理接口）
+        ServletHolder adminLyricsBackfillHolder = new ServletHolder(new AdminLyricsBackfillHandler());
+        context.addServlet(adminLyricsBackfillHolder, "/api/admin/lyrics-backfill/*");
         
         // 注册用户上传预览API处理器
         ServletHolder userUploadPreviewHolder = new ServletHolder(new UserUploadPreviewHandler());

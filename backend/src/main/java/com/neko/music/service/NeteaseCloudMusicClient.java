@@ -114,7 +114,8 @@ public class NeteaseCloudMusicClient {
         this.httpClient = HttpTransport.create(Duration.ofSeconds(config.getNeteaseHttpTimeoutSeconds()));
     }
 
-    public record NeteaseSongCandidate(long id, String title, String artist, String album) {}
+    public record NeteaseSongCandidate(
+            long id, String title, String artist, String album, int durationMs) {}
     public record SongPlayUrl(String url, String type, int durationMs, String level) {}
     public record SongDetail(String title, String artist, String album, String coverUrl, int durationMs) {}
     public record LyricApiPayload(String primaryLrc, String rawMain, NekoLyrics.Document rich) {}
@@ -399,7 +400,7 @@ public class NeteaseCloudMusicClient {
             String title = textOrEmpty(song.path("name"));
             if (id > 0 && !title.isEmpty()) {
                 result.add(new NeteaseSongCandidate(id, title, joinArtists(song.path("ar")),
-                        textOrEmpty(song.path("al").path("name"))));
+                        textOrEmpty(song.path("al").path("name")), song.path("dt").asInt(0)));
             }
         }
         return result;

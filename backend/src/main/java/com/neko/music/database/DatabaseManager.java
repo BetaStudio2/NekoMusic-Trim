@@ -104,6 +104,29 @@ public class DatabaseManager {
                 stmt.execute();
             }
 
+            String createMusicExternalRefsTable = """
+                CREATE TABLE IF NOT EXISTS music_external_refs (
+                    music_id INT NOT NULL,
+                    source VARCHAR(16) NOT NULL,
+                    external_id VARCHAR(128) NOT NULL,
+                    secondary_id VARCHAR(128) NULL,
+                    title_snapshot VARCHAR(255) NULL,
+                    artist_snapshot VARCHAR(255) NULL,
+                    album_snapshot VARCHAR(255) NULL,
+                    duration_ms INT NOT NULL DEFAULT 0,
+                    matched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (music_id, source),
+                    UNIQUE KEY uk_music_external_source_id (source, external_id),
+                    KEY idx_music_external_secondary (source, secondary_id),
+                    CONSTRAINT fk_music_external_refs_music
+                        FOREIGN KEY (music_id) REFERENCES music(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """;
+            try (PreparedStatement stmt = conn.prepareStatement(createMusicExternalRefsTable)) {
+                stmt.execute();
+            }
+
             // 移除旧版 music 表的 file_path / cover_path（一次 ALTER 合并 DROP，减少锁表次数）
             try {
                 List<String> dropParts = new ArrayList<>();

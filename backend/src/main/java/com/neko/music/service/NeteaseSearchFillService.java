@@ -289,6 +289,7 @@ public class NeteaseSearchFillService {
             Optional<AdminMusicIngestService.IngestedMusic> existing =
                     ingestService.findSameTitleDuplicate(title, artist, album);
             if (existing.isPresent()) {
+                saveNeteaseExternalRef(existing.get().id(), songId, title, artist, album, detail.durationMs());
                 return new ExactIngest(songId, title, artist, album, existing, true, FillReason.NONE);
             }
 
@@ -296,10 +297,12 @@ public class NeteaseSearchFillService {
                     "网易云歌单导入", "songId=" + songId + ", title=" + title);
             workDir = Files.createTempDirectory("neko-netease-import-");
             NeteaseCloudMusicClient.NeteaseSongCandidate candidate =
-                    new NeteaseCloudMusicClient.NeteaseSongCandidate(songId, title, artist, album);
+                    new NeteaseCloudMusicClient.NeteaseSongCandidate(
+                            songId, title, artist, album, detail.durationMs());
             Optional<AdminMusicIngestService.IngestedMusic> ingested =
                     downloadAndIngestUnderLock(candidate, workDir, songId, progressListener, true);
             if (ingested.isPresent()) {
+                saveNeteaseExternalRef(ingested.get().id(), songId, title, artist, album, detail.durationMs());
                 return new ExactIngest(songId, title, artist, album, ingested, false, FillReason.NONE);
             }
             boolean loggedIn = probeLoginStateAndReport();
@@ -616,6 +619,7 @@ public class NeteaseSearchFillService {
         if (result.isPresent()) {
             int ingestedMusicId = result.get().id();
             saveRichLyrics(ingestedMusicId, lyricsPrep.rich(), "netease_fill");
+            saveNeteaseExternalRef(result.get().id(), songId, title, artist, album, durationSec * 1000);
             lyricsPrep.invalidLyricsAlert().ifPresent(alert ->
                     {
                         Main.getEmailService().scheduleNeteaseInvalidLyricsAlertToAdmins(
@@ -855,6 +859,7 @@ public class NeteaseSearchFillService {
                 ? ingested
                 : ingestService.findExistingDuplicate(title, artist, album);
         result.ifPresent(music -> saveRichLyrics(music.id(), richLyrics, "qq_fill"));
+        result.ifPresent(music -> saveQqExternalRef(music.id(), candidate));
         return result;
     }
 
@@ -1016,6 +1021,31 @@ public class NeteaseSearchFillService {
             logger.warn("保存 Neko 字级歌词异常 musicId={} source={}: {}",
                     musicId, source, e.getMessage());
         }
+    }
+
+    private void saveNeteaseExternalRef(int musicId, long songId, String title, String artist,
+                                        String album, int durationMs) {
+        if (musicId <= 0 || songId <= 0 || Main.getMusicExternalRefDatabaseManager() == null) {
+            return;
+        }
+        Main.getMusicExternalRefDatabaseManager().upsert(
+                musicId, "netease", Long.toString(songId), null,
+                title, artist, album, durationMs);
+    }
+
+    private void saveQqExternalRef(int musicId, QQMusicClient.QqSongCandidate candidate) {
+        if (musicId <= 0 || candidate == null || Main.getMusicExternalRefDatabaseManager() == null) {
+            return;
+        }
+        Main.getMusicExternalRefDatabaseManager().upsert(
+                musicId,
+                "qq",
+                candidate.mid(),
+                candidate.songId() > 0 ? Long.toString(candidate.songId()) : null,
+                candidate.title(),
+                candidate.artist(),
+                candidate.album(),
+                candidate.durationMs());
     }
 
     private FillAttempt failReason(boolean loggedIn) {
