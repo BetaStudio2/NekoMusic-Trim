@@ -436,6 +436,7 @@ public class DatabaseManager {
 
             migrateUsersCreatedAtToDatetime(conn);
             dropUsersNicknameColumn(conn);
+            dropUsersAvatarColumn(conn);
 
             try {
                 // 检查email字段是否有唯一约束
@@ -485,27 +486,12 @@ public class DatabaseManager {
                 logger.debug("修改 email 字段为 NOT NULL 失败（可能已修改）: {}", e.getMessage());
             }
 
-            // 为已存在的 users 表添加 avatar 字段（如果不存在）
-            try {
-                String alterAvatarTable = """
-                    ALTER TABLE users
-                    ADD COLUMN IF NOT EXISTS avatar VARCHAR(500) DEFAULT NULL
-                    AFTER email
-                    """;
-                try (PreparedStatement stmt = conn.prepareStatement(alterAvatarTable)) {
-                    stmt.execute();
-                    logger.info("已为 users 表添加 avatar 字段");
-                }
-            } catch (SQLException e) {
-                logger.debug("avatar 字段可能已存在，跳过添加: {}", e.getMessage());
-            }
-
             // 为 users 表添加 VIP 到期时间（NULL 表示非会员）
             try {
                 String alterVip = """
                     ALTER TABLE users
                     ADD COLUMN IF NOT EXISTS vip_expires_at TIMESTAMP NULL DEFAULT NULL
-                    AFTER avatar
+                    AFTER email
                     """;
                 try (PreparedStatement stmt = conn.prepareStatement(alterVip)) {
                     stmt.execute();
@@ -702,6 +688,31 @@ public class DatabaseManager {
             }
         } catch (SQLException e) {
             logger.warn("删除 users.nickname 字段失败；代码已不再读写该列，请检查数据库迁移权限: {}",
+                    e.getMessage());
+        }
+    }
+
+    /** NekoAuth 是头像唯一权威源；旧库中的 users.avatar 直接删除。 */
+    private void dropUsersAvatarColumn(Connection conn) {
+        try {
+            String checkColumn = """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                AND table_name = 'users'
+                AND column_name = 'avatar'
+                """;
+            try (PreparedStatement stmt = conn.prepareStatement(checkColumn);
+                 ResultSet rs = stmt.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) {
+                    try (PreparedStatement dropStmt = conn.prepareStatement(
+                            "ALTER TABLE users DROP COLUMN avatar")) {
+                        dropStmt.execute();
+                        logger.info("已删除 users.avatar 字段（头像改由 NekoAuth 实时提供）");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            logger.warn("删除 users.avatar 字段失败；代码已不再读写该列，请检查数据库迁移权限: {}",
                     e.getMessage());
         }
     }

@@ -15,11 +15,10 @@ public record User(
         String password,
         String email,
         boolean emailVerified,
-        String avatar,
         String createdAt,
         Timestamp vipExpiresAt) {
 
     public User(String nickname, String password, String email) {
-        this(0, nickname, password, email, false, null, null, null);
+        this(0, nickname, password, email, false, null, null);
     }
 }

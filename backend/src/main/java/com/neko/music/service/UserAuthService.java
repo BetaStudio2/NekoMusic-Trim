@@ -182,7 +182,7 @@ public class UserAuthService {
             return user;
         }
         return new User(user.id(), nickname, user.password(), user.email(), user.emailVerified(),
-                user.avatar(), user.createdAt(), user.vipExpiresAt());
+                user.createdAt(), user.vipExpiresAt());
     }
 
     /**
@@ -232,7 +232,6 @@ public class UserAuthService {
                 null,
                 email,
                 false,
-                null,
                 DbTimeUtil.formatStoredWallClock(rs.getString("created_at")),
                 hasVip ? vipTs : null);
     }
