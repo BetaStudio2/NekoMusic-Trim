@@ -3,6 +3,7 @@ package com.neko.music.service;
 import com.neko.music.Main;
 import com.neko.music.database.LyricsDatabaseManager;
 import com.neko.music.util.LyricsPlainTextExtractor;
+import com.neko.music.util.NekoLyrics;
 import com.neko.music.util.VideoRenderPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,7 +74,7 @@ public class LyricsSearchIndex {
 
             int indexed = 0;
             for (LyricsDatabaseManager.StoredLyrics lyrics : Main.getLyricsDatabaseManager().findAllForIndex()) {
-                if (indexOne(lyrics.musicId(), lyrics.content(), lyrics.plainText())) {
+                if (indexOne(lyrics.musicId(), lyrics.content(), lyrics.plainText(), lyrics.format())) {
                     indexed++;
                 }
             }
@@ -208,15 +209,22 @@ public class LyricsSearchIndex {
             Files.createDirectories(PLAIN_DIR);
             Main.getLyricsDatabaseManager()
                     .findByMusicId(musicId)
-                    .ifPresent(lyrics -> indexOne(lyrics.musicId(), lyrics.content(), lyrics.plainText()));
+                    .ifPresent(lyrics -> indexOne(
+                            lyrics.musicId(), lyrics.content(), lyrics.plainText(), lyrics.format()));
         } catch (Exception e) {
             logger.warn("重建歌词索引失败 musicId={}: {}", musicId, e.toString());
         }
     }
 
     private boolean indexOne(int musicId, String lrcContent, String precomputedPlain) {
+        return indexOne(musicId, lrcContent, precomputedPlain, "lrc");
+    }
+
+    private boolean indexOne(int musicId, String content, String precomputedPlain, String format) {
         String indexed = precomputedPlain == null || precomputedPlain.isBlank()
-                ? LyricsPlainTextExtractor.fromLrc(lrcContent)
+                ? (NekoLyrics.isNekoFormat(format)
+                    ? NekoLyrics.deserialize(content).map(NekoLyrics::plainText).orElse("")
+                    : LyricsPlainTextExtractor.fromLrc(content))
                 : precomputedPlain;
         // plain_text 可能是历史遗留或外部写入的未归一原文（如繁体、带空白），必须在这里再归一一次：
         // 查询侧是归一后的文本，索引侧不归一就会出现「繁体歌词永远搜不到简体关键词」。

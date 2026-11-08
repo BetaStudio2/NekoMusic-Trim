@@ -160,7 +160,7 @@ public class VideoRenderService {
 
     private List<LrcParser.Line> loadLyrics(int musicId) {
         return Main.getLyricsDatabaseManager().findByMusicId(musicId)
-                .flatMap(lyrics -> LrcParser.parseString(lyrics.content()))
+                .flatMap(lyrics -> LrcParser.parseString(lyrics.lrcContent()))
                 .orElse(List.of());
     }
 

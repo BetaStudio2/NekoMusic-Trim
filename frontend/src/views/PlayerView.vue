@@ -351,6 +351,7 @@ import { useLiteMode } from '@/composables/useLiteMode'
 import { isMobileDevice } from '@/utils/mobile.js'
 import { usePlaybackBridge } from '@/composables/usePlaybackBridge'
 import { applyPageSeo, DEFAULT_ROBOTS, PRIVATE_ROBOTS, SITE_ORIGIN } from '@/utils/seoMeta'
+import { parseLyricsPayload } from '@/utils/lyrics.js'
 
 const toast = useToast()
 
@@ -547,7 +548,7 @@ const fetchMusicDetail = async (musicId) => {
       favoriteCount.value = Number.isFinite(count) ? count : null
       const lyricsText = typeof data.data?.lyrics === 'string' ? data.data.lyrics : ''
       lyrics.value = lyricsText
-      parseLrcLyrics(lyricsText)
+      parsedLyrics.value = parseLyricsPayload(data.data)
       syncPlayStateFromStorage()
     } else {
       console.error('获取音乐详情失败:', data.message)
@@ -583,68 +584,6 @@ const loadMusicById = async (musicId) => {
   await fetchMusicDetail(id)
   // 启动定时器以持续更新歌词 / 对齐全局播放状态
   startTimer()
-}
-
-// 解析LRC歌词格式
-const parseLrcLyrics = (lrcText) => {
-  if (!lrcText) {
-    parsedLyrics.value = []
-    return
-  }
-  
-  const lines = lrcText.split('\n')
-  const parsed = []
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim()
-    
-    // 跳过空行
-    if (!line) {
-      continue
-    }
-    
-    // 匹配时间戳歌词行 [mm:ss.xx] 或 [mm:ss.xxx]
-    const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/
-    const timeMatch = line.match(timeRegex)
-    
-    if (timeMatch) {
-      // 这是歌词行，提取时间和文本
-      const minutes = parseInt(timeMatch[1])
-      const seconds = parseInt(timeMatch[2])
-      const milliseconds = parseInt(timeMatch[3])
-      
-      // 根据毫秒部分的位数正确计算秒数
-      let millisecondsDivisor
-      if (milliseconds.toString().length === 2) {
-        millisecondsDivisor = 100 // 两位毫秒，如 .25
-      } else {
-        millisecondsDivisor = 1000 // 三位毫秒，如 .250
-      }
-      const timeInSeconds = minutes * 60 + seconds + (milliseconds / millisecondsDivisor)
-      const text = line.replace(timeRegex, '').trim()
-      
-      // 查找下一行是否有翻译
-      let translation = ''
-      if (i + 1 < lines.length) {
-        const nextLine = lines[i + 1].trim()
-        // 检查是否是JSON格式的翻译行
-        const jsonMatch = nextLine.match(/^\{["\'](.+)["\']\}$/)
-        if (jsonMatch) {
-          translation = jsonMatch[1]
-        }
-      }
-      
-      parsed.push({
-        time: timeInSeconds,
-        text: text,
-        translation: translation
-      })
-    }
-  }
-  
-  // 按时间排序
-  parsed.sort((a, b) => a.time - b.time)
-  parsedLyrics.value = parsed
 }
 
 /** 进入详情或外部切歌后，与 localStorage 对齐本页「是否正在播当前曲」 */

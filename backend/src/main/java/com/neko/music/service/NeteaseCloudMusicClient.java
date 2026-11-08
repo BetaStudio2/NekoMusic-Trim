@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.neko.music.config.ConfigManager;
 import com.neko.music.util.HttpTransport;
+import com.neko.music.util.NekoLyrics;
 import com.neko.music.util.NeteaseLyricParser;
 import com.neko.music.util.OutboundUrlGuard;
 import org.slf4j.Logger;
@@ -116,7 +117,7 @@ public class NeteaseCloudMusicClient {
     public record NeteaseSongCandidate(long id, String title, String artist, String album) {}
     public record SongPlayUrl(String url, String type, int durationMs, String level) {}
     public record SongDetail(String title, String artist, String album, String coverUrl, int durationMs) {}
-    public record LyricApiPayload(String primaryLrc, String rawMain) {}
+    public record LyricApiPayload(String primaryLrc, String rawMain, NekoLyrics.Document rich) {}
     /** 扫码轮询结果：code 800 过期 / 801 待扫码 / 802 待确认 / 803 已确认（cookie 已下发）。 */
     public record QrLoginCheck(int code, String cookie, String nickname, String avatarUrl) {}
     /** 当前登录账号资料。 */
@@ -471,7 +472,7 @@ public class NeteaseCloudMusicClient {
     public LyricApiPayload fetchLyricPayload(long songId) throws IOException {
         JsonNode root = fetchLyricRaw(songId);
         NeteaseLyricParser.ParsedLyrics parsed = NeteaseLyricParser.parse(root);
-        return new LyricApiPayload(parsed.lrc(), parsed.rawMain());
+        return new LyricApiPayload(parsed.lrc(), parsed.rawMain(), parsed.rich());
     }
 
     public JsonNode fetchLyricRaw(long songId) throws IOException {

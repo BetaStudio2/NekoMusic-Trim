@@ -2,6 +2,7 @@ package com.neko.music.handlers;
 
 import com.neko.music.model.ErrorResponse;
 import com.neko.music.Main;
+import com.neko.music.util.NekoLyrics;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,7 +72,7 @@ public class MusicInfoHandler extends HttpServlet {
      */
     private Music getMusicById(int musicId) {
         Music music = null;
-        String lyrics = getLyricsById(musicId);
+        LyricsView lyrics = getLyricsById(musicId);
 
         try (Connection conn = Main.getDatabaseManager().getConnection()) {
             String sql = "SELECT m.id, m.title, m.artist, m.album, m.duration, m.language, m.tags, " +
@@ -98,7 +99,9 @@ public class MusicInfoHandler extends HttpServlet {
                             rs.getTimestamp("updated_at").toString(),
                             rs.getString("max_quality"),
                             rs.getInt("favorite_count"),
-                            lyrics);
+                            lyrics.format(),
+                            lyrics.lrc(),
+                            lyrics.rich());
                 }
             }
         } catch (Exception e) {
@@ -111,17 +114,21 @@ public class MusicInfoHandler extends HttpServlet {
     /**
      * 根据音乐ID获取歌词；没有歌词时返回空字符串。
      */
-    private String getLyricsById(int musicId) {
+    private LyricsView getLyricsById(int musicId) {
         try {
             var stored = Main.getLyricsDatabaseManager().findByMusicIdCached(musicId);
             if (stored.isPresent()) {
-                return normalizeLrc(stored.get().content());
+                var lyrics = stored.get();
+                return new LyricsView(
+                        lyrics.format(),
+                        normalizeLrc(lyrics.lrcContent()),
+                        lyrics.richLyrics().orElse(null));
             }
             logger.debug("数据库歌词不存在 musicId={}", musicId);
         } catch (Exception e) {
             logger.error("获取歌词失败 musicId={}", musicId, e);
         }
-        return "";
+        return new LyricsView("lrc", "", null);
     }
 
     private String normalizeLrc(String lyricsContent) {
@@ -145,7 +152,12 @@ public class MusicInfoHandler extends HttpServlet {
             String updatedAt,
             String maxQuality,
             int favoriteCount,
-            String lyrics) {
+            String lyricsFormat,
+            String lyrics,
+            NekoLyrics.Document lyricsRich) {
+    }
+
+    private record LyricsView(String format, String lrc, NekoLyrics.Document rich) {
     }
     
     // 内部类用于表示单个音乐响应

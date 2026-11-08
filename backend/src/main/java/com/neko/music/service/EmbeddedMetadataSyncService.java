@@ -77,7 +77,7 @@ public final class EmbeddedMetadataSyncService {
         }
         return lyricsDatabaseManager.findByMusicId(musicId)
                 .filter(stored -> !stored.placeholder())
-                .map(LyricsDatabaseManager.StoredLyrics::content)
+                .map(LyricsDatabaseManager.StoredLyrics::lrcContent)
                 .orElse("");
     }
 

@@ -26,6 +26,9 @@ class NeteaseLyricParserTest {
                 [00:01.000]你好
                 [00:03.000]世界""", parsed.lrc());
         assertEquals(yrc, parsed.rawMain());
+        assertEquals(3, parsed.rich().lines().size());
+        assertEquals("你", parsed.rich().lines().get(1).words().get(0).text());
+        assertEquals(1_000, parsed.rich().lines().get(1).words().get(0).startMs());
     }
 
     @Test
@@ -40,8 +43,8 @@ class NeteaseLyricParserTest {
 
         assertEquals("""
                 [00:01.250]旧版冒号毫秒
-                [00:03.0]缺少毫秒
-                [00:05.50]普通 LRC""", parsed.lrc());
+                [00:03.000]缺少毫秒
+                [00:05.500]普通 LRC""", parsed.lrc());
         assertEquals(lrc, parsed.rawMain());
     }
 
@@ -63,6 +66,7 @@ class NeteaseLyricParserTest {
         assertEquals("""
                 [00:01.000]Hello
                 {"你好"}""", parsed.lrc());
+        assertEquals("你好", parsed.rich().lines().get(0).translation());
     }
 
     @Test

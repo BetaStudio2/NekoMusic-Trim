@@ -2,6 +2,7 @@ package com.neko.music.database;
 
 import com.neko.music.util.LyricsPlainTextExtractor;
 import com.neko.music.util.LrcValidator;
+import com.neko.music.util.NekoLyrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -148,8 +149,12 @@ public class LyricsDatabaseManager {
     }
 
     public boolean upsert(int musicId, String content, String source) {
+        return upsert(musicId, content, "lrc", source);
+    }
+
+    public boolean upsert(int musicId, String content, String format, String source) {
         try (Connection conn = databaseManager.getConnection()) {
-            upsert(conn, musicId, content, source);
+            upsert(conn, musicId, content, format, source);
             return true;
         } catch (SQLException e) {
             logger.warn("保存歌词失败 musicId={}: {}", musicId, e.toString());
@@ -158,19 +163,35 @@ public class LyricsDatabaseManager {
     }
 
     public void upsert(Connection conn, int musicId, String content, String source) throws SQLException {
+        upsert(conn, musicId, content, "lrc", source);
+    }
+
+    public void upsert(Connection conn, int musicId, String content,
+                       String format, String source) throws SQLException {
         if (musicId <= 0 || content == null) {
             throw new SQLException("无效的歌词参数");
         }
-        content = LrcValidator.normalizeDuplicateTimestampTranslations(content);
+        String normalizedFormat = format == null || format.isBlank() ? "lrc" : format.trim();
+        String plain;
+        boolean placeholder;
+        if (NekoLyrics.isNekoFormat(normalizedFormat)) {
+            NekoLyrics.Document document = NekoLyrics.deserialize(content)
+                    .orElseThrow(() -> new SQLException("Neko 歌词格式无效"));
+            content = NekoLyrics.serialize(document);
+            plain = NekoLyrics.plainText(document);
+            placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
+        } else {
+            content = LrcValidator.normalizeDuplicateTimestampTranslations(content);
+            plain = LyricsPlainTextExtractor.fromLrc(content);
+            placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
+        }
         String normalizedSource = source == null || source.isBlank() ? "manual" : source.trim();
-        String plain = LyricsPlainTextExtractor.fromLrc(content);
-        boolean placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
         int sizeBytes = content.getBytes(StandardCharsets.UTF_8).length;
         String hash = sha256Hex(content);
         String sql = """
                 INSERT INTO music_lyrics
                     (music_id, content, plain_text, content_hash, format, source, is_placeholder, size_bytes)
-                VALUES (?, ?, ?, ?, 'lrc', ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     content = VALUES(content),
                     plain_text = VALUES(plain_text),
@@ -186,9 +207,10 @@ public class LyricsDatabaseManager {
             stmt.setString(2, content);
             stmt.setString(3, plain);
             stmt.setString(4, hash);
-            stmt.setString(5, normalizedSource);
-            stmt.setBoolean(6, placeholder);
-            stmt.setInt(7, sizeBytes);
+            stmt.setString(5, normalizedFormat);
+            stmt.setString(6, normalizedSource);
+            stmt.setBoolean(7, placeholder);
+            stmt.setInt(8, sizeBytes);
             stmt.executeUpdate();
         }
         invalidateCached(musicId);
@@ -247,6 +269,15 @@ public class LyricsDatabaseManager {
             Timestamp createdAt,
             Timestamp updatedAt
     ) {
+        public String lrcContent() {
+            return NekoLyrics.toLrc(content, format);
+        }
+
+        public Optional<NekoLyrics.Document> richLyrics() {
+            return NekoLyrics.isNekoFormat(format)
+                    ? NekoLyrics.deserialize(content)
+                    : Optional.empty();
+        }
     }
 
     public record AdminLyricsMeta(

@@ -6,7 +6,10 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.neko.music.config.ConfigManager;
 import com.neko.music.util.HttpTransport;
+import com.neko.music.util.NekoLyrics;
 import com.neko.music.util.OutboundUrlGuard;
+import com.neko.music.util.QqLyricParser;
+import com.neko.music.util.QqQrcCrypto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -290,7 +293,7 @@ public class QQMusicClient {
     // ───────────────────── 外站补全：搜索 / 取链 / 下载 / 登录态 ─────────────────────
 
     /** 一次搜索命中的 QQ 曲目（含取链所需的 media_mid）。 */
-    public record QqSongCandidate(String mid, String mediaMid, String title, String artist,
+    public record QqSongCandidate(long songId, String mid, String mediaMid, String title, String artist,
                                   String album, String coverUrl, int durationMs) {
     }
 
@@ -687,6 +690,61 @@ public class QQMusicClient {
         return lyric.isBlank() ? decodeLyricBase64(json.path("trans").asText("")) : lyric;
     }
 
+    /**
+     * 拉取 QQ 音乐 QRC 富歌词并转换成 Neko 统一格式。
+     * 请求失败或无 QRC 时回退到旧 LRC 接口，保证仍能生成行级歌词。
+     */
+    public NekoLyrics.Document fetchNekoLyrics(QqSongCandidate candidate) throws IOException {
+        if (candidate == null) {
+            return new NekoLyrics.Document(NekoLyrics.VERSION, List.of());
+        }
+        if (candidate.songId() > 0) {
+            try {
+                ObjectNode param = objectMapper.createObjectNode();
+                param.put("albumName", base64Text(candidate.album()));
+                param.put("crypt", 1);
+                param.put("ct", 19);
+                param.put("cv", 2111);
+                param.put("interval", candidate.durationMs());
+                param.put("lrc_t", 0);
+                param.put("qrc", 1);
+                param.put("qrc_t", 0);
+                param.put("roma", 1);
+                param.put("roma_t", 0);
+                param.put("singerName", base64Text(candidate.artist()));
+                param.put("songID", candidate.songId());
+                param.put("songName", base64Text(candidate.title()));
+                param.put("trans", 1);
+                param.put("trans_t", 0);
+                param.put("type", 0);
+
+                ObjectNode module = objectMapper.createObjectNode();
+                module.put("module", "music.musichallSong.PlayLyricInfo");
+                module.put("method", "GetPlayLyricInfo");
+                module.set("param", param);
+
+                ObjectNode body = objectMapper.createObjectNode();
+                body.set("comm", moduleComm());
+                body.set("req_0", module);
+                JsonNode root = postJson(UPSTREAM, objectMapper.writeValueAsString(body),
+                        Map.of("User-Agent", WEB_UA));
+                JsonNode data = root.path("req_0").path("data");
+                String lyric = QqQrcCrypto.decrypt(data.path("lyric").asText(""));
+                String trans = QqQrcCrypto.decrypt(data.path("trans").asText(""));
+                String roma = QqQrcCrypto.decrypt(data.path("roma").asText(""));
+                NekoLyrics.Document document = QqLyricParser.parse(lyric, trans, roma);
+                if (!document.isEmpty()) {
+                    return document;
+                }
+            } catch (Exception e) {
+                logger.warn("获取 QQ QRC 歌词失败，回退 LRC: songId={} mid={} err={}",
+                        candidate.songId(), candidate.mid(), e.getMessage());
+            }
+        }
+        String lrc = fetchLyric(candidate.mid());
+        return QqLyricParser.parse(lrc, "", "");
+    }
+
     /** 解码歌词字段的 Base64 文本（容忍换行）；空值或非法 Base64 返回空串。 */
     private static String decodeLyricBase64(String encoded) {
         if (encoded == null || encoded.isBlank()) {
@@ -766,6 +824,7 @@ public class QQMusicClient {
     }
 
     private QqSongCandidate toCandidate(JsonNode song) {
+        long songId = song.path("id").asLong(0);
         String mid = song.path("mid").asText("").trim();
         String title = song.path("title").asText(song.path("name").asText("")).trim();
         if (mid.isEmpty() || title.isEmpty()) {
@@ -781,8 +840,13 @@ public class QQMusicClient {
         String cover = albumMid.isEmpty()
                 ? ""
                 : "https://y.gtimg.cn/music/photo_new/T002R800x800M000" + albumMid + ".jpg";
-        return new QqSongCandidate(mid, mediaMid, title, joinSingers(song.path("singer")),
+        return new QqSongCandidate(songId, mid, mediaMid, title, joinSingers(song.path("singer")),
                 albumName, cover, song.path("interval").asInt(0) * 1000);
+    }
+
+    private static String base64Text(String value) {
+        return Base64.getEncoder().encodeToString(
+                (value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
     }
 
     /** 移动端 comm：模块调用（用户资料等）。 */

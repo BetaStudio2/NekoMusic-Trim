@@ -189,8 +189,9 @@ public class AdminLyricsFileHandler extends ApiServlet {
             return;
         }
 
-        ObjectNode data = buildDbFileNode(musicId, stored.get().content(), musicMetaById());
-        data.put("content", stored.get().content());
+        String lrc = stored.get().lrcContent();
+        ObjectNode data = buildDbFileNode(musicId, lrc, musicMetaById());
+        data.put("content", lrc);
         sendResponse(response, true, "admin.lyrics.read_ok", data);
     }
 

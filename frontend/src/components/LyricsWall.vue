@@ -68,14 +68,32 @@ const lyricLines = computed(() =>
     const startTime = toMs(line.time)
     const next = props.lines[i + 1]
     // 下一行起点即本行终点；最后一行给一个兜底时长
-    const endTime = next ? Math.max(startTime + 1, toMs(next.time)) : startTime + props.tailMs
+    const rawEnd = Number(line.endTime)
+    const endTime = Number.isFinite(rawEnd) && rawEnd > line.time
+      ? toMs(rawEnd)
+      : (next ? Math.max(startTime + 1, toMs(next.time)) : startTime + props.tailMs)
+    const sourceWords = Array.isArray(line.words) ? line.words : []
+    const words = sourceWords.length
+      ? sourceWords.map((word, wi) => {
+          const wordStart = toMs(word.startTime)
+          const nextWord = sourceWords[wi + 1]
+          const wordEnd = Number.isFinite(Number(word.endTime))
+            ? toMs(word.endTime)
+            : (nextWord ? toMs(nextWord.startTime) : endTime)
+          return {
+            word: word.text || '',
+            startTime: Math.max(startTime, wordStart),
+            endTime: Math.max(startTime + 1, wordEnd),
+          }
+        })
+      : [{ word: line.text || '', startTime, endTime }]
     return {
-      words: [{ word: line.text || '', startTime, endTime }],
+      words,
       translatedLyric: line.translation || '',
-      romanLyric: '',
+      romanLyric: line.romanization || '',
       startTime,
       endTime,
-      isBG: false,
+      isBG: !!line.background,
       isDuet: false,
     }
   })

@@ -4,18 +4,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 网易云歌词解析：把 lyric_new 返回的 YRC / LRC / 翻译统一转换成项目当前使用的逐行 LRC。
+ * 网易云歌词解析：把 lyric_new 返回的 YRC / LRC / 翻译统一转换成 Neko 字级格式。
  *
- * <p>本阶段只保留行级时间轴，不把字级片段写入数据库。新版 YRC 的
+ * <p>新版 YRC 的
  * {@code [start,dur](start,dur,flag)text} 与旧版 YRC 的
- * {@code [mm:ss.xxx]<offset,dur>text} 都会先还原成纯文本行。</p>
+ * {@code [mm:ss.xxx]<offset,dur>text} 都会保留字级时间，并同时提供普通 LRC 兼容文本。</p>
  */
 public final class NeteaseLyricParser {
 
@@ -23,7 +21,8 @@ public final class NeteaseLyricParser {
     private static final Pattern NEW_YRC_LINE = Pattern.compile("^\\[(\\d+),(\\d+)\\](.*)$");
     private static final Pattern NEW_YRC_FRAGMENT =
             Pattern.compile("\\((\\d+),(\\d+),\\d+\\)([^(\\r\\n]*)");
-    private static final Pattern OLD_YRC_FRAGMENT = Pattern.compile("<\\d+,\\d+>");
+    private static final Pattern OLD_YRC_FRAGMENT =
+            Pattern.compile("<(\\d+),(\\d+)>([^<\\r\\n]*)");
     private static final Pattern TIMED_LINE =
             Pattern.compile("^\\[(\\d{1,3}):(\\d{1,2})(?:[.:](\\d{1,5}))?\\](.*)$");
     private static final int TRANSLATION_TOLERANCE_MS = 4_000;
@@ -31,13 +30,11 @@ public final class NeteaseLyricParser {
     private NeteaseLyricParser() {
     }
 
-    public record ParsedLyrics(String lrc, String rawMain) {
+    public record ParsedLyrics(String lrc, String rawMain, NekoLyrics.Document rich) {
         public static ParsedLyrics empty() {
-            return new ParsedLyrics("", "");
+            return new ParsedLyrics("", "", new NekoLyrics.Document(
+                    NekoLyrics.VERSION, List.of()));
         }
-    }
-
-    private record TimedText(long timeMs, String text) {
     }
 
     /**
@@ -51,21 +48,27 @@ public final class NeteaseLyricParser {
 
         String rawYrc = lyricText(root.path("yrc"));
         String rawLrc = lyricText(root.path("lrc"));
-        String yrcLrc = convertToLrc(rawYrc);
-        String plainLrc = convertToLrc(rawLrc);
+        NekoLyrics.Document yrcDocument = parseDocument(rawYrc);
+        NekoLyrics.Document lrcDocument = parseDocument(rawLrc);
 
-        String main = hasTimedContent(yrcLrc) ? yrcLrc : plainLrc;
-        String rawMain = hasTimedContent(yrcLrc) ? rawYrc : rawLrc;
-        if (!hasTimedContent(main)) {
+        boolean useYrc = !yrcDocument.isEmpty();
+        NekoLyrics.Document main = useYrc ? yrcDocument : lrcDocument;
+        String rawMain = useYrc ? rawYrc : rawLrc;
+        if (main.isEmpty()) {
             return ParsedLyrics.empty();
         }
 
-        String pairedTranslation = convertToLrc(lyricText(root.path("ytlrc")));
-        String plainTranslation = convertToLrc(lyricText(root.path("tlyric")));
-        String translation = hasTimedContent(pairedTranslation)
+        NekoLyrics.Document pairedTranslation = parseDocument(lyricText(root.path("ytlrc")));
+        NekoLyrics.Document plainTranslation = parseDocument(lyricText(root.path("tlyric")));
+        NekoLyrics.Document translation = !pairedTranslation.isEmpty()
                 ? pairedTranslation
                 : plainTranslation;
-        return new ParsedLyrics(mergeTranslations(main, translation), rawMain);
+        NekoLyrics.Document pairedRomaji = parseDocument(lyricText(root.path("yromalrc")));
+        NekoLyrics.Document plainRomaji = parseDocument(lyricText(root.path("romalrc")));
+        NekoLyrics.Document romaji = !pairedRomaji.isEmpty() ? pairedRomaji : plainRomaji;
+
+        NekoLyrics.Document rich = attachSubLyrics(main, translation, romaji);
+        return new ParsedLyrics(NekoLyrics.toLrc(rich), rawMain, rich);
     }
 
     /**
@@ -76,162 +79,208 @@ public final class NeteaseLyricParser {
      * 偶发的冒号毫秒、缺失毫秒和多时间戳行。</p>
      */
     static String convertToLrc(String content) {
-        if (content == null || content.isBlank()) {
-            return "";
-        }
+        return NekoLyrics.toLrc(parseDocument(content));
+    }
 
-        List<String> lines = new ArrayList<>();
+    /**
+     * 解析任一网易云歌词文本为 Neko 字级文档。
+     */
+    private static NekoLyrics.Document parseDocument(String content) {
+        if (content == null || content.isBlank()) {
+            return new NekoLyrics.Document(NekoLyrics.VERSION, List.of());
+        }
+        List<NekoLyrics.Line> lines = new ArrayList<>();
         for (String raw : content.split("\\R", -1)) {
             String line = raw.trim();
             if (line.isEmpty()) {
                 continue;
             }
             if (line.startsWith("{")) {
-                String metadata = convertJsonMetadata(line);
-                if (!metadata.isEmpty()) {
+                NekoLyrics.Line metadata = parseJsonMetadata(line);
+                if (metadata != null) {
                     lines.add(metadata);
                 }
                 continue;
             }
-
             Matcher newYrc = NEW_YRC_LINE.matcher(line);
             if (newYrc.matches()) {
-                String text = stripNewYrcFragments(newYrc.group(3));
-                if (!text.isEmpty()) {
-                    lines.add(formatTimestamp(parseLong(newYrc.group(1))) + text);
+                NekoLyrics.Line parsed = parseNewYrcLine(newYrc);
+                if (parsed != null) {
+                    lines.add(parsed);
                 }
                 continue;
             }
-
-            // 旧版 YRC 与普通 LRC 共用 [mm:ss.xxx] 行时间，只去掉行内字级标签。
-            lines.add(OLD_YRC_FRAGMENT.matcher(line).replaceAll(""));
+            String normalized = LrcValidator.normalizeNeteaseTimestamps(line);
+            for (String timed : normalized.split("\\R", -1)) {
+                NekoLyrics.Line parsed = parseTimedLine(timed);
+                if (parsed != null) {
+                    lines.add(parsed);
+                }
+            }
         }
-        return LrcValidator.normalizeNeteaseTimestamps(String.join("\n", lines)).trim();
+        return NekoLyrics.document(lines);
     }
 
-    /**
-     * 新版 YRC 的元数据行：{@code {"t":-1000,"c":[{"tx":"作词: "},{"tx":"周仁"}]}}。
-     */
-    private static String convertJsonMetadata(String line) {
+    private static NekoLyrics.Line parseJsonMetadata(String line) {
         try {
             JsonNode metadata = OBJECT_MAPPER.readTree(line);
-            long timeMs = metadata.path("t").asLong(0);
+            long timeMs = Math.max(0, metadata.path("t").asLong(0));
             JsonNode contents = metadata.path("c");
             if (!contents.isArray()) {
-                return "";
+                return null;
             }
             StringBuilder text = new StringBuilder();
             for (JsonNode item : contents) {
                 text.append(item.path("tx").asText(""));
             }
             String value = text.toString().trim();
-            return value.isEmpty() ? "" : formatTimestamp(Math.max(0, timeMs)) + value;
+            return value.isEmpty()
+                    ? null
+                    : new NekoLyrics.Line(timeMs, 0, value, null, null, false, List.of());
         } catch (Exception ignored) {
-            return "";
+            return null;
         }
     }
 
-    /**
-     * 新版 YRC 的字级标记是 {@code (start,dur,flag)text}，这里只拼接文本，
-     * 保留片段之间的普通文本，暂不生成字级时间轴。
-     */
-    private static String stripNewYrcFragments(String body) {
+    private static NekoLyrics.Line parseNewYrcLine(Matcher lineMatcher) {
+        long lineStart = parseLong(lineMatcher.group(1));
+        long lineDuration = parseLong(lineMatcher.group(2));
+        String body = lineMatcher.group(3);
         StringBuilder text = new StringBuilder();
+        List<NekoLyrics.Word> words = new ArrayList<>();
         int cursor = 0;
+        long previousEnd = lineStart;
         Matcher fragment = NEW_YRC_FRAGMENT.matcher(body);
         while (fragment.find()) {
-            text.append(body, cursor, fragment.start());
-            text.append(fragment.group(3));
+            String plain = body.substring(cursor, fragment.start());
+            if (!plain.isEmpty()) {
+                text.append(plain);
+                if (!plain.isBlank()) {
+                    words.add(new NekoLyrics.Word(previousEnd, parseLong(fragment.group(1)), plain));
+                }
+            }
+            long wordStart = parseLong(fragment.group(1));
+            long wordEnd = wordStart + parseLong(fragment.group(2));
+            String wordText = fragment.group(3);
+            text.append(wordText);
+            if (!wordText.isEmpty()) {
+                words.add(new NekoLyrics.Word(wordStart, wordEnd, wordText));
+            }
+            previousEnd = wordEnd;
             cursor = fragment.end();
         }
-        text.append(body.substring(cursor));
-        return text.toString().trim();
+        String tail = body.substring(cursor);
+        if (!tail.isEmpty()) {
+            text.append(tail);
+            if (!tail.isBlank()) {
+                words.add(new NekoLyrics.Word(previousEnd, lineStart + lineDuration, tail));
+            }
+        }
+        String value = text.toString().trim();
+        if (value.isEmpty()) {
+            return null;
+        }
+        return new NekoLyrics.Line(
+                lineStart,
+                lineStart + lineDuration,
+                value,
+                null,
+                null,
+                false,
+                words
+        );
     }
 
-    /**
-     * 把翻译行按最近时间挂到主歌词后面，沿用现有 {@code {"翻译"}} LRC 约定。
-     */
-    private static String mergeTranslations(String mainLrc, String translationLrc) {
-        if (!hasTimedContent(translationLrc)) {
-            return mainLrc;
+    private static NekoLyrics.Line parseTimedLine(String rawLine) {
+        Matcher matcher = TIMED_LINE.matcher(rawLine.trim());
+        if (!matcher.matches()) {
+            return null;
         }
-
-        List<TimedText> translations = new ArrayList<>();
-        for (String line : translationLrc.split("\\R", -1)) {
-            TimedText timed = parseTimedText(line);
-            if (timed != null && !timed.text().isEmpty()) {
-                translations.add(timed);
-            }
-        }
-        if (translations.isEmpty()) {
-            return mainLrc;
-        }
-        translations.sort(Comparator.comparingLong(TimedText::timeMs));
-
-        StringBuilder merged = new StringBuilder(mainLrc.length() + translationLrc.length());
-        for (String line : mainLrc.split("\\R", -1)) {
-            merged.append(line).append('\n');
-            TimedText timed = parseTimedText(line);
-            if (timed == null) {
+        long lineStart = timestampToMs(matcher);
+        String body = matcher.group(4);
+        List<NekoLyrics.Word> words = new ArrayList<>();
+        Matcher fragment = OLD_YRC_FRAGMENT.matcher(body);
+        while (fragment.find()) {
+            String wordText = fragment.group(3);
+            if (wordText.isEmpty()) {
                 continue;
             }
-            TimedText nearest = nearestTranslation(translations, timed.timeMs());
-            if (nearest == null
-                    || Math.abs(nearest.timeMs() - timed.timeMs()) > TRANSLATION_TOLERANCE_MS
-                    || nearest.text().equals(timed.text())) {
-                continue;
-            }
-            merged.append("{\"").append(escapeTranslation(nearest.text())).append("\"}\n");
+            long wordStart = lineStart + parseLong(fragment.group(1));
+            words.add(new NekoLyrics.Word(
+                    wordStart,
+                    wordStart + parseLong(fragment.group(2)),
+                    wordText
+            ));
         }
-        return merged.toString().trim();
+        String text = words.isEmpty()
+                ? body.trim()
+                : words.stream().map(NekoLyrics.Word::text).reduce("", String::concat).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        return new NekoLyrics.Line(lineStart, 0, text, null, null, false, words);
     }
 
-    private static TimedText nearestTranslation(List<TimedText> translations, long timeMs) {
+    private static NekoLyrics.Document attachSubLyrics(
+            NekoLyrics.Document main,
+            NekoLyrics.Document translation,
+            NekoLyrics.Document romaji
+    ) {
+        if (main.isEmpty()) {
+            return main;
+        }
+        List<NekoLyrics.Line> translated = new ArrayList<>(main.lines().size());
+        for (NekoLyrics.Line line : main.lines()) {
+            NekoLyrics.Line trans = nearestLine(translation, line.startMs());
+            NekoLyrics.Line roma = nearestLine(romaji, line.startMs());
+            translated.add(new NekoLyrics.Line(
+                    line.startMs(),
+                    line.endMs(),
+                    line.text(),
+                    trans != null && !trans.text().equals(line.text()) ? trans.text() : null,
+                    roma != null && !roma.text().equals(line.text()) ? roma.text() : null,
+                    line.background(),
+                    line.words()
+            ));
+        }
+        return NekoLyrics.document(translated);
+    }
+
+    private static NekoLyrics.Line nearestLine(NekoLyrics.Document document, long timeMs) {
+        if (document == null || document.lines().isEmpty()) {
+            return null;
+        }
+        List<NekoLyrics.Line> lines = document.lines();
         int low = 0;
-        int high = translations.size() - 1;
+        int high = lines.size() - 1;
         while (low < high) {
             int mid = (low + high) >>> 1;
-            if (translations.get(mid).timeMs() < timeMs) {
+            if (lines.get(mid).startMs() < timeMs) {
                 low = mid + 1;
             } else {
                 high = mid;
             }
         }
-        TimedText best = translations.get(low);
+        NekoLyrics.Line best = lines.get(low);
         if (low > 0) {
-            TimedText previous = translations.get(low - 1);
-            if (Math.abs(previous.timeMs() - timeMs) < Math.abs(best.timeMs() - timeMs)) {
+            NekoLyrics.Line previous = lines.get(low - 1);
+            if (Math.abs(previous.startMs() - timeMs) < Math.abs(best.startMs() - timeMs)) {
                 best = previous;
             }
         }
-        return best;
+        return Math.abs(best.startMs() - timeMs) <= TRANSLATION_TOLERANCE_MS ? best : null;
     }
 
-    private static TimedText parseTimedText(String line) {
-        Matcher matcher = TIMED_LINE.matcher(line.trim());
-        if (!matcher.matches() || matcher.group(4).isBlank()) {
-            return null;
-        }
+    private static long timestampToMs(Matcher matcher) {
         long minutes = parseLong(matcher.group(1));
         long seconds = parseLong(matcher.group(2));
         String fraction = matcher.group(3) == null ? "" : matcher.group(3);
         long millis = fraction.isEmpty()
                 ? 0
-                : parseLong(fraction.length() >= 3 ? fraction.substring(0, 3) : fraction + "0".repeat(3 - fraction.length()));
-        return new TimedText(minutes * 60_000 + seconds * 1_000 + millis, matcher.group(4).trim());
-    }
-
-    private static boolean hasTimedContent(String lrc) {
-        if (lrc == null || lrc.isBlank()) {
-            return false;
-        }
-        for (String line : lrc.split("\\R", -1)) {
-            String trimmed = line.trim();
-            if (TIMED_LINE.matcher(trimmed).matches()) {
-                return true;
-            }
-        }
-        return false;
+                : parseLong(fraction.length() >= 3
+                        ? fraction.substring(0, 3)
+                        : fraction + "0".repeat(3 - fraction.length()));
+        return minutes * 60_000 + seconds * 1_000 + millis;
     }
 
     private static String lyricText(JsonNode node) {
@@ -244,14 +293,6 @@ public final class NeteaseLyricParser {
         return node.path("lyric").asText("");
     }
 
-    private static String formatTimestamp(long timeMs) {
-        long safe = Math.max(0, timeMs);
-        long minutes = safe / 60_000;
-        long seconds = (safe % 60_000) / 1_000;
-        long millis = safe % 1_000;
-        return String.format(Locale.ROOT, "[%02d:%02d.%03d]", minutes, seconds, millis);
-    }
-
     private static long parseLong(String value) {
         try {
             return Long.parseLong(value);
@@ -260,7 +301,4 @@ public final class NeteaseLyricParser {
         }
     }
 
-    private static String escapeTranslation(String translation) {
-        return translation.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
 }

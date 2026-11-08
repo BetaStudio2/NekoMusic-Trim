@@ -5,6 +5,7 @@ import com.neko.music.config.ConfigManager;
 import com.neko.music.util.BatchMusicMatchUtil;
 import com.neko.music.util.ChineseConverter;
 import com.neko.music.util.LrcValidator;
+import com.neko.music.util.NekoLyrics;
 import com.neko.music.util.RuntimeDiskGuard;
 import com.neko.music.util.SongLanguageInferer;
 import com.neko.music.util.StripedLock;
@@ -614,6 +615,7 @@ public class NeteaseSearchFillService {
                 : findDuplicateByMode(title, artist, album, exactTitleOnly);
         if (result.isPresent()) {
             int ingestedMusicId = result.get().id();
+            saveRichLyrics(ingestedMusicId, lyricsPrep.rich(), "netease_fill");
             lyricsPrep.invalidLyricsAlert().ifPresent(alert ->
                     {
                         Main.getEmailService().scheduleNeteaseInvalidLyricsAlertToAdmins(
@@ -814,7 +816,8 @@ public class NeteaseSearchFillService {
         }
 
         Path lyricsTemp = workDir.resolve("lyrics.lrc");
-        if (!prepareQqLyricsFile(lyricsTemp, candidate)) {
+        NekoLyrics.Document richLyrics = prepareQqLyricsFile(lyricsTemp, candidate);
+        if (richLyrics == null) {
             // 拿不到歌词或未通过校验时回落占位歌词，保证入库流程完整。
             writePlaceholderLyrics(lyricsTemp);
         }
@@ -848,9 +851,11 @@ public class NeteaseSearchFillService {
                 config.getNeteaseFillUploadUserId(),
                 false
         );
-        return ingested.isPresent()
+        Optional<AdminMusicIngestService.IngestedMusic> result = ingested.isPresent()
                 ? ingested
                 : ingestService.findExistingDuplicate(title, artist, album);
+        result.ifPresent(music -> saveRichLyrics(music.id(), richLyrics, "qq_fill"));
+        return result;
     }
 
     private static int scoreQqCandidate(
@@ -867,7 +872,11 @@ public class NeteaseSearchFillService {
             long neteaseSongId, String title, String artist, String fullOriginalLyrics, String reason) {
     }
 
-    private record LyricsPrepareResult(Path lyricsPath, Optional<InvalidLyricsAlert> invalidLyricsAlert) {
+    private record LyricsPrepareResult(
+            Path lyricsPath,
+            Optional<InvalidLyricsAlert> invalidLyricsAlert,
+            NekoLyrics.Document rich
+    ) {
     }
 
     private String resolveLanguage(String title, String artist, String album, Path lyricsTemp) {
@@ -897,10 +906,12 @@ public class NeteaseSearchFillService {
         Optional<InvalidLyricsAlert> invalidAlert = Optional.empty();
         String lrc = "";
         String fullOriginalLyrics = "";
+        NekoLyrics.Document rich = null;
         try {
             NeteaseCloudMusicClient.LyricApiPayload payload = neteaseClient.fetchLyricPayload(songId);
             lrc = payload.primaryLrc();
             fullOriginalLyrics = payload.rawMain();
+            rich = payload.rich();
         } catch (IOException e) {
             logger.warn("获取歌词失败 songId={}: {}", songId, e.getMessage());
         }
@@ -912,7 +923,7 @@ public class NeteaseSearchFillService {
                 long size = Files.size(lyricsTemp);
                 LrcValidator.ValidationResult check = LrcValidator.validate(in, size);
                 if (check.isValid()) {
-                    return new LyricsPrepareResult(lyricsTemp, Optional.empty());
+                    return new LyricsPrepareResult(lyricsTemp, Optional.empty(), rich);
                 }
                 String reason = check.getErrorMessage();
                 String lyricsForEmail = fullOriginalLyrics;
@@ -925,7 +936,7 @@ public class NeteaseSearchFillService {
         }
 
         writePlaceholderLyrics(lyricsTemp);
-        return new LyricsPrepareResult(lyricsTemp, invalidAlert);
+        return new LyricsPrepareResult(lyricsTemp, invalidAlert, null);
     }
 
     private void writePlaceholderLyrics(Path lyricsTemp) throws IOException {
@@ -942,20 +953,24 @@ public class NeteaseSearchFillService {
      * 取 QQ 明文歌词写入 {@code lyricsTemp} 并通过 LRC 校验时返回 true；
      * 取不到、为空或校验不通过时返回 false（由调用方写占位歌词），不抛异常中断入库。
      */
-    private boolean prepareQqLyricsFile(Path lyricsTemp, QQMusicClient.QqSongCandidate candidate)
+    private NekoLyrics.Document prepareQqLyricsFile(
+            Path lyricsTemp,
+            QQMusicClient.QqSongCandidate candidate
+    )
             throws IOException {
-        String lrc;
+        NekoLyrics.Document rich;
         try {
-            lrc = qqClient.fetchLyric(candidate.mid());
+            rich = qqClient.fetchNekoLyrics(candidate);
         } catch (IOException e) {
             logger.warn("获取 QQ 歌词失败 mid={} title={}: {}",
                     candidate.mid(), candidate.title(), e.getMessage());
-            return false;
+            return null;
         }
+        String lrc = NekoLyrics.toLrc(rich);
         if (lrc == null || lrc.isBlank()) {
             logger.info("QQ 歌词为空 mid={} title={}，使用占位歌词",
                     candidate.mid(), candidate.title());
-            return false;
+            return null;
         }
         // 时间轴归一化（多时间戳展开 / 补毫秒）对 QQ 与网易云通用，直接复用。
         Files.writeString(lyricsTemp, LrcValidator.normalizeNeteaseTimestamps(lrc));
@@ -963,13 +978,44 @@ public class NeteaseSearchFillService {
             LrcValidator.ValidationResult check =
                     LrcValidator.validate(in, Files.size(lyricsTemp));
             if (check.isValid()) {
-                return true;
+                return rich;
             }
             logger.warn("QQ 歌词未通过 LRC 校验 mid={} title={}: {}，使用占位歌词",
                     candidate.mid(), candidate.title(), check.getErrorMessage());
         }
         Files.deleteIfExists(lyricsTemp);
-        return false;
+        return null;
+    }
+
+    private void saveRichLyrics(int musicId, NekoLyrics.Document rich, String source) {
+        if (musicId <= 0 || rich == null || rich.isEmpty()) {
+            return;
+        }
+        try {
+            var stored = Main.getLyricsDatabaseManager().findByMusicId(musicId);
+            if (stored.isPresent() && !stored.get().placeholder()) {
+                String storedSource = stored.get().source();
+                if (storedSource != null
+                        && !"ingest".equals(storedSource)
+                        && !storedSource.endsWith("_fill")) {
+                    logger.info("保留已有歌词，不覆盖为字级歌词 musicId={} source={}",
+                            musicId, storedSource);
+                    return;
+                }
+            }
+            String content = NekoLyrics.serialize(rich);
+            if (!Main.getLyricsDatabaseManager().upsert(
+                    musicId, content, NekoLyrics.FORMAT, source)) {
+                logger.warn("保存 Neko 字级歌词失败 musicId={} source={}", musicId, source);
+                return;
+            }
+            if (Main.getLyricsSearchIndex() != null) {
+                Main.getLyricsSearchIndex().rebuildOne(musicId);
+            }
+        } catch (Exception e) {
+            logger.warn("保存 Neko 字级歌词异常 musicId={} source={}: {}",
+                    musicId, source, e.getMessage());
+        }
     }
 
     private FillAttempt failReason(boolean loggedIn) {
