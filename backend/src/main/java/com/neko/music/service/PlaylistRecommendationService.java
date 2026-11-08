@@ -412,7 +412,7 @@ public class PlaylistRecommendationService {
             try (PreparedStatement ps = conn.prepareStatement("""
                     SELECT ufp.playlist_id, COUNT(*) AS score
                     FROM (
-                        SELECT music_id
+                        SELECT music_id, user_id
                         FROM user_favorites
                         WHERE user_id = ?
                         ORDER BY created_at DESC
@@ -435,7 +435,7 @@ public class PlaylistRecommendationService {
             try (PreparedStatement ps = conn.prepareStatement("""
                     SELECT peer.playlist_id, COUNT(*) AS score
                     FROM (
-                        SELECT playlist_id
+                        SELECT playlist_id, user_id
                         FROM user_favorite_playlists
                         WHERE user_id = ?
                         ORDER BY created_at DESC
