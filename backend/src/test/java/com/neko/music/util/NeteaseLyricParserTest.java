@@ -49,6 +49,34 @@ class NeteaseLyricParserTest {
     }
 
     @Test
+    void metadataAndBareTextWithoutTimelineAreNotLyrics() {
+        String metadataOnly = """
+                {"c":[{"tx":"作词: "},{"tx":"予樂"}]}
+                {"c":[{"tx":"作曲: "},{"tx":"予樂"}]}
+                {"c":[{"tx":"编曲: "},{"tx":"予樂"}]}
+                d的
+                """;
+
+        NeteaseLyricParser.ParsedLyrics parsed =
+                NeteaseLyricParser.parse(root("", metadataOnly, "", ""));
+
+        assertTrue(parsed.lrc().isEmpty());
+        assertTrue(parsed.rich().isEmpty());
+    }
+
+    @Test
+    void usesPlainLrcWhenYrcContainsOnlyMetadata() {
+        String yrcMetadata = "{\"t\":-1000,\"c\":[{\"tx\":\"作词: 周仁\"}]}\n";
+        String lrc = "[00:01.00]真正歌词\n";
+
+        NeteaseLyricParser.ParsedLyrics parsed =
+                NeteaseLyricParser.parse(root(yrcMetadata, lrc, "", ""));
+
+        assertEquals("[00:01.000]真正歌词", parsed.lrc());
+        assertEquals(lrc, parsed.rawMain());
+    }
+
+    @Test
     void stripsOldYrcWordTags() {
         String yrc = "[00:01.000]<0,500>你<500,500>好\n";
 

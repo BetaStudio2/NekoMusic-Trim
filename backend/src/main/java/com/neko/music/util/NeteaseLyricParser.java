@@ -48,10 +48,14 @@ public final class NeteaseLyricParser {
 
         String rawYrc = lyricText(root.path("yrc"));
         String rawLrc = lyricText(root.path("lrc"));
+        boolean useYrc = hasActualTimedLyric(rawYrc);
+        boolean useLrc = hasActualTimedLyric(rawLrc);
+        if (!useYrc && !useLrc) {
+            return ParsedLyrics.empty();
+        }
         NekoLyrics.Document yrcDocument = parseDocument(rawYrc);
         NekoLyrics.Document lrcDocument = parseDocument(rawLrc);
 
-        boolean useYrc = !yrcDocument.isEmpty();
         NekoLyrics.Document main = useYrc ? yrcDocument : lrcDocument;
         String rawMain = useYrc ? rawYrc : rawLrc;
         if (main.isEmpty()) {
@@ -119,6 +123,34 @@ public final class NeteaseLyricParser {
             }
         }
         return NekoLyrics.document(lines);
+    }
+
+    /**
+     * 判断歌词源里是否存在真实的带时间轴正文。JSON 制作信息和没有时间轴的残片
+     * （例如网易云偶发返回的裸文本 {@code d的}）都不算歌词。
+     */
+    private static boolean hasActualTimedLyric(String content) {
+        if (content == null || content.isBlank()) {
+            return false;
+        }
+        for (String raw : content.split("\\R", -1)) {
+            String line = raw.trim();
+            if (line.isEmpty() || line.startsWith("{")) {
+                continue;
+            }
+            Matcher newYrc = NEW_YRC_LINE.matcher(line);
+            if (newYrc.matches() && !newYrc.group(3).isBlank()) {
+                return true;
+            }
+            String normalized = LrcValidator.normalizeNeteaseTimestamps(line);
+            for (String timed : normalized.split("\\R", -1)) {
+                Matcher matcher = TIMED_LINE.matcher(timed.trim());
+                if (matcher.matches() && !matcher.group(4).isBlank()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static NekoLyrics.Line parseJsonMetadata(String line) {
