@@ -12,7 +12,8 @@ import java.util.regex.Pattern;
  * 外站自动补全的非音乐内容黑名单。
  *
  * <p>只用于爬取/补全入库前的判定，不影响管理员或用户主动上传。规则刻意保留
- * 「广播剧」等可能出现在正常音乐标题中的词，避免把主题曲、片尾曲一并拦掉。</p>
+ * 「广播剧」等可能出现在正常音乐标题中的词，避免把主题曲、片尾曲一并拦掉。
+ * 同时拦截歌名仅由标点或符号组成的曲目，避免用无检索价值的标题请求外站。</p>
  */
 final class NonMusicContentFilter {
 
@@ -82,6 +83,10 @@ final class NonMusicContentFilter {
         String normalizedArtist = normalize(artist);
         String normalizedAlbum = normalize(album);
 
+        if (isPunctuationOnly(normalizedTitle)) {
+            return Optional.of("歌名仅含标点或符号");
+        }
+
         for (String term : CONTENT_TERMS) {
             if (normalizedTitle.contains(term)
                     || normalizedArtist.contains(term)
@@ -104,6 +109,34 @@ final class NonMusicContentFilter {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * 歌名是否只有标点、符号或不可见控制字符。字母、数字和组合附加符号视为有效文字，
+     * 因此 {@code ... (Live)}、数字标题等仍可正常补全。
+     */
+    private static boolean isPunctuationOnly(String normalizedTitle) {
+        if (normalizedTitle.isEmpty()) {
+            return false;
+        }
+        boolean sawNonWhitespace = false;
+        for (int offset = 0; offset < normalizedTitle.length(); ) {
+            int codePoint = normalizedTitle.codePointAt(offset);
+            offset += Character.charCount(codePoint);
+            if (Character.isWhitespace(codePoint)
+                    || Character.getType(codePoint) == Character.SPACE_SEPARATOR) {
+                continue;
+            }
+            sawNonWhitespace = true;
+            int type = Character.getType(codePoint);
+            if (Character.isLetterOrDigit(codePoint)
+                    || type == Character.NON_SPACING_MARK
+                    || type == Character.COMBINING_SPACING_MARK
+                    || type == Character.ENCLOSING_MARK) {
+                return false;
+            }
+        }
+        return sawNonWhitespace;
     }
 
     private static String normalize(String value) {

@@ -34,4 +34,26 @@ class NonMusicContentFilterTest {
         assertFalse(NonMusicContentFilter.match("Chapter One", "歌手", "专辑").isPresent());
         assertFalse(NonMusicContentFilter.match("故事", "许巍", "时光·漫步").isPresent());
     }
+
+    @Test
+    void blocksTitlesMadeOnlyOfPunctuationOrSymbols() {
+        assertTrue(NonMusicContentFilter.match("...", "周杰伦", "").isPresent());
+        assertTrue(NonMusicContentFilter.match("——？！", "", "").isPresent());
+        assertTrue(NonMusicContentFilter.match("【 　】", "歌手", "").isPresent());
+        assertTrue(NonMusicContentFilter.match("♪ ♡", "", "").isPresent());
+        assertTrue(NonMusicContentFilter.match("\u200B\uFEFF", "", "").isPresent());
+    }
+
+    @Test
+    void keepsTitlesContainingLettersOrDigits() {
+        assertFalse(NonMusicContentFilter.match("... (Live)", "", "").isPresent());
+        assertFalse(NonMusicContentFilter.match("!!! 7 !!!", "", "").isPresent());
+        assertFalse(NonMusicContentFilter.match("∞ (Live)", "", "").isPresent());
+    }
+
+    @Test
+    void punctuationOnlyTitleWinsOverMeaningfulArtist() {
+        assertTrue(NonMusicContentFilter.match("？？", "A-Lin", "").isPresent());
+        assertTrue(NonMusicContentFilter.match("∞", "歌手", "").isPresent());
+    }
 }
