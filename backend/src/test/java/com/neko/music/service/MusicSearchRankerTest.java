@@ -45,6 +45,29 @@ class MusicSearchRankerTest {
     }
 
     @Test
+    void dropsCoverQualifierFromSearchTerms() {
+        assertEquals(List.of("粛聖", "ロリ神レクイエム☆"),
+                MusicSearchRanker.splitTerms("粛聖!! ロリ神レクイエム☆ (Cover)"));
+        assertEquals(List.of("晴天"), MusicSearchRanker.splitTerms("晴天 Cover"));
+        assertEquals(List.of("Cover"), MusicSearchRanker.splitTerms("Cover"));
+    }
+
+    @Test
+    void rewardsAdditionalMatchedTitleTerms() {
+        List<String> terms = MusicSearchRanker.splitTerms("粛聖!! ロリ神レクイエム☆ (Cover)");
+        int exact = MusicSearchRanker.score(
+                fields("粛聖!! ロリ神レクイエム☆", "しぐれうい", "まだ雨はやまない"), terms);
+        int missingStar = MusicSearchRanker.score(
+                fields("粛聖!! ロリ神レクイエム", "しぐれうい", "未知专辑"), terms);
+        int unrelatedCover = MusicSearchRanker.score(
+                fields("真夏の果実 (Cover)", "Sotte Bosse", "Essence of life"), terms);
+
+        assertTrue(exact > missingStar, "命中更多歌名词条的完整标题应排在前面");
+        assertTrue(missingStar > 0);
+        assertEquals(0, unrelatedCover, "只命中被剔除的 Cover 修饰词不能形成结果");
+    }
+
+    @Test
     void titleMatchAlwaysOutranksArtistOnlyMatch() {
         int titleHit = MusicSearchRanker.score(fields("晴天", "周杰伦", "叶惠美"), List.of("晴天"));
         int artistHit = MusicSearchRanker.score(fields("稻香", "晴天", "魔杰座"), List.of("晴天"));

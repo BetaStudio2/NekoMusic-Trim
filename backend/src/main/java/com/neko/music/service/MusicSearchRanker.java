@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 曲库搜索相关度评分：先把查询串拆成「歌名 / 歌手」候选词条，再按层级打分。
@@ -39,6 +40,16 @@ public final class MusicSearchRanker {
      */
     private static final String TERM_SEPARATORS =
             " \t\u00A0\u3000-\u2013\u2014_+~～/\\|｜,，、;；:：&＆!！?？(（)）[【]】{《}》<>·•";
+    /**
+     * 版本/翻唱修饰词不是歌名主体：用户搜「歌名 (Cover)」时，
+     * 不能把 Cover 当成一个独立的正向关键词，否则会召回大量无关翻唱。
+     */
+    private static final Pattern WEAK_QUALIFIER_GROUP = Pattern.compile(
+            "(?iu)\\s*[\\(（\\[【]\\s*"
+                    + "(?:cover|covers|翻唱|翻唱版|伴奏|instrumental|off\\s*vocal|karaoke)"
+                    + "\\s*[\\)）\\]】]");
+    private static final Set<String> WEAK_TERMS = Set.of(
+            "cover", "covers", "翻唱", "翻唱版", "伴奏", "instrumental", "off vocal", "karaoke");
     /**
      * 「歌名 / 歌手 / 专辑」三级角色的权重（10 的幂）。
      * 单字段得分不超过 100，所以低一级角色拿满分也越不过高一级角色的最低命中分。
@@ -73,13 +84,15 @@ public final class MusicSearchRanker {
             return List.of();
         }
         String trimmed = rawQuery.trim();
-        if (isFreeTextPhrase(trimmed)) {
-            return List.of(trimmed);
+        String withoutQualifierGroups = WEAK_QUALIFIER_GROUP.matcher(trimmed).replaceAll(" ").trim();
+        String searchable = withoutQualifierGroups.isEmpty() ? trimmed : withoutQualifierGroups;
+        if (isFreeTextPhrase(searchable)) {
+            return List.of(searchable);
         }
 
         List<String> terms = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
-        for (String piece : splitOnSeparators(trimmed)) {
+        for (String piece : splitOnSeparators(searchable)) {
             String term = piece.trim();
             if (term.isEmpty() || !seen.add(term)) {
                 continue;
@@ -89,12 +102,19 @@ public final class MusicSearchRanker {
                 break;
             }
         }
-        return terms.isEmpty() ? List.of(trimmed) : List.copyOf(terms);
+        if (terms.isEmpty()) {
+            return List.of(searchable);
+        }
+        List<String> strongTerms = terms.stream()
+                .filter(term -> !WEAK_TERMS.contains(term.toLowerCase(Locale.ROOT)))
+                .toList();
+        return strongTerms.isEmpty() ? List.copyOf(terms) : strongTerms;
     }
 
     /**
      * 层级评分：枚举「词条 → 角色（歌名 / 歌手 / 专辑）」的全部指派，取分值最高的一种。
      * 这样 {@code 周杰伦，晴天} 与 {@code 晴天/周杰伦} 这类顺序不定的输入都能命中同一首曲目。
+     * 角色主分相同时，命中词条更多的候选优先。
      */
     public static int score(MusicFields fields, List<String> terms) {
         if (fields == null || terms == null || terms.isEmpty()) {
@@ -180,7 +200,7 @@ public final class MusicSearchRanker {
         if (titleScore <= 0 || artistScore <= 0) {
             return 0;
         }
-        return layeredScore(titleScore, artistScore, 0);
+        return layeredScore(titleScore, artistScore, 0) + 200;
     }
 
     /**
@@ -302,17 +322,34 @@ public final class MusicSearchRanker {
             int title = 0;
             int artist = 0;
             int album = 0;
+            int matchedTerms = 0;
             int rest = mask;
             for (int i = 0; i < count; i++) {
                 int role = rest % 3;
                 rest /= 3;
                 switch (role) {
-                    case 0 -> title = Math.max(title, titleScores[i]);
-                    case 1 -> artist = Math.max(artist, artistScores[i]);
-                    default -> album = Math.max(album, albumScores[i]);
+                    case 0 -> {
+                        if (titleScores[i] > 0) {
+                            matchedTerms++;
+                        }
+                        title = Math.max(title, titleScores[i]);
+                    }
+                    case 1 -> {
+                        if (artistScores[i] > 0) {
+                            matchedTerms++;
+                        }
+                        artist = Math.max(artist, artistScores[i]);
+                    }
+                    default -> {
+                        if (albumScores[i] > 0) {
+                            matchedTerms++;
+                        }
+                        album = Math.max(album, albumScores[i]);
+                    }
                 }
             }
-            int score = layeredScore(title, artist, album);
+            // 角色内仍取最高单项分，低两位用于“命中词覆盖数”的稳定排序。
+            int score = layeredScore(title, artist, album) + matchedTerms * 100;
             if (score > best) {
                 best = score;
             }
