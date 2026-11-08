@@ -302,6 +302,10 @@ public final class ServletRegistrar {
         ServletHolder searchPlaylistsHolder = new ServletHolder(new SearchPlaylistsHandler());
         context.addServlet(searchPlaylistsHolder, "/api/playlists/search");
 
+        // 推荐歌单：登录用户走个性化画像，游客走热门与新鲜度策略；不缓存，支持 refresh 换一批
+        ServletHolder recommendedPlaylistsHolder = new ServletHolder(new RecommendedPlaylistsHandler());
+        context.addServlet(recommendedPlaylistsHolder, "/api/playlists/recommended");
+
         // 注册更新歌单API处理器
         ServletHolder updatePlaylistHolder = new ServletHolder(new UpdatePlaylistHandler());
         context.addServlet(updatePlaylistHolder, "/api/user/playlist/update");

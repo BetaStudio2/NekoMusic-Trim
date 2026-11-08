@@ -88,6 +88,8 @@ public class Main {
     private static EmailService emailService;
     private static RedisService redisService;
     private static PlaylistService playlistService;
+    private static PlaylistRecommendationService playlistRecommendationService;
+    private static UserSearchHistoryService userSearchHistoryService;
     private static NotificationService notificationService;
     private static IPRateLimitService ipRateLimitService;
     private static CommentDatabaseManager commentDatabaseManager;
@@ -266,6 +268,10 @@ public class Main {
 
         // 初始化歌单服务
         playlistService = new PlaylistService(databaseManager);
+        playlistRecommendationService = new PlaylistRecommendationService(databaseManager);
+        userSearchHistoryService = new UserSearchHistoryService(databaseManager);
+        Runtime.getRuntime().addShutdownHook(
+                new Thread(userSearchHistoryService::shutdown, "search-history-shutdown"));
         externalImportService = new ExternalImportService(
                 neteaseCloudMusicClient,
                 neteaseSearchFillService,
@@ -625,6 +631,14 @@ public class Main {
 
     public static DailyRecommendationService getDailyRecommendationService() {
         return dailyRecommendationService;
+    }
+
+    public static PlaylistRecommendationService getPlaylistRecommendationService() {
+        return playlistRecommendationService;
+    }
+
+    public static UserSearchHistoryService getUserSearchHistoryService() {
+        return userSearchHistoryService;
     }
 
     public static LyricsSearchIndex getLyricsSearchIndex() {

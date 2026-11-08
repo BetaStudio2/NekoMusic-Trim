@@ -8,6 +8,7 @@ import com.neko.music.service.MusicSearchRanker;
 import com.neko.music.service.NeteaseSearchFillService;
 import com.neko.music.util.ChineseConverter;
 import com.neko.music.util.ClientIpResolver;
+import com.neko.music.util.RequestAuthUtil;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,7 +114,29 @@ public class MusicSearchHandler extends ApiServlet {
         if (results.isEmpty() && "playlist.search_ok".equals(message)) {
             message = "search.not_found";
         }
+        if (!results.isEmpty()) {
+            recordAuthenticatedSearch(request, query);
+        }
         writeSearchResponse(response, !results.isEmpty(), message, responseResults);
+    }
+
+    /**
+     * 只记录已登录用户且确有站内结果的搜索词。记录异步执行，队列满时放弃画像信号，
+     * 不在公开搜索路径上等待数据库。
+     */
+    private static void recordAuthenticatedSearch(HttpServletRequest request, String query) {
+        String token = RequestAuthUtil.extractToken(request);
+        var authService = Main.getUserAuthService();
+        Integer userId = token == null || authService == null
+                ? null
+                : authService.validateToken(token).orElse(null);
+        if (userId == null) {
+            return;
+        }
+        var historyService = Main.getUserSearchHistoryService();
+        if (historyService != null) {
+            historyService.recordAsync(userId, query);
+        }
     }
 
     private void handleBatchSearch(List<SearchItem> items, HttpServletRequest request, HttpServletResponse response)

@@ -90,11 +90,15 @@ watch(
 )
 
 const jsonHeaders = { 'Content-Type': 'application/json' }
+const authHeaders = () => {
+  const token = localStorage.getItem('userToken')
+  return token ? { Authorization: token } : {}
+}
 
 async function fetchMusicResults(query) {
   const response = await fetch(`${API_CONFIG.BASE_URL}/api/music/search`, {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: { ...jsonHeaders, ...authHeaders() },
     body: JSON.stringify({ query }),
   })
   const data = await response.json()

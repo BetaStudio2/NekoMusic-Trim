@@ -39,6 +39,12 @@ const nickname = ref('')
 const dailyList = ref([])
 const dailyDate = ref('')
 
+/** 推荐歌单：登录用户个性化，游客热门精选；每次刷新实时请求，不使用缓存 */
+const recommendedPlaylists = ref([])
+const playlistLoading = ref(false)
+const playlistRefreshing = ref(false)
+const playlistPersonalized = ref(false)
+
 const syncLoginState = () => {
   isLoggedIn.value = !!localStorage.getItem('userToken')
   nickname.value = getUser()?.nickname || ''
@@ -154,6 +160,54 @@ const fetchDaily = async () => {
   }
 }
 
+const resolveCoverPath = (path) => {
+  if (!path) return `${API_CONFIG.BASE_URL}/api/music/cover/0`
+  if (/^https?:\/\//i.test(path)) return path
+  return `${API_CONFIG.BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+const normalizeRecommendedPlaylist = (playlist) => {
+  const covers = Array.isArray(playlist.coverUrls) && playlist.coverUrls.length
+    ? playlist.coverUrls.map(resolveCoverPath)
+    : [resolveCoverPath(playlist.firstMusicCover)]
+  return {
+    ...playlist,
+    coverUrls: covers,
+  }
+}
+
+const fetchRecommendedPlaylists = async (refresh = false) => {
+  if (playlistLoading.value) return
+  playlistLoading.value = true
+  playlistRefreshing.value = refresh
+  try {
+    const token = localStorage.getItem('userToken')
+    const query = refresh ? `?refresh=true&t=${Date.now()}` : `?t=${Date.now()}`
+    const doFetch = (withToken) => fetch(`${API_CONFIG.BASE_URL}/api/playlists/recommended${query}`, {
+      cache: 'no-store',
+      headers: withToken ? { Authorization: withToken } : {},
+    })
+    let res = await doFetch(token)
+    if (res.status === 401 && token) {
+      // Token 过期时仍允许游客推荐，不让过期的本地登录态挡住首页内容。
+      res = await doFetch('')
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    if (!data.success || !Array.isArray(data.data)) {
+      throw new Error(data.message || 'invalid recommendation payload')
+    }
+    recommendedPlaylists.value = data.data.map(normalizeRecommendedPlaylist)
+    playlistPersonalized.value = data.personalized === true
+  } catch (error) {
+    console.error('推荐歌单请求失败:', error)
+    if (refresh) toast.error(t('home.playlistLoadFailed'))
+  } finally {
+    playlistLoading.value = false
+    playlistRefreshing.value = false
+  }
+}
+
 const handleImageError = (event) => {
   event.target.src = `${API_CONFIG.BASE_URL}/api/music/cover/0`
 }
@@ -191,6 +245,7 @@ function onStorage() {
   syncLoginState()
   if (isLoggedIn.value && !wasLoggedIn) fetchDaily()
   if (!isLoggedIn.value) dailyList.value = []
+  fetchRecommendedPlaylists(false)
 }
 
 onMounted(() => {
@@ -199,6 +254,7 @@ onMounted(() => {
   fetchRanking()
   fetchLatest()
   fetchDaily()
+  fetchRecommendedPlaylists(false)
 })
 
 onUnmounted(() => {
@@ -334,6 +390,78 @@ onUnmounted(() => {
         </span>
         <NIcon name="chevron-right" :size="16" class="quick__arrow" />
       </NCard>
+    </section>
+
+    <!-- ==================== 推荐歌单（固定五个） ==================== -->
+    <section class="section playlist-section" :aria-label="$t('home.playlistTitle')">
+      <header class="section__head">
+        <div class="section__heading">
+          <h2 class="section__title">{{ $t('home.playlistTitle') }}</h2>
+          <p class="section__sub">
+            {{ playlistPersonalized ? $t('home.playlistSubPersonalized') : $t('home.playlistSubGuest') }}
+          </p>
+        </div>
+        <NButton
+          variant="ghost"
+          size="sm"
+          icon="refresh"
+          :loading="playlistRefreshing"
+          :disabled="playlistLoading"
+          @click="fetchRecommendedPlaylists(true)"
+        >
+          {{ $t('home.playlistRefresh') }}
+        </NButton>
+      </header>
+
+      <div v-if="playlistLoading && !recommendedPlaylists.length" class="playlist-state">
+        <NSpinner :size="24" />
+        <span>{{ $t('home.playlistLoading') }}</span>
+      </div>
+
+      <div v-else-if="recommendedPlaylists.length" class="playlist-grid">
+        <NCard
+          v-for="playlist in recommendedPlaylists"
+          :key="playlist.id"
+          as="router-link"
+          :to="`/playlist/${playlist.id}`"
+          hoverable
+          pad="none"
+          class="playlist-card"
+        >
+          <div class="playlist-card__art">
+            <div class="playlist-card__mosaic" :class="{ 'playlist-card__mosaic--single': playlist.coverUrls.length === 1 }">
+              <img
+                v-for="(cover, coverIndex) in playlist.coverUrls.slice(0, 4)"
+                :key="`${playlist.id}-${coverIndex}`"
+                :src="cover"
+                :alt="coverIndex === 0 ? playlist.name : ''"
+                loading="lazy"
+                decoding="async"
+                @error="handleImageError"
+              />
+            </div>
+            <span class="playlist-card__badge">
+              <NIcon :name="playlist.source === 'personalized' ? 'sparkles' : 'trending-up'" :size="12" />
+              {{ playlist.source === 'personalized' ? $t('home.playlistPersonalizedBadge') : $t('home.playlistPopularBadge') }}
+            </span>
+            <span class="playlist-card__explore" v-if="playlist.exploration">
+              {{ $t('home.playlistExploreBadge') }}
+            </span>
+          </div>
+          <div class="playlist-card__body">
+            <h3 class="playlist-card__title">{{ playlist.name }}</h3>
+            <p class="playlist-card__meta">
+              <NIcon name="music" :size="13" />
+              {{ $t('track.songCount', { count: playlist.musicCount }) }}
+              <span class="playlist-card__dot">·</span>
+              {{ playlist.creator?.nickname || $t('home.playlistUnknownCreator') }}
+            </p>
+            <p class="playlist-card__reason">{{ playlist.reason }}</p>
+          </div>
+        </NCard>
+      </div>
+
+      <p v-else class="playlist-state">{{ $t('home.playlistEmpty') }}</p>
     </section>
 
     <!-- ==================== 加载态 ==================== -->
@@ -717,6 +845,139 @@ onUnmounted(() => {
   }
 }
 
+/* ==================== 推荐歌单 ==================== */
+.playlist-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--n-space-4);
+}
+
+.playlist-card {
+  min-width: 0;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+}
+
+.playlist-card__art {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--n-surface-soft);
+}
+
+.playlist-card__mosaic {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
+
+.playlist-card__mosaic--single {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  gap: 0;
+}
+
+.playlist-card__mosaic img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+  display: block;
+  transition: transform var(--n-duration-slow) var(--n-ease);
+}
+
+@media (hover: hover) {
+  .playlist-card:hover .playlist-card__mosaic img {
+    transform: scale(1.04);
+  }
+}
+
+.playlist-card__badge,
+.playlist-card__explore {
+  position: absolute;
+  z-index: var(--n-z-content);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--n-radius-xs);
+  background: rgba(4, 9, 11, 0.74);
+  backdrop-filter: var(--n-blur-sm);
+  -webkit-backdrop-filter: var(--n-blur-sm);
+  color: var(--n-accent-strong);
+  font-size: var(--n-text-xs);
+  font-weight: var(--n-weight-semibold);
+}
+
+.playlist-card__badge {
+  top: var(--n-space-2);
+  left: var(--n-space-2);
+}
+
+.playlist-card__explore {
+  right: var(--n-space-2);
+  bottom: var(--n-space-2);
+  color: var(--n-text);
+}
+
+.playlist-card__body {
+  padding: var(--n-space-3);
+}
+
+.playlist-card__title {
+  font-size: var(--n-text-sm);
+  font-weight: var(--n-weight-semibold);
+  line-height: var(--n-leading-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin-top: var(--n-space-2);
+  color: var(--n-text-muted);
+  font-size: var(--n-text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-card__dot {
+  color: var(--n-text-faint);
+}
+
+.playlist-card__reason {
+  min-height: 2.7em;
+  margin-top: var(--n-space-2);
+  color: var(--n-text-faint);
+  font-size: var(--n-text-xs);
+  line-height: var(--n-leading-normal);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.playlist-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--n-space-3);
+  min-height: 120px;
+  padding: var(--n-space-6);
+  border: 1px dashed var(--n-line);
+  border-radius: var(--n-radius-lg);
+  color: var(--n-text-muted);
+}
+
 /* ==================== 加载态 ==================== */
 .loading {
   display: flex;
@@ -938,6 +1199,10 @@ onUnmounted(() => {
     flex: 1 1 auto;
     justify-content: center;
   }
+
+  .playlist-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 /* ==================== 手机竖屏：横向卡片栏 ====================
@@ -997,6 +1262,15 @@ onUnmounted(() => {
      手机端让视觉图居中，容器更平衡。 */
   .hero__feature {
     justify-self: center;
+  }
+
+  .playlist-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--n-space-3);
+  }
+
+  .playlist-card__body {
+    padding: var(--n-space-2) var(--n-space-1) var(--n-space-1);
   }
 }
 </style>

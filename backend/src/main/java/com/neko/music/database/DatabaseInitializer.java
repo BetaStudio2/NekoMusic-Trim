@@ -52,6 +52,26 @@ public class DatabaseInitializer {
             
             executeTableDdl(stmt, createFavoritePlaylistsTable,
                     "user_favorite_playlists 表创建成功", "创建 user_favorite_playlists 表失败（可能是表已存在）");
+
+            // 登录用户搜索画像：只保存规范化后的查询词，用于站内个性化歌单推荐。
+            // 同一查询在短时间内重复出现只更新时间、不重复累计次数，避免前端并行搜索造成权重虚高。
+            String createUserSearchHistoryTable = """
+                CREATE TABLE IF NOT EXISTS user_search_history (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    query_text VARCHAR(255) NOT NULL,
+                    normalized_query VARCHAR(255) NOT NULL,
+                    search_count INT NOT NULL DEFAULT 1,
+                    first_searched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_searched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_user_search_query (user_id, normalized_query),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    INDEX idx_user_search_history_recent (user_id, last_searched_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """;
+
+            executeTableDdl(stmt, createUserSearchHistoryTable,
+                    "user_search_history 表创建成功", "创建 user_search_history 表失败（可能是表已存在）");
             
             // 创建用户上传审核表
             String createUserUploadsTable = """
