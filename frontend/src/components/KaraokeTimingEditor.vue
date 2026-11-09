@@ -276,11 +276,7 @@ function ensureSegments(line) {
       || needsEnglishResplit) {
     line.words = needsEnglishResplit
       ? remapTimingUnits(line.text || '', line.words)
-      : splitTimingUnits(line.text || '').map((text) => ({
-          text,
-          startSec: null,
-          endSec: null,
-        }))
+      : splitTimingUnits(line.text || '')
     line.timingVersion = 2
   }
 }
@@ -383,11 +379,7 @@ function nextLine() {
 function resplitLine() {
   const line = currentLine.value
   if (!line) return
-  line.words = splitTimingUnits(line.text || '').map((text) => ({
-    text,
-    startSec: null,
-    endSec: null,
-  }))
+  line.words = splitTimingUnits(line.text || '')
   line.timingVersion = 2
   cursor.value = 0
   finished.value = false
