@@ -96,7 +96,8 @@ public final class LyricsReportHandler extends ApiServlet {
         }
 
         try {
-            if (!musicExists(body.musicId())) {
+            MusicMeta music = findMusic(body.musicId()).orElse(null);
+            if (music == null) {
                 sendErrorResponse(response, HttpServletResponse.SC_NOT_FOUND, "music.not_found");
                 return;
             }
@@ -117,6 +118,20 @@ public final class LyricsReportHandler extends ApiServlet {
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("id", reportId);
             data.put("status", "pending");
+            if (Main.getNotificationService() != null) {
+                try {
+                    Main.getNotificationService().scheduleLyricsReportSubmittedNotification(
+                            reportId,
+                            body.musicId(),
+                            music.title(),
+                            music.artist(),
+                            userId,
+                            note
+                    );
+                } catch (Exception e) {
+                    logger.warn("排队歌词报错提醒失败 reportId={}: {}", reportId, e.getMessage());
+                }
+            }
             sendResponse(response, true, "lyrics.report.submitted", data);
         } catch (Exception e) {
             logger.warn("提交歌词报错失败 musicId={} userId={}", body.musicId(), userId, e);
@@ -125,12 +140,15 @@ public final class LyricsReportHandler extends ApiServlet {
         }
     }
 
-    private static boolean musicExists(int musicId) throws Exception {
+    private static Optional<MusicMeta> findMusic(int musicId) throws Exception {
         try (Connection conn = Main.getDatabaseManager().getConnection();
-             PreparedStatement stmt = conn.prepareStatement("SELECT 1 FROM music WHERE id = ?")) {
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT title, artist FROM music WHERE id = ?")) {
             stmt.setInt(1, musicId);
             try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next();
+                return rs.next()
+                        ? Optional.of(new MusicMeta(rs.getString("title"), rs.getString("artist")))
+                        : Optional.empty();
             }
         }
     }
@@ -143,5 +161,8 @@ public final class LyricsReportHandler extends ApiServlet {
     }
 
     private record SubmitRequest(Integer musicId, String content, String note) {
+    }
+
+    private record MusicMeta(String title, String artist) {
     }
 }

@@ -144,6 +144,30 @@ public class NotificationService {
         });
     }
 
+    /** 异步发送歌词报错待审核提醒，不阻塞用户提交。 */
+    public void scheduleLyricsReportSubmittedNotification(
+            long reportId,
+            int musicId,
+            String title,
+            String artist,
+            int userId,
+            String note
+    ) {
+        asyncExecutor.execute(() -> {
+            String message = "歌词报错待审核\n"
+                    + "报错记录：" + reportId + "\n"
+                    + "歌曲：" + safe(title) + " — " + safe(artist) + "\n"
+                    + "曲库 ID：" + musicId + "\n"
+                    + "提交用户 ID：" + userId
+                    + (note == null || note.isBlank() ? "" : "\n补充说明：" + safe(note));
+            try {
+                sendNotification(message);
+            } catch (Exception e) {
+                logger.warn("异步发送歌词报错提醒异常 reportId={}: {}", reportId, e.getMessage(), e);
+            }
+        });
+    }
+
     /**
      * 异步发送「来源因反复认证失败被临时封禁」告警，用于让处置可见（不阻塞认证请求）。
      *
