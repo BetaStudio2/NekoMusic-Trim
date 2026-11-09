@@ -2,7 +2,7 @@ import { parseLyricsPayload } from '@/utils/lyrics.js'
 
 export function toReportLines(music) {
   const parsed = parseLyricsPayload(music)
-  return parsed.map((line, index) => {
+  const lines = parsed.map((line, index) => {
     const startSec = finiteNumber(line.time, 0)
     const nextStart = parsed[index + 1]?.time
     const endSec = finiteNumber(
@@ -28,6 +28,44 @@ export function toReportLines(music) {
       words,
     }
   })
+  const cleaned = []
+  for (const line of lines) {
+    if (looksLikeJsonText(line.text)) {
+      const translation = translationFromJsonText(line.text)
+      if (translation && cleaned.length) {
+        cleaned[cleaned.length - 1].translation ||= translation
+      }
+      continue
+    }
+    cleaned.push(line)
+  }
+  return cleaned
+}
+
+export function looksLikeJsonText(value) {
+  const text = String(value || '').trim()
+  return text.startsWith('{') && text.endsWith('}')
+    && (text.includes('"lines"') || /^\{\s*["'][\s\S]*["']\s*\}$/u.test(text))
+}
+
+function translationFromJsonText(value) {
+  const text = String(value || '').trim()
+  const wrapper = text.match(/^\{\s*(["'])([\s\S]*)\1\s*\}$/u)
+  if (wrapper) {
+    return wrapper[2].trim()
+  }
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const values = Object.values(parsed)
+      if (values.length === 1 && typeof values[0] === 'string') {
+        return values[0].trim()
+      }
+    }
+  } catch {
+    // 非标准 JSON 交给上层按异常草稿丢弃。
+  }
+  return ''
 }
 
 export function emptyReportLine(startSec = 0) {

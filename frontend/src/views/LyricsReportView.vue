@@ -149,7 +149,13 @@ import { openAuthDialog } from '@/composables/useAuthDialog'
 import { useToast } from '@/composables/useToast'
 import { getToken } from '@/utils/userStore.js'
 import { applyPageSeo, PRIVATE_ROBOTS } from '@/utils/seoMeta'
-import { buildNekoDocument, emptyReportLine, reportStats, toReportLines } from '@/utils/lyricsReport'
+import {
+  buildNekoDocument,
+  emptyReportLine,
+  looksLikeJsonText,
+  reportStats,
+  toReportLines,
+} from '@/utils/lyricsReport'
 import { resolveMediaUrl } from '@/utils/mediaUrl.js'
 import { remapTimingUnits } from '@/utils/timingUnits'
 import NIcon from '@/icons/NIcon.vue'
@@ -324,6 +330,13 @@ function restoreDraft() {
   try {
     const draft = JSON.parse(window.localStorage.getItem(draftKey.value) || 'null')
     if (!draft || !Array.isArray(draft.lines) || draft.lines.length === 0) return false
+    if (draft.lines.some((line) =>
+      looksLikeJsonText(line?.text)
+      || (Array.isArray(line?.words) && line.words.some((word) => looksLikeJsonText(word?.text))))) {
+      window.localStorage.removeItem(draftKey.value)
+      toast.error('旧本地草稿包含异常 JSON，已丢弃并重新加载服务器歌词')
+      return false
+    }
     lines.value = draft.lines.map((line) => withUid({
       startSec: Number(line.startSec) || 0,
       endSec: Number(line.endSec) || 0,
