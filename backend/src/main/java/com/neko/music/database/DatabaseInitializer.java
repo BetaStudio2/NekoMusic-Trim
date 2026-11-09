@@ -99,6 +99,31 @@ public class DatabaseInitializer {
             executeTableDdl(stmt, createUserUploadsTable,
                     "user_uploads 表创建成功", "创建 user_uploads 表失败（可能是表已存在）");
 
+            // 用户歌词报错：保存提交版本与审核状态，审核通过后才覆盖正式歌词。
+            String createLyricsReportsTable = """
+                CREATE TABLE IF NOT EXISTS lyrics_reports (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    music_id INT NOT NULL,
+                    user_id INT NOT NULL,
+                    status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+                    format VARCHAR(16) NOT NULL DEFAULT 'neko-v1',
+                    content MEDIUMTEXT NOT NULL,
+                    original_content MEDIUMTEXT NULL,
+                    original_format VARCHAR(16) NULL,
+                    note VARCHAR(500) NULL,
+                    review_note VARCHAR(500) NULL,
+                    reviewer_id INT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    reviewed_at DATETIME NULL,
+                    FOREIGN KEY (music_id) REFERENCES music(id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    INDEX idx_lyrics_reports_pending (status, created_at),
+                    INDEX idx_lyrics_reports_user_music (user_id, music_id, status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """;
+            executeTableDdl(stmt, createLyricsReportsTable,
+                    "lyrics_reports 表创建成功", "创建 lyrics_reports 表失败（可能是表已存在）");
+
             // 创建歌曲评论表（每首歌的评论与楼层回复）
             String createMusicCommentsTable = """
                 CREATE TABLE IF NOT EXISTS music_comments (

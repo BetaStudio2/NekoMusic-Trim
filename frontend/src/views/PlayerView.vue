@@ -66,6 +66,16 @@
               type="button"
               class="np-icon"
               :disabled="!currentMusic"
+              :aria-label="$t('player.reportLyrics')"
+              :title="$t('player.reportLyrics')"
+              @click="openLyricsReport"
+            >
+              <NIcon name="file-text" :size="18" />
+            </button>
+            <button
+              type="button"
+              class="np-icon"
+              :disabled="!currentMusic"
               :aria-label="$t('track.download')"
               :title="$t('track.download')"
               @click="downloadMusic"
@@ -1148,6 +1158,11 @@ const onLyricSeek = (seconds) => {
   if (!Number.isFinite(time) || time < 0) return
   sendPlayerCommand('seek', { time })
   if (!isPlaying.value) sendPlayerCommand('play')
+}
+
+const openLyricsReport = () => {
+  if (!currentMusic.value) return
+  router.push(`/lyrics-report/${currentMusic.value.id}`)
 }
 
 /** 播放模式图标与标题（状态来自桥接层；playback 是 reactive 对象，不是 ref） */

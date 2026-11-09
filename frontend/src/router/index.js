@@ -30,7 +30,10 @@ const adminGuard = (to) => {
       const role = JSON.parse(stored).role || 'admin'
       // 审核员不能访问音乐/歌词/VIP 价目/客户端更新页面
       if (role === 'auditor') {
-        if (to.path.startsWith('/admin/music') || to.path.startsWith('/admin/lyrics')) return '/admin'
+        if (to.path.startsWith('/admin/music')
+          || (to.path.startsWith('/admin/lyrics') && !to.path.startsWith('/admin/lyrics-reports'))) {
+          return '/admin'
+        }
         if (to.path.startsWith('/admin/vip-pricing')) return '/admin'
         if (to.path.startsWith('/admin/releases')) return '/admin'
         if (to.path.startsWith('/admin/settings')) return '/admin'
@@ -335,6 +338,17 @@ const router = createRouter({
           }
         },
         {
+          path: 'lyrics-reports',
+          name: 'admin-lyrics-reports',
+          component: () => import('@/views/admin/AdminLyricsReportsView.vue'),
+          beforeEnter: adminGuard,
+          meta: {
+            title: '歌词报错审核 - Neko歌姬计划',
+            description: '审核用户提交的歌词修改、翻译和逐字时间轴报错。',
+            keywords: '歌词报错,歌词审核,后台管理'
+          }
+        },
+        {
           path: 'audit',
           name: 'admin-audit',
           component: () => import('@/views/admin/AdminAuditView.vue'),
@@ -405,6 +419,16 @@ const router = createRouter({
       }
     },
     {
+      path: '/lyrics-report/:id',
+      name: 'lyrics-report',
+      component: () => import('@/views/LyricsReportView.vue'),
+      meta: {
+        title: '歌词报错 - Neko歌姬计划',
+        description: '协助修改歌词、添加翻译并完善逐字时间轴，提交后由管理员审核。',
+        keywords: '歌词报错,歌词修改,翻译,逐字歌词'
+      }
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/ErrorView.vue'),
@@ -427,6 +451,7 @@ const router = createRouter({
 /** 账号私有页与后台不参与收录，避免登录页 / 空列表页被索引进结果 */
 const NOINDEX_PREFIXES = [
   '/admin', '/favorites', '/playlists', '/account', '/vip', '/upload',
+  '/lyrics-report',
   '/notifications', '/playlist/create', '/forgot-password', '/login', '/register',
   '/oauth/nekocore', '/sso',
 ]
@@ -460,12 +485,14 @@ const ROUTE_TITLE_KEYS = {
   'admin-security': 'route.adminSecurity',
   'admin-music': 'route.adminMusic',
   'admin-lyrics': 'route.adminLyrics',
+  'admin-lyrics-reports': 'route.adminLyricsReports',
   'admin-audit': 'route.adminAudit',
   'admin-vip-pricing': 'route.adminVipPricing',
   'admin-releases': 'route.adminReleases',
   'admin-settings': 'route.adminSettings',
   'admin-logs': 'route.adminLogs',
   detail: 'route.detail',
+  'lyrics-report': 'route.lyricsReport',
   'not-found': 'route.notFound',
 }
 

@@ -107,6 +107,7 @@ public class RequestAuditFilter implements Filter {
             // 歌词
             new OperationRule("/api/admin/lyrics-files", Set.of("PUT"), "歌词管理", "修改歌词"),
             new OperationRule("/api/admin/lyrics-files", Set.of("DELETE"), "歌词管理", "删除歌词"),
+            new OperationRule("/api/admin/lyrics-reports", Set.of("POST"), "歌词报错", "审核歌词报错"),
             // 音乐：/api/music 同时承载公开接口，这里只登记写方法；听歌识曲 /api/music/recognize 不在其列
             new OperationRule("/api/music/upload", Set.of("POST"), "音乐管理", "上传音乐"),
             new OperationRule("/api/music/upload", Set.of("PUT"), "音乐管理", "修改音乐"),
@@ -132,6 +133,7 @@ public class RequestAuditFilter implements Filter {
     /** 模块兜底表：没有命中操作规则的后台路径按它归类（只用于模块名）。 */
     private static final List<String[]> ADMIN_MODULES = List.of(
             new String[] { "/api/admin/lyrics-files", "歌词管理" },
+            new String[] { "/api/admin/lyrics-reports", "歌词报错" },
             new String[] { "/api/admin/settings", "系统设置" },
             new String[] { "/api/admin/releases", "客户端更新" },
             new String[] { "/api/admin/netease", "外站补全" },

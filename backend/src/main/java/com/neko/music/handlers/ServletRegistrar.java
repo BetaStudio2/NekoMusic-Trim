@@ -117,6 +117,12 @@ public final class ServletRegistrar {
         ServletHolder adminLyricsFileHolder = new ServletHolder(new AdminLyricsFileHandler());
         context.addServlet(adminLyricsFileHolder, "/api/admin/lyrics-files/*");
 
+        // 用户歌词报错 + 后台审核
+        ServletHolder lyricsReportHolder = new ServletHolder(new LyricsReportHandler());
+        context.addServlet(lyricsReportHolder, "/api/lyrics/reports");
+        ServletHolder adminLyricsReportHolder = new ServletHolder(new AdminLyricsReportHandler());
+        context.addServlet(adminLyricsReportHolder, "/api/admin/lyrics-reports/*");
+
         // 注册用户上传预览API处理器
         ServletHolder userUploadPreviewHolder = new ServletHolder(new UserUploadPreviewHandler());
         context.addServlet(userUploadPreviewHolder, "/api/user/upload/preview");

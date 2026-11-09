@@ -101,6 +101,7 @@ const navGroups = computed(() => {
   }
   if (hasPermission('audit_view')) {
     content.push({ to: '/admin/audit', icon: 'clipboard-check', label: '审核管理' })
+    content.push({ to: '/admin/lyrics-reports', icon: 'file-text', label: '歌词报错' })
   }
 
   const ops = []
