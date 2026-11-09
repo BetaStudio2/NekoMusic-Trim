@@ -97,17 +97,66 @@
             :audio-loading="audioLoading"
           />
 
-          <NCard v-else-if="activeTab === 'text'" pad="md" class="plain-editor-card">
-            <label class="field">
-              <span>{{ $t('lyricsReport.plainTextHint') }}</span>
-              <textarea
-                v-model="combinedLyricsText"
-                class="plain-editor"
-                spellcheck="false"
-                :placeholder="$t('lyricsReport.plainTextPlaceholder')"
-                @input="syncCombinedTextToLines"
-              />
-            </label>
+          <NCard v-else-if="activeTab === 'text'" pad="md" class="line-editor-card">
+            <div class="line-editor__head">
+              <div>
+                <h2>{{ $t('lyricsReport.tabText') }}</h2>
+                <p>{{ $t('lyricsReport.lineEditorHint') }}</p>
+              </div>
+              <div class="line-editor__actions">
+                <span class="line-editor__count">{{ $t('lyricsReport.lineCount', { count: lines.length }) }}</span>
+                <NButton variant="secondary" size="sm" icon="plus" @click="addLine">
+                  {{ $t('lyricsReport.addLine') }}
+                </NButton>
+              </div>
+            </div>
+
+            <div class="line-editor">
+              <section
+                v-for="(line, index) in lines"
+                :key="line.uid || index"
+                class="lyric-line"
+                :aria-label="$t('lyricsReport.line', { index: index + 1 })"
+              >
+                <div class="lyric-line__head">
+                  <span class="lyric-line__number">{{ $t('lyricsReport.line', { index: index + 1 }) }}</span>
+                  <button
+                    type="button"
+                    class="lyric-line__remove"
+                    :aria-label="$t('lyricsReport.removeLine', { index: index + 1 })"
+                    :disabled="lines.length <= 1"
+                    @click="removeLine(index)"
+                  >
+                    <NIcon name="trash" :size="15" />
+                  </button>
+                </div>
+                <div class="lyric-line__fields">
+                  <label class="field lyric-line__field">
+                    <span>{{ $t('lyricsReport.original') }}</span>
+                    <textarea
+                      :value="line.text"
+                      rows="2"
+                      :placeholder="$t('lyricsReport.textPlaceholder')"
+                      @input="updateOriginal(line, $event.target.value)"
+                    />
+                  </label>
+                  <label class="field lyric-line__field">
+                    <span>{{ $t('lyricsReport.translation') }}</span>
+                    <textarea
+                      v-model="line.translation"
+                      rows="2"
+                      :placeholder="$t('lyricsReport.translationPlaceholder')"
+                    />
+                  </label>
+                </div>
+              </section>
+            </div>
+
+            <div class="line-editor__bottom">
+              <NButton variant="ghost" size="sm" icon="plus" @click="addLine">
+                {{ $t('lyricsReport.addLine') }}
+              </NButton>
+            </div>
           </NCard>
 
           <NCard pad="md" class="submit-card">
@@ -184,7 +233,6 @@ const submitting = ref(false)
 const submittedId = ref(null)
 const music = ref(null)
 const lines = ref([])
-const combinedLyricsText = ref('')
 const note = ref('')
 const activeTab = ref('text')
 const draftSaved = ref(false)
@@ -202,14 +250,6 @@ watch(
   () => scheduleDraftSave(),
   { deep: true },
 )
-
-watch(activeTab, (tab, previous) => {
-  if (previous === 'text' && tab !== 'text') {
-    syncCombinedTextToLines()
-  } else if (tab === 'text' && previous !== 'text') {
-    syncLinesToEditors()
-  }
-})
 
 onBeforeUnmount(() => {
   if (draftTimer) window.clearTimeout(draftTimer)
@@ -233,7 +273,6 @@ async function load() {
       lines.value = (initial.length ? initial : [emptyReportLine()]).map(withUid)
     }
     normalizeEnglishTimingSegments()
-    syncLinesToEditors()
     loadAudio()
     applyPageSeo({
       title: `${payload.data.title} - 歌词报错 | Neko歌姬计划`,
@@ -249,68 +288,26 @@ async function load() {
   }
 }
 
-function syncLinesToEditors() {
-  combinedLyricsText.value = lines.value.map((line) => {
-    const text = line.text || ''
-    const translation = String(line.translation || '').trim()
-    return translation ? `${text} | ${translation}` : text
-  }).join('\n')
+function addLine() {
+  const previous = lines.value[lines.value.length - 1]
+  const line = withUid(emptyReportLine(previous ? Number(previous.endSec) || 0 : 0))
+  lines.value.push(line)
 }
 
-function syncCombinedTextToLines() {
-  const entries = []
-  for (const rawLine of combinedLyricsText.value.split(/\r?\n/u)) {
-    const line = rawLine.trim()
-    if (!line) continue
-    const separator = line.indexOf('|')
-    const text = (separator >= 0 ? line.slice(0, separator) : line).trim()
-    const translation = separator >= 0 ? line.slice(separator + 1).trim() : ''
-    if (!text) continue
-    entries.push({
-      text,
-      translation,
-    })
+function updateOriginal(line, text) {
+  if (line.text === text) return
+  line.text = text
+  line.words = []
+  line.timingVersion = 0
+  if (/[\p{Script=Latin}]{2,}/u.test(String(text || ''))) {
+    line.words = remapTimingUnits(text, [])
+    line.timingVersion = 2
   }
-  const previousLines = lines.value
-  const used = new Set()
-  const next = []
+}
 
-  for (let index = 0; index < entries.length; index++) {
-    const { text, translation } = entries[index]
-    let sourceIndex = -1
-    if (previousLines[index] && !used.has(index)
-        && String(previousLines[index].text || '').trim() === text) {
-      sourceIndex = index
-    }
-    if (sourceIndex < 0) {
-      sourceIndex = previousLines.findIndex((line, lineIndex) =>
-        !used.has(lineIndex) && String(line.text || '').trim() === text)
-    }
-    if (sourceIndex < 0 && previousLines[index] && !used.has(index)) {
-      sourceIndex = index
-    }
-
-    if (sourceIndex >= 0) {
-      const source = previousLines[sourceIndex]
-      used.add(sourceIndex)
-      const changed = String(source.text || '').trim() !== text
-      next.push({
-        ...source,
-        text,
-        translation,
-        words: changed ? [] : source.words,
-        timingVersion: changed ? 0 : source.timingVersion,
-      })
-    } else {
-      const previous = next[next.length - 1]
-      const line = withUid(emptyReportLine(previous ? Number(previous.endSec) || 0 : 0))
-      line.text = text
-      line.translation = translation
-      next.push(line)
-    }
-  }
-  lines.value = next
-  normalizeEnglishTimingSegments()
+function removeLine(index) {
+  if (lines.value.length <= 1) return
+  lines.value.splice(index, 1)
 }
 
 function normalizeEnglishTimingSegments() {
@@ -448,18 +445,20 @@ async function submitReport() {
     openLogin()
     return
   }
-  const populated = lines.value.filter((line) => String(line.text || '').trim())
+  const populated = lines.value
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => String(line.text || '').trim())
   if (!populated.length) {
     toast.error('请至少填写一行歌词')
     return
   }
-  for (let index = 0; index < populated.length; index++) {
-    if (Number(populated[index].endSec) <= Number(populated[index].startSec)) {
+  for (const { line, index } of populated) {
+    if (Number(line.endSec) <= Number(line.startSec)) {
       toast.error(`第 ${index + 1} 行的结束时间必须晚于开始时间`)
       return
     }
   }
-  const content = JSON.stringify(buildNekoDocument(populated))
+  const content = JSON.stringify(buildNekoDocument(populated.map(({ line }) => line)))
   if (new Blob([content]).size > 1024 * 1024) {
     toast.error('歌词内容不能超过 1MiB')
     return
@@ -636,29 +635,120 @@ async function submitReport() {
   gap: var(--n-space-3);
 }
 
-.plain-editor-card {
-  min-height: 520px;
+.line-editor-card {
+  display: grid;
+  gap: var(--n-space-4);
 }
 
-.plain-editor {
-  width: 100%;
-  min-height: 62vh;
+.line-editor__head,
+.line-editor__actions,
+.line-editor__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--n-space-3);
+}
+
+.line-editor__head h2,
+.line-editor__head p {
+  margin: 0;
+}
+
+.line-editor__head h2 {
+  font-size: var(--n-text-lg);
+}
+
+.line-editor__head p {
+  margin-top: 4px;
+  color: var(--n-text-muted);
+  font-size: var(--n-text-sm);
+}
+
+.line-editor__actions {
+  flex-shrink: 0;
+}
+
+.line-editor__count {
+  color: var(--n-text-faint);
+  font-size: var(--n-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.line-editor {
+  display: grid;
+  gap: var(--n-space-3);
+}
+
+.lyric-line {
+  min-width: 0;
   padding: var(--n-space-4);
+  border: 1px solid var(--n-line);
+  border-radius: var(--n-radius-lg);
+  background: var(--n-surface-soft);
+}
+
+.lyric-line__head {
+  display: flex;
+  align-items: center;
+  gap: var(--n-space-2);
+  margin-bottom: var(--n-space-3);
+}
+
+.lyric-line__number {
+  color: var(--n-text-muted);
+  font-size: var(--n-text-sm);
+  font-weight: var(--n-weight-medium);
+}
+
+.lyric-line__remove {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  border-radius: var(--n-radius-sm);
+  color: var(--n-text-faint);
+}
+
+.lyric-line__remove:hover:not(:disabled) {
+  background: var(--n-danger-soft);
+  color: var(--n-danger);
+}
+
+.lyric-line__remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lyric-line__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--n-space-3);
+}
+
+.lyric-line__field textarea {
+  width: 100%;
+  min-height: 66px;
+  padding: 10px 12px;
   border: 1px solid var(--n-line);
   border-radius: var(--n-radius-control);
   outline: none;
-  resize: vertical;
   background: var(--n-surface-soft);
   color: var(--n-text);
-  font-family: var(--n-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: clamp(15px, 1.2vw, 18px);
-  line-height: 1.9;
-  tab-size: 2;
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
 }
 
-.plain-editor:focus {
+.lyric-line__field textarea:focus {
   border-color: var(--n-accent-line);
   box-shadow: var(--n-shadow-glow);
+}
+
+.line-editor__bottom {
+  justify-content: flex-start;
+  padding-top: var(--n-space-1);
+  border-top: 1px solid var(--n-line);
 }
 
 @media (min-width: 1080px) {
@@ -790,6 +880,20 @@ async function submitReport() {
 
   .tabs {
     overflow-x: auto;
+  }
+
+  .line-editor__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .line-editor__actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .lyric-line__fields {
+    grid-template-columns: 1fr;
   }
 
   .line-card__times {
