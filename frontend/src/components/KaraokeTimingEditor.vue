@@ -1,63 +1,97 @@
 <template>
   <div class="karaoke">
-    <div class="karaoke__player">
-      <button
-        type="button"
-        class="karaoke__play"
-        :aria-label="isPlaying ? '暂停' : '播放'"
-        :disabled="audioLoading || !audioUrl || audioError"
-        @click="togglePlay"
-      >
-        <NIcon :name="isPlaying ? 'pause' : 'play'" :size="20" />
-      </button>
-      <div class="karaoke__timeline">
-        <template v-if="audioLoading">
-          <p class="karaoke__status">正在加载音乐…</p>
-        </template>
-        <template v-else-if="audioError || !audioUrl">
-          <p class="karaoke__status karaoke__status--error">音乐加载失败，请刷新页面重试</p>
-        </template>
-        <template v-else>
-          <input
-            :value="currentTime"
-            type="range"
-            min="0"
-            :max="duration || 0"
-            step="0.01"
-            :disabled="!duration"
-            aria-label="播放进度"
-            @input="seek"
-          />
-        </template>
-        <div class="karaoke__time">
-          <span>{{ formatTime(currentTime) }}</span>
-          <span>{{ formatTime(duration) }}</span>
+    <div class="karaoke__dock">
+      <div class="karaoke__player">
+        <button
+          type="button"
+          class="karaoke__play"
+          :aria-label="isPlaying ? '暂停' : '播放'"
+          :disabled="audioLoading || !audioUrl || audioError"
+          @click="togglePlay"
+        >
+          <NIcon :name="isPlaying ? 'pause' : 'play'" :size="20" />
+        </button>
+        <div class="karaoke__timeline">
+          <template v-if="audioLoading">
+            <p class="karaoke__status">正在加载音乐…</p>
+          </template>
+          <template v-else-if="audioError || !audioUrl">
+            <p class="karaoke__status karaoke__status--error">音乐加载失败，请刷新页面重试</p>
+          </template>
+          <template v-else>
+            <input
+              :value="currentTime"
+              type="range"
+              min="0"
+              :max="duration || 0"
+              step="0.01"
+              :disabled="!duration"
+              aria-label="播放进度"
+              @input="seek"
+            />
+          </template>
+          <div class="karaoke__time">
+            <span>{{ formatTime(currentTime) }}</span>
+            <span>{{ formatTime(duration) }}</span>
+          </div>
+        </div>
+        <label class="karaoke__speed">
+          <span>倍速</span>
+          <select v-model.number="playbackRate" @change="applyPlaybackRate">
+            <option :value="0.5">0.5×</option>
+            <option :value="0.75">0.75×</option>
+            <option :value="1">1×</option>
+            <option :value="1.25">1.25×</option>
+            <option :value="1.5">1.5×</option>
+            <option :value="2">2×</option>
+          </select>
+        </label>
+      </div>
+
+      <audio
+        ref="audioRef"
+        :src="audioUrl"
+        preload="metadata"
+        @timeupdate="onTimeUpdate"
+        @loadedmetadata="onLoadedMetadata"
+        @play="isPlaying = true"
+        @pause="isPlaying = false"
+        @ended="isPlaying = false"
+        @error="audioError = true"
+      />
+
+      <div class="karaoke__tap-panel">
+        <div class="karaoke__target">
+          <span>下一个目标</span>
+          <strong>{{ targetLabel }}</strong>
+        </div>
+        <button
+          type="button"
+          class="karaoke__tap"
+          :class="{
+            'karaoke__tap--finish': cursor >= currentWords.length,
+            'karaoke__tap--playing': isPlaying,
+            'karaoke__tap--hit': tapPulse,
+          }"
+          :disabled="!isPlaying || finished || !currentLine"
+          @click="tap"
+        >
+          <NIcon name="music-2" :size="24" />
+          <span>{{ tapLabel }}</span>
+        </button>
+        <div class="karaoke__actions">
+          <NButton size="sm" variant="ghost" icon="chevron-left" @click="previousLine">
+            上一行
+          </NButton>
+          <NButton size="sm" variant="ghost" icon="refresh" @click="resplitLine">
+            重新拆分本行
+          </NButton>
+          <NButton size="sm" variant="ghost" iconAfter="chevron-right" @click="nextLine">
+            下一行
+          </NButton>
         </div>
       </div>
-      <label class="karaoke__speed">
-        <span>倍速</span>
-        <select v-model.number="playbackRate" @change="applyPlaybackRate">
-          <option :value="0.5">0.5×</option>
-          <option :value="0.75">0.75×</option>
-          <option :value="1">1×</option>
-          <option :value="1.25">1.25×</option>
-          <option :value="1.5">1.5×</option>
-          <option :value="2">2×</option>
-        </select>
-      </label>
     </div>
-
-    <audio
-      ref="audioRef"
-      :src="audioUrl"
-      preload="metadata"
-      @timeupdate="onTimeUpdate"
-      @loadedmetadata="onLoadedMetadata"
-      @play="isPlaying = true"
-      @pause="isPlaying = false"
-      @ended="isPlaying = false"
-      @error="audioError = true"
-    />
 
     <div class="karaoke__guide">
       <div>
@@ -98,37 +132,6 @@
       </button>
     </div>
 
-    <div class="karaoke__tap-panel">
-      <div class="karaoke__target">
-        <span>下一个目标</span>
-        <strong>{{ targetLabel }}</strong>
-      </div>
-      <button
-        type="button"
-        class="karaoke__tap"
-        :class="{
-          'karaoke__tap--finish': cursor >= currentWords.length,
-          'karaoke__tap--playing': isPlaying,
-          'karaoke__tap--hit': tapPulse,
-        }"
-        :disabled="!isPlaying || finished || !currentLine"
-        @click="tap"
-      >
-        <NIcon name="music-2" :size="24" />
-        <span>{{ tapLabel }}</span>
-      </button>
-      <div class="karaoke__actions">
-        <NButton size="sm" variant="ghost" icon="chevron-left" @click="previousLine">
-          上一行
-        </NButton>
-        <NButton size="sm" variant="ghost" icon="refresh" @click="resplitLine">
-          重新拆分本行
-        </NButton>
-        <NButton size="sm" variant="ghost" iconAfter="chevron-right" @click="nextLine">
-          下一行
-        </NButton>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -353,6 +356,10 @@ function formatTime(seconds) {
     "guide lyrics tap";
   align-items: start;
   gap: var(--n-space-4);
+}
+
+.karaoke__dock {
+  display: contents;
 }
 
 .karaoke__player {
@@ -620,10 +627,56 @@ function formatTime(seconds) {
   .karaoke {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "player"
       "guide"
       "lyrics";
-    padding-bottom: 176px;
+    padding-bottom: 214px;
+  }
+
+  .karaoke__dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: calc(var(--n-z-player) + 1);
+    display: grid;
+    gap: 8px;
+    padding:
+      10px max(16px, env(safe-area-inset-right))
+      calc(10px + var(--n-safe-bottom))
+      max(16px, env(safe-area-inset-left));
+    border-top: 1px solid var(--n-line);
+    background: var(--n-surface-strong);
+    box-shadow: 0 -14px 44px rgba(0, 0, 0, 0.46);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .karaoke__player {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .karaoke__player .karaoke__play {
+    width: 40px;
+    height: 40px;
+  }
+
+  .karaoke__speed {
+    grid-column: auto;
+    gap: 0;
+  }
+
+  .karaoke__speed span {
+    display: none;
+  }
+
+  .karaoke__speed select {
+    min-width: 72px;
+    height: 30px;
   }
 
   .karaoke__guide {
@@ -635,29 +688,20 @@ function formatTime(seconds) {
   }
 
   .karaoke__tap-panel {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: calc(var(--n-z-player) + 1);
+    position: static;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "target tap"
       "actions actions";
     align-items: center;
     gap: 8px 16px;
-    padding:
-      10px max(16px, env(safe-area-inset-right))
-      calc(10px + var(--n-safe-bottom))
-      max(16px, env(safe-area-inset-left));
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
+    padding: 0;
+    border: 0;
     border-radius: 0;
-    background: var(--n-surface-strong);
-    box-shadow: 0 -14px 44px rgba(0, 0, 0, 0.46);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .karaoke__target {
