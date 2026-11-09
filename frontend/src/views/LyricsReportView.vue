@@ -82,11 +82,19 @@
             </NButton>
           </div>
 
-          <div class="lines">
+          <KaraokeTimingEditor
+            v-if="activeTab === 'words'"
+            :lines="lines"
+            :audio-url="audioUrl"
+          />
+
+          <div v-else class="lines">
             <NCard v-for="(line, index) in lines" :key="line.uid" pad="none" class="line-card">
               <header class="line-card__head">
                 <strong>{{ $t('lyricsReport.line', { index: index + 1 }) }}</strong>
-                <span>{{ formatTime(line.startSec) }} – {{ formatTime(line.endSec) }}</span>
+                <span v-if="activeTab === 'text'">
+                  {{ formatTime(line.startSec) }} – {{ formatTime(line.endSec) }}
+                </span>
                 <button
                   type="button"
                   class="line-card__remove"
@@ -98,7 +106,7 @@
                 </button>
               </header>
 
-              <div class="line-card__times">
+              <div v-if="activeTab === 'text'" class="line-card__times">
                 <label>
                   <span>{{ $t('lyricsReport.start') }}</span>
                   <input v-model.number="line.startSec" type="number" min="0" step="0.01" />
@@ -134,31 +142,6 @@
                 </label>
               </template>
 
-              <template v-else>
-                <p class="line-card__original">{{ line.text || $t('lyricsReport.noOriginal') }}</p>
-                <div class="words">
-                  <div v-for="(word, wordIndex) in line.words" :key="wordIndex" class="word-row">
-                    <NInput
-                      v-model="word.text"
-                      size="sm"
-                      :placeholder="$t('lyricsReport.wordPlaceholder')"
-                    />
-                    <input v-model.number="word.startSec" type="number" min="0" step="0.01" aria-label="word start" />
-                    <input v-model.number="word.endSec" type="number" min="0" step="0.01" aria-label="word end" />
-                    <button
-                      type="button"
-                      class="word-row__remove"
-                      :aria-label="$t('lyricsReport.removeWord')"
-                      @click="removeWord(line, wordIndex)"
-                    >
-                      <NIcon name="close" :size="14" />
-                    </button>
-                  </div>
-                  <NButton size="sm" variant="ghost" icon="plus" @click="addWord(line)">
-                    {{ $t('lyricsReport.addWord') }}
-                  </NButton>
-                </div>
-              </template>
             </NCard>
           </div>
 
@@ -204,6 +187,7 @@ import { applyPageSeo, PRIVATE_ROBOTS } from '@/utils/seoMeta'
 import { buildNekoDocument, emptyReportLine, reportStats, toReportLines } from '@/utils/lyricsReport'
 import NIcon from '@/icons/NIcon.vue'
 import { NButton, NCard, NInput, NSpinner, NTag } from '@/ui'
+import KaraokeTimingEditor from '@/components/KaraokeTimingEditor.vue'
 import { AmbientBackdrop, PageShell } from '@/layouts'
 
 const route = useRoute()
@@ -213,6 +197,7 @@ const { isLoggedIn } = useAuth()
 
 const musicId = computed(() => Number(route.params.id))
 const coverUrl = computed(() => `${API_CONFIG.BASE_URL}/api/music/cover/${musicId.value}`)
+const audioUrl = computed(() => `${API_CONFIG.BASE_URL}/api/music/file/${musicId.value}`)
 const tabs = [
   { id: 'text', label: 'lyricsReport.tabText', icon: 'edit' },
   { id: 'translation', label: 'lyricsReport.tabTranslation', icon: 'languages' },
@@ -275,20 +260,6 @@ function addLine() {
 
 function removeLine(index) {
   lines.value.splice(index, 1)
-}
-
-function addWord(line) {
-  const start = Number(line.startSec) || 0
-  const end = Number(line.endSec) > start ? Number(line.endSec) : start + 1
-  line.words.push({
-    text: '',
-    startSec: start,
-    endSec: end,
-  })
-}
-
-function removeWord(line, index) {
-  line.words.splice(index, 1)
 }
 
 function openLogin() {
