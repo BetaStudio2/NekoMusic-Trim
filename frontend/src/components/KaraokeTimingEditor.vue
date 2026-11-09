@@ -165,12 +165,15 @@
         <span class="karaoke-line__time">{{ formatTime(line.startSec) }}</span>
         <span class="karaoke-line__content">
           <span class="karaoke-line__text">
-          <span
-            v-for="(word, wordIndex) in line.words"
-            :key="wordIndex"
-            class="karaoke-segment"
-            :class="segmentClass(line, lineIndex, word, wordIndex)"
-          >{{ wordText(word) }}</span>
+            <template v-if="line.words?.length">
+              <span
+                v-for="(word, wordIndex) in line.words"
+                :key="wordIndex"
+                class="karaoke-segment"
+                :class="segmentClass(line, lineIndex, word, wordIndex)"
+              >{{ wordText(word) }}</span>
+            </template>
+            <template v-else>{{ line.text }}</template>
           </span>
           <span v-if="line.romanization" class="karaoke-line__romanization">
             {{ line.romanization }}
@@ -239,6 +242,19 @@ watch(() => props.lines.length, () => {
   cursor.value = 0
   finished.value = false
 })
+
+watch(
+  () => props.lines.map((line) => `${line.uid || ''}:${line.text || ''}`).join('\n'),
+  () => {
+    props.lines.forEach(ensureSegments)
+    if (activeLineIndex.value >= props.lines.length) {
+      activeLineIndex.value = Math.max(0, props.lines.length - 1)
+    }
+    cursor.value = 0
+    finished.value = false
+  },
+  { immediate: true },
+)
 
 watch(() => props.audioUrl, () => {
   audioError.value = false
