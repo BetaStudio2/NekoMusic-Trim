@@ -189,6 +189,7 @@ const note = ref('')
 const activeTab = ref('text')
 const draftSaved = ref(false)
 const draftKey = computed(() => `nekoLyricsReportDraft:${musicId.value}`)
+const REPORT_DRAFT_VERSION = 3
 let lineSequence = 0
 let draftTimer = null
 
@@ -330,11 +331,9 @@ function restoreDraft() {
   try {
     const draft = JSON.parse(window.localStorage.getItem(draftKey.value) || 'null')
     if (!draft || !Array.isArray(draft.lines) || draft.lines.length === 0) return false
-    if (draft.lines.some((line) =>
-      looksLikeJsonText(line?.text)
-      || (Array.isArray(line?.words) && line.words.some((word) => looksLikeJsonText(word?.text))))) {
+    if (draft.version !== REPORT_DRAFT_VERSION || !isValidDraft(draft)) {
       window.localStorage.removeItem(draftKey.value)
-      toast.error('旧本地草稿包含异常 JSON，已丢弃并重新加载服务器歌词')
+      toast.error('旧版或异常本地草稿已清理，已重新加载服务器歌词')
       return false
     }
     lines.value = draft.lines.map((line) => withUid({
@@ -373,16 +372,46 @@ function saveDraft() {
   if (loading.value || submittedId.value || !music.value || !lines.value.length) return
   try {
     window.localStorage.setItem(draftKey.value, JSON.stringify({
-      version: 1,
+      version: REPORT_DRAFT_VERSION,
       updatedAt: Date.now(),
       activeTab: activeTab.value,
       note: note.value,
-      lines: lines.value.map(({ uid: _uid, ...line }) => line),
+      lines: lines.value.map((line) => ({
+        startSec: Number(line.startSec) || 0,
+        endSec: Number(line.endSec) || 0,
+        text: typeof line.text === 'string' ? line.text : '',
+        translation: typeof line.translation === 'string' ? line.translation : '',
+        romanization: typeof line.romanization === 'string' ? line.romanization : '',
+        timingVersion: Number(line.timingVersion) || 0,
+        words: Array.isArray(line.words)
+          ? line.words
+              .filter((word) => word && typeof word === 'object' && typeof word.text === 'string')
+              .map((word) => ({
+                text: word.text,
+                startSec: Number.isFinite(Number(word.startSec)) ? Number(word.startSec) : null,
+                endSec: Number.isFinite(Number(word.endSec)) ? Number(word.endSec) : null,
+              }))
+          : [],
+      })),
     }))
     draftSaved.value = true
   } catch {
     draftSaved.value = false
   }
+}
+
+function isValidDraft(draft) {
+  return draft.lines.every((line) => {
+    if (!line || typeof line !== 'object') return false
+    if (typeof line.text !== 'string' || looksLikeJsonText(line.text)) return false
+    if (line.translation != null && typeof line.translation !== 'string') return false
+    if (line.romanization != null && typeof line.romanization !== 'string') return false
+    if (line.words != null && !Array.isArray(line.words)) return false
+    return (line.words || []).every((word) =>
+      word && typeof word === 'object'
+      && typeof word.text === 'string'
+      && !looksLikeJsonText(word.text))
+  })
 }
 
 async function loadAudio() {

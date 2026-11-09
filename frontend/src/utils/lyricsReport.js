@@ -45,7 +45,7 @@ export function toReportLines(music) {
 export function looksLikeJsonText(value) {
   const text = String(value || '').trim()
   return text.startsWith('{') && text.endsWith('}')
-    && (text.includes('"lines"') || /^\{\s*["'][\s\S]*["']\s*\}$/u.test(text))
+    && (text.includes(':') || /^\{\s*["'][\s\S]*["']\s*\}$/u.test(text))
 }
 
 function translationFromJsonText(value) {
@@ -82,6 +82,7 @@ export function emptyReportLine(startSec = 0) {
 export function buildNekoDocument(lines) {
   const source = Array.isArray(lines) ? lines : []
   const sorted = source
+    .filter((line) => line && typeof line === 'object')
     .map((line) => ({
       ...line,
       startSec: Math.max(0, finiteNumber(line.startSec, 0)),
@@ -99,24 +100,25 @@ export function buildNekoDocument(lines) {
     }
     const endMs = Math.round(endSec * 1000)
     const words = (Array.isArray(line.words) ? line.words : [])
-      .filter((word) => String(word.text || '').length > 0)
+      .filter((word) => word && typeof word === 'object'
+        && typeof word.text === 'string' && word.text.length > 0)
       .map((word) => {
         const wordStart = Math.round(Math.max(line.startSec, finiteNumber(word.startSec, line.startSec)) * 1000)
         const wordEnd = Math.round(Math.max(
           wordStart / 1000,
           finiteNumber(word.endSec, endSec),
         ) * 1000)
-        return { startMs: wordStart, endMs: wordEnd, text: String(word.text || '') }
+        return { startMs: wordStart, endMs: wordEnd, text: word.text }
       })
       .sort((a, b) => a.startMs - b.startMs)
     normalized.push({
       startMs,
       endMs,
-      text: String(line.text || '').trim(),
+      text: typeof line.text === 'string' ? line.text.trim() : '',
       translation: blankToNull(line.translation),
       romanization: blankToNull(line.romanization),
       background: false,
-      words,
+      words: words.filter((word) => typeof word.text === 'string' && word.text.length > 0),
     })
   }
   return { version: 1, lines: normalized }
@@ -142,6 +144,7 @@ function finiteNumber(value, fallback) {
 }
 
 function blankToNull(value) {
-  const text = String(value ?? '').trim()
+  if (typeof value !== 'string') return null
+  const text = value.trim()
   return text ? text : null
 }

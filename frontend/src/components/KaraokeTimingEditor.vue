@@ -170,7 +170,7 @@
             :key="wordIndex"
             class="karaoke-segment"
             :class="segmentClass(line, lineIndex, word, wordIndex)"
-          >{{ word.text }}</span>
+          >{{ wordText(word) }}</span>
           </span>
           <span v-if="line.romanization" class="karaoke-line__romanization">
             {{ line.romanization }}
@@ -214,7 +214,7 @@ const targetLabel = computed(() => {
   if (finished.value) return '全部完成'
   if (!currentWords.value.length) return '请先重新拆分本行'
   if (cursor.value >= currentWords.value.length) return '结束本行'
-  return `「${(currentWords.value[cursor.value]?.text || '').trim()}」`
+  return `「${wordText(currentWords.value[cursor.value]).trim()}」`
 })
 const tapLabel = computed(() => {
   if (finished.value) return '已完成'
@@ -248,11 +248,14 @@ watch(() => props.audioUrl, () => {
 
 function ensureSegments(line) {
   if (!line) return
+  const hasInvalidWords = Array.isArray(line.words)
+    && line.words.some((word) => !word || typeof word !== 'object' || typeof word.text !== 'string')
   const joined = Array.isArray(line.words)
-    ? line.words.map((word) => word.text || '').join('')
+    ? line.words.map((word) => wordText(word)).join('')
     : ''
   const needsEnglishResplit = hasLatinWord(line.text) && line.timingVersion !== 2
   if (!Array.isArray(line.words) || line.words.length === 0
+      || hasInvalidWords
       || comparableLyricsText(joined) !== comparableLyricsText(line.text)
       || needsEnglishResplit) {
     line.words = needsEnglishResplit
@@ -264,6 +267,10 @@ function ensureSegments(line) {
         }))
     line.timingVersion = 2
   }
+}
+
+function wordText(word) {
+  return word && typeof word.text === 'string' ? word.text : ''
 }
 
 function hasLatinWord(text) {

@@ -80,7 +80,7 @@
               v-for="(segment, segmentIndex) in segmentsFor(line)"
               :key="segmentIndex"
               :class="{ 'preview-line__segment--active': segmentActive(segment, index) }"
-            >{{ segment.text }}</span>
+            >{{ segmentText(segment) }}</span>
           </p>
           <p v-if="line.romanization" class="preview-line__romanization">
             {{ line.romanization }}
@@ -144,11 +144,16 @@ watch(() => props.audioUrl, () => {
 function segmentsFor(line) {
   const words = Array.isArray(line.words) ? line.words : []
   if (words.length
-    && comparableLyricsText(words.map((word) => word.text || '').join(''))
+    && words.every((word) => word && typeof word.text === 'string')
+    && comparableLyricsText(words.map((word) => word.text).join(''))
       === comparableLyricsText(line.text)) {
     return words
   }
   return line.text ? [{ text: line.text, startSec: line.startSec }] : []
+}
+
+function segmentText(segment) {
+  return segment && typeof segment.text === 'string' ? segment.text : ''
 }
 
 function segmentActive(segment, lineIndex) {

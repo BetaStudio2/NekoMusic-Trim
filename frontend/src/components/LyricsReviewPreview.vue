@@ -73,7 +73,7 @@
                   v-for="(word, wordIndex) in segmentsFor(line)"
                   :key="wordIndex"
                   :class="{ 'review-word--active': wordActive(word, index === submittedActive) }"
-                >{{ word.text }}</span>
+                >{{ wordText(word) }}</span>
               </p>
               <p v-if="line.romanization" class="review-line__romanization">
                 {{ line.romanization }}
@@ -106,7 +106,7 @@
                   v-for="(word, wordIndex) in segmentsFor(line)"
                   :key="wordIndex"
                   :class="{ 'review-word--active': wordActive(word, index === currentActive) }"
-                >{{ word.text }}</span>
+                >{{ wordText(word) }}</span>
               </p>
               <p v-if="line.romanization" class="review-line__romanization">
                 {{ line.romanization }}
@@ -172,11 +172,16 @@ function findActive(lines) {
 function segmentsFor(line) {
   const words = Array.isArray(line.words) ? line.words : []
   if (words.length
-    && comparableLyricsText(words.map((word) => word.text || '').join(''))
+    && words.every((word) => word && typeof word.text === 'string')
+    && comparableLyricsText(words.map((word) => word.text).join(''))
       === comparableLyricsText(line.text)) {
     return words
   }
   return line.text ? [{ text: line.text, startMs: lineStartMs(line) }] : []
+}
+
+function wordText(word) {
+  return word && typeof word.text === 'string' ? word.text : ''
 }
 
 function wordActive(word, lineActive) {
