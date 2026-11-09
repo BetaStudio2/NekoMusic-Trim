@@ -325,11 +325,11 @@ public class FileUploadHandler extends HttpServlet {
                 logger.info("封面文件已保存到: {}", coverFile);
             }
             
-            // 保存歌词到数据库
-            saveLyricsToDatabase(id, form.lyricsFilePart);
-            
             // 更新数据库中的音乐信息
             updateMusicInDatabase(id, title, artist, album, language, tags, duration, uploadUserId);
+
+            // 语种先落库，随后写歌词时才能按“日语”硬性补全罗马音。
+            saveLyricsToDatabase(id, form.lyricsFilePart);
 
             // 歌词/封面/基础标签同步进音频文件（保留广告元数据）
             EmbeddedMetadataSyncService.syncOne(id);

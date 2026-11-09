@@ -9,6 +9,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Neko 统一歌词格式 {@code neko-v1}。
@@ -21,6 +23,12 @@ public final class NekoLyrics {
 
     public static final String FORMAT = "neko-v1";
     public static final int VERSION = 1;
+
+    private static final Pattern LRC_LINE =
+            Pattern.compile("^\\[(\\d{1,3}):(\\d{1,3})(?:[.:](\\d{1,5}))?\\](.*)$");
+    private static final Pattern LRC_TRANSLATION = Pattern.compile("^\\{[\"'](.*)[\"']\\}$");
+    private static final Pattern LRC_OFFSET =
+            Pattern.compile("^\\[offset:\\s*([+-]?\\d+)\\]$", Pattern.CASE_INSENSITIVE);
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -136,6 +144,66 @@ public final class NekoLyrics {
         return trimmed.startsWith("{") && trimmed.contains("\"lines\"");
     }
 
+    /**
+     * 把受校验的普通 LRC 转成 Neko 结构，供需要给日语歌词补罗马音时复用。
+     */
+    public static Optional<Document> fromLrc(String content) {
+        if (content == null || content.isBlank()) {
+            return Optional.empty();
+        }
+        String normalized = LrcValidator.normalizeNeteaseTimestamps(
+                LyricsPlaceholderFilter.filterLrc(content));
+        List<Line> lines = new ArrayList<>();
+        long offsetMs = 0;
+        boolean canAttachTranslation = false;
+        for (String raw : normalized.split("\\R", -1)) {
+            String line = raw.trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+            Matcher offset = LRC_OFFSET.matcher(line);
+            if (offset.matches()) {
+                offsetMs = parseLong(offset.group(1));
+                canAttachTranslation = false;
+                continue;
+            }
+            Matcher timed = LRC_LINE.matcher(line);
+            if (timed.matches()) {
+                String text = timed.group(4).trim();
+                if (!text.isEmpty()) {
+                    lines.add(new Line(
+                            Math.max(0, timestampToMs(timed) + offsetMs),
+                            0,
+                            text,
+                            null,
+                            null,
+                            false,
+                            List.of()
+                    ));
+                }
+                canAttachTranslation = !text.isEmpty();
+                continue;
+            }
+            Matcher translation = LRC_TRANSLATION.matcher(line);
+            if (translation.matches() && canAttachTranslation && !lines.isEmpty()) {
+                Line previous = lines.removeLast();
+                lines.add(new Line(
+                        previous.startMs(),
+                        previous.endMs(),
+                        previous.text(),
+                        unescapeTranslation(translation.group(1)),
+                        previous.romanization(),
+                        previous.background(),
+                        previous.words()
+                ));
+                canAttachTranslation = false;
+                continue;
+            }
+            canAttachTranslation = false;
+        }
+        return lines.isEmpty() ? Optional.empty() : Optional.of(document(lines));
+    }
+
     public static String toLrc(String content, String format) {
         if (!isNekoFormat(format) && !looksLikeNekoJson(content)) {
             String filtered = LyricsPlaceholderFilter.filterLrc(content);
@@ -211,6 +279,30 @@ public final class NekoLyrics {
 
     private static String escapeTranslation(String translation) {
         return translation.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static String unescapeTranslation(String translation) {
+        return translation.replace("\\\"", "\"").replace("\\\\", "\\");
+    }
+
+    private static long timestampToMs(Matcher matcher) {
+        long minutes = parseLong(matcher.group(1));
+        long seconds = parseLong(matcher.group(2));
+        String fraction = matcher.group(3) == null ? "" : matcher.group(3);
+        long millis = fraction.isEmpty()
+                ? 0
+                : parseLong(fraction.length() >= 3
+                        ? fraction.substring(0, 3)
+                        : fraction + "0".repeat(3 - fraction.length()));
+        return minutes * 60_000 + seconds * 1_000 + millis;
+    }
+
+    private static long parseLong(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     private static String blankToNull(String value) {

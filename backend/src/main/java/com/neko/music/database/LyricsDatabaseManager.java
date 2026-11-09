@@ -1,8 +1,9 @@
 package com.neko.music.database;
 
-import com.neko.music.util.LyricsPlainTextExtractor;
-import com.neko.music.util.LyricsPlaceholderFilter;
+import com.neko.music.util.JapaneseRomanizer;
 import com.neko.music.util.LrcValidator;
+import com.neko.music.util.LyricsPlaceholderFilter;
+import com.neko.music.util.LyricsPlainTextExtractor;
 import com.neko.music.util.NekoLyrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -173,11 +174,15 @@ public class LyricsDatabaseManager {
             throw new SQLException("无效的歌词参数");
         }
         String normalizedFormat = format == null || format.isBlank() ? "lrc" : format.trim();
+        boolean japanese = JapaneseRomanizer.isJapaneseLanguage(findLanguage(conn, musicId));
         String plain;
         boolean placeholder;
         if (NekoLyrics.isNekoFormat(normalizedFormat)) {
             NekoLyrics.Document document = NekoLyrics.deserialize(content)
                     .orElseThrow(() -> new SQLException("Neko 歌词格式无效"));
+            if (japanese) {
+                document = JapaneseRomanizer.enforceRomanization(document);
+            }
             content = NekoLyrics.serialize(document);
             plain = NekoLyrics.plainText(document);
             placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
@@ -185,8 +190,18 @@ public class LyricsDatabaseManager {
             content = LrcValidator.normalizeDuplicateTimestampTranslations(
                     LyricsPlaceholderFilter.filterLrc(content));
             content = LyricsPlaceholderFilter.filterLrc(content);
-            plain = LyricsPlainTextExtractor.fromLrc(content);
-            placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
+            if (japanese) {
+                NekoLyrics.Document document = NekoLyrics.fromLrc(content)
+                        .orElseThrow(() -> new SQLException("日语歌词无法解析为可补全罗马音的结构"));
+                document = JapaneseRomanizer.enforceRomanization(document);
+                normalizedFormat = NekoLyrics.FORMAT;
+                content = NekoLyrics.serialize(document);
+                plain = NekoLyrics.plainText(document);
+                placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
+            } else {
+                plain = LyricsPlainTextExtractor.fromLrc(content);
+                placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
+            }
         }
         String normalizedSource = source == null || source.isBlank() ? "manual" : source.trim();
         int sizeBytes = content.getBytes(StandardCharsets.UTF_8).length;
@@ -217,6 +232,16 @@ public class LyricsDatabaseManager {
             stmt.executeUpdate();
         }
         invalidateCached(musicId);
+    }
+
+    private static String findLanguage(Connection conn, int musicId) throws SQLException {
+        try (PreparedStatement stmt = conn.prepareStatement(
+                "SELECT language FROM music WHERE id = ?")) {
+            stmt.setInt(1, musicId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? rs.getString("language") : null;
+            }
+        }
     }
 
     public boolean delete(int musicId) {
