@@ -5,26 +5,46 @@
         type="button"
         class="karaoke__play"
         :aria-label="isPlaying ? '暂停' : '播放'"
+        :disabled="audioLoading || !audioUrl || audioError"
         @click="togglePlay"
       >
         <NIcon :name="isPlaying ? 'pause' : 'play'" :size="20" />
       </button>
       <div class="karaoke__timeline">
-        <input
-          :value="currentTime"
-          type="range"
-          min="0"
-          :max="duration || 0"
-          step="0.01"
-          :disabled="!duration"
-          aria-label="播放进度"
-          @input="seek"
-        />
+        <template v-if="audioLoading">
+          <p class="karaoke__status">正在加载音乐…</p>
+        </template>
+        <template v-else-if="audioError || !audioUrl">
+          <p class="karaoke__status karaoke__status--error">音乐加载失败，请刷新页面重试</p>
+        </template>
+        <template v-else>
+          <input
+            :value="currentTime"
+            type="range"
+            min="0"
+            :max="duration || 0"
+            step="0.01"
+            :disabled="!duration"
+            aria-label="播放进度"
+            @input="seek"
+          />
+        </template>
         <div class="karaoke__time">
           <span>{{ formatTime(currentTime) }}</span>
           <span>{{ formatTime(duration) }}</span>
         </div>
       </div>
+      <label class="karaoke__speed">
+        <span>倍速</span>
+        <select v-model.number="playbackRate" @change="applyPlaybackRate">
+          <option :value="0.5">0.5×</option>
+          <option :value="0.75">0.75×</option>
+          <option :value="1">1×</option>
+          <option :value="1.25">1.25×</option>
+          <option :value="1.5">1.5×</option>
+          <option :value="2">2×</option>
+        </select>
+      </label>
     </div>
 
     <audio
@@ -36,6 +56,7 @@
       @play="isPlaying = true"
       @pause="isPlaying = false"
       @ended="isPlaying = false"
+      @error="audioError = true"
     />
 
     <div class="karaoke__guide">
@@ -114,6 +135,7 @@ import { NButton } from '@/ui'
 const props = defineProps({
   lines: { type: Array, required: true },
   audioUrl: { type: String, required: true },
+  audioLoading: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['change'])
@@ -123,6 +145,8 @@ const scrollRef = ref(null)
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
+const playbackRate = ref(1)
+const audioError = ref(false)
 const activeLineIndex = ref(0)
 const cursor = ref(0)
 const finished = ref(false)
@@ -160,6 +184,12 @@ watch(() => props.lines.length, () => {
   finished.value = false
 })
 
+watch(() => props.audioUrl, () => {
+  audioError.value = false
+  currentTime.value = 0
+  duration.value = 0
+})
+
 function ensureSegments(line) {
   if (!line) return
   if (!Array.isArray(line.words) || line.words.length === 0) {
@@ -188,7 +218,7 @@ function splitGraphemes(text) {
 
 function togglePlay() {
   const audio = audioRef.value
-  if (!audio) return
+  if (!audio || !props.audioUrl || props.audioLoading || audioError.value) return
   if (audio.paused) {
     audio.play().catch(() => {
       isPlaying.value = false
@@ -204,6 +234,13 @@ function onTimeUpdate() {
 
 function onLoadedMetadata() {
   duration.value = Number(audioRef.value?.duration) || 0
+  applyPlaybackRate()
+}
+
+function applyPlaybackRate() {
+  if (audioRef.value) {
+    audioRef.value.playbackRate = playbackRate.value
+  }
 }
 
 function seek(event) {
@@ -302,11 +339,18 @@ function formatTime(seconds) {
 <style scoped>
 .karaoke {
   display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(220px, 280px);
+  grid-template-areas:
+    "player lyrics tap"
+    "guide lyrics tap";
+  align-items: start;
   gap: var(--n-space-4);
 }
 
 .karaoke__player {
-  display: flex;
+  grid-area: player;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: var(--n-space-3);
   padding: var(--n-space-3) var(--n-space-4);
@@ -331,6 +375,16 @@ function formatTime(seconds) {
   min-width: 0;
 }
 
+.karaoke__status {
+  margin: 0 0 4px;
+  color: var(--n-text-muted);
+  font-size: var(--n-text-sm);
+}
+
+.karaoke__status--error {
+  color: var(--n-danger);
+}
+
 .karaoke__timeline input {
   width: 100%;
   accent-color: var(--n-accent);
@@ -344,7 +398,28 @@ function formatTime(seconds) {
   font-variant-numeric: tabular-nums;
 }
 
+.karaoke__speed {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--n-space-3);
+  color: var(--n-text-muted);
+  font-size: var(--n-text-sm);
+}
+
+.karaoke__speed select {
+  height: 32px;
+  min-width: 84px;
+  padding: 0 10px;
+  border: 1px solid var(--n-line);
+  border-radius: var(--n-radius-control);
+  background: var(--n-surface-soft);
+  color: var(--n-text);
+}
+
 .karaoke__guide {
+  grid-area: guide;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -367,9 +442,10 @@ function formatTime(seconds) {
 }
 
 .karaoke__lyrics {
+  grid-area: lyrics;
   display: grid;
   gap: 8px;
-  max-height: 380px;
+  max-height: min(62vh, 650px);
   overflow-y: auto;
   padding: var(--n-space-4);
   border: 1px solid var(--n-line);
@@ -432,6 +508,7 @@ function formatTime(seconds) {
 }
 
 .karaoke__tap-panel {
+  grid-area: tap;
   display: grid;
   justify-items: center;
   gap: var(--n-space-3);
@@ -510,7 +587,26 @@ function formatTime(seconds) {
   gap: var(--n-space-2);
 }
 
+@media (max-width: 1000px) {
+  .karaoke {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
+    grid-template-areas:
+      "lyrics tap"
+      "player tap"
+      "guide tap";
+  }
+}
+
 @media (max-width: 720px) {
+  .karaoke {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "player"
+      "guide"
+      "lyrics"
+      "tap";
+  }
+
   .karaoke__guide {
     flex-direction: column;
   }

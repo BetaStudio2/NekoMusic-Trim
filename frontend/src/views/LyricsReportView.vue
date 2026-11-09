@@ -1,7 +1,7 @@
 <template>
   <AmbientBackdrop />
 
-  <PageShell width="wide">
+  <PageShell width="xwide">
     <div class="report">
       <header class="report__head">
         <NButton variant="ghost" icon="chevron-left" @click="backToSong">
@@ -86,6 +86,7 @@
             v-if="activeTab === 'words'"
             :lines="lines"
             :audio-url="audioUrl"
+            :audio-loading="audioLoading"
           />
 
           <div v-else class="lines">
@@ -185,6 +186,7 @@ import { useToast } from '@/composables/useToast'
 import { getToken } from '@/utils/userStore.js'
 import { applyPageSeo, PRIVATE_ROBOTS } from '@/utils/seoMeta'
 import { buildNekoDocument, emptyReportLine, reportStats, toReportLines } from '@/utils/lyricsReport'
+import { resolveMediaUrl } from '@/utils/mediaUrl.js'
 import NIcon from '@/icons/NIcon.vue'
 import { NButton, NCard, NInput, NSpinner, NTag } from '@/ui'
 import KaraokeTimingEditor from '@/components/KaraokeTimingEditor.vue'
@@ -197,7 +199,8 @@ const { isLoggedIn } = useAuth()
 
 const musicId = computed(() => Number(route.params.id))
 const coverUrl = computed(() => `${API_CONFIG.BASE_URL}/api/music/cover/${musicId.value}`)
-const audioUrl = computed(() => `${API_CONFIG.BASE_URL}/api/music/file/${musicId.value}`)
+const audioUrl = ref('')
+const audioLoading = ref(false)
 const tabs = [
   { id: 'text', label: 'lyricsReport.tabText', icon: 'edit' },
   { id: 'translation', label: 'lyricsReport.tabTranslation', icon: 'languages' },
@@ -229,6 +232,7 @@ async function load() {
     music.value = payload.data
     const initial = toReportLines(payload.data)
     lines.value = (initial.length ? initial : [emptyReportLine()]).map(withUid)
+    loadAudio()
     applyPageSeo({
       title: `${payload.data.title} - 歌词报错 | Neko歌姬计划`,
       description: '协助修改歌词、添加翻译并完善逐字时间轴，提交后由管理员审核。',
@@ -240,6 +244,18 @@ async function load() {
     music.value = null
   } finally {
     loading.value = false
+  }
+}
+
+async function loadAudio() {
+  audioLoading.value = true
+  audioUrl.value = ''
+  try {
+    audioUrl.value = await resolveMediaUrl(musicId.value)
+  } catch (error) {
+    toast.error(error.message || '音乐加载失败')
+  } finally {
+    audioLoading.value = false
   }
 }
 
@@ -332,7 +348,7 @@ function formatTime(seconds) {
 
 <style scoped>
 .report {
-  width: min(1120px, 100%);
+  width: min(1600px, 100%);
   margin: 0 auto;
   padding: clamp(18px, 4vw, 44px) clamp(14px, 4vw, 40px) 80px;
 }
@@ -453,6 +469,13 @@ function formatTime(seconds) {
 .lines {
   display: grid;
   gap: var(--n-space-3);
+}
+
+@media (min-width: 1080px) {
+  .lines {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
 }
 
 .line-card {

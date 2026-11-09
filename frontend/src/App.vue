@@ -10,7 +10,7 @@
  *  - 有曲目时滑入；因 GlobalPlayer 挂着 hash / 事件 / MediaSession 监听，
  *    只能视觉隐藏，不能 v-if 卸载。
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import SiteHeader from './layouts/SiteHeader.vue'
 import SiteFooter from './layouts/SiteFooter.vue'
@@ -27,7 +27,7 @@ const route = useRoute()
  * 全局挂载播放状态桥：让任意页面都能读到统一的「正在播放」快照
  * （列表高亮、播放条等共用同一数据源），而不再只在播放页才接线。
  */
-usePlaybackBridge()
+const { sendPlayerCommand } = usePlaybackBridge()
 
 /** 下载页独立布局：不显示顶栏、底栏与全局播放器 */
 const isDownloadPage = computed(() => route.name === 'download')
@@ -37,6 +37,7 @@ const isDownloadPage = computed(() => route.name === 'download')
  * 此时底部停靠播放条必须让位——两者层级相同，否则会把全屏页压在下面。
  */
 const isPlayerPage = computed(() => route.name === 'detail')
+const isLyricsReportPage = computed(() => route.name === 'lyrics-report')
 
 /** 内容区全幅（去掉 main 内边距，由页面自行控制） */
 const isFlushMain = computed(() => !String(route.name || '').startsWith('admin'))
@@ -115,6 +116,14 @@ onMounted(() => {
   window.addEventListener('resize', measureHeader)
 })
 
+watch(
+  () => route.name,
+  (name) => {
+    if (name === 'lyrics-report') sendPlayerCommand('pause')
+  },
+  { immediate: true },
+)
+
 onUnmounted(() => {
   window.removeEventListener('storage', refreshTrackPresence)
   window.removeEventListener('forcePlay', refreshTrackPresence)
@@ -150,13 +159,16 @@ onUnmounted(() => {
       <RouterView />
     </main>
 
-    <div class="app-footer" :class="{ 'app-footer--raised': hasTrack && !isDownloadPage }">
+    <div
+      class="app-footer"
+      :class="{ 'app-footer--raised': hasTrack && !isDownloadPage && !isLyricsReportPage }"
+    >
       <SiteFooter v-if="!isDownloadPage" />
     </div>
 
     <div
       class="app-player"
-      :class="{ 'app-player--hidden': !hasTrack || isDownloadPage || isPlayerPage }"
+      :class="{ 'app-player--hidden': !hasTrack || isDownloadPage || isPlayerPage || isLyricsReportPage }"
     >
       <!-- 不能 v-if 卸载：<audio> 是唯一播放源，卸载即打断播放（含下载页） -->
       <GlobalPlayer :chrome-dark="isChromeDarkShell" />

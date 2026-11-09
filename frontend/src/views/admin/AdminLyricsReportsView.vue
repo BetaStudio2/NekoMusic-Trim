@@ -321,7 +321,7 @@ function formatTime(ms) {
 <style scoped>
 .subpage {
   width: 100%;
-  max-width: 1100px;
+  max-width: 1500px;
   margin: 0 auto;
 }
 
@@ -349,6 +349,13 @@ function formatTime(ms) {
 .list {
   display: grid;
   gap: var(--n-space-4);
+}
+
+@media (min-width: 1400px) {
+  .list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
 }
 
 .report-card {
