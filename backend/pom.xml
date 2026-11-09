@@ -162,6 +162,13 @@
             <artifactId>opencc4j</artifactId>
             <version>1.14.0</version>
         </dependency>
+
+        <!-- Kuromoji：离线日语分词与汉字读音，生成纯罗马音时不再依赖外网 -->
+        <dependency>
+            <groupId>com.atilika.kuromoji</groupId>
+            <artifactId>kuromoji-ipadic</artifactId>
+            <version>0.9.0</version>
+        </dependency>
         
         <!-- pinyin4j 用于中文拼音转换 -->
         <dependency>

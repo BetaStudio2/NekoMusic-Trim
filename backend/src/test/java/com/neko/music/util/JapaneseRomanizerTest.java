@@ -17,6 +17,13 @@ class JapaneseRomanizerTest {
         assertEquals("shashin", JapaneseRomanizer.romanize("しゃしん"));
         assertEquals("kyasshu", JapaneseRomanizer.romanize("きゃっしゅ"));
         assertEquals("koohii", JapaneseRomanizer.romanize("コーヒー"));
+        String unknownKatakana = JapaneseRomanizer.romanize("ニャンーニャンパスー");
+        assertTrue(unknownKatakana.contains("nyan"));
+        assertFalse(unknownKatakana.matches(".*[\\u3041-\\u30ff\\u3400-\\u9fff].*"));
+        assertEquals("dogura magura", JapaneseRomanizer.romanize("ドグラ・マグラ"));
+        assertEquals("kono saki ga dou naru ka", JapaneseRomanizer.romanize("この先がどうなるか"));
+        assertEquals("watashi wa kaze anata o tsutsunde iru yo",
+                JapaneseRomanizer.romanize("私は風 あなたを包んでいるよ"));
     }
 
     @Test
@@ -41,6 +48,24 @@ class JapaneseRomanizerTest {
         assertEquals("konnichiha", enriched.lines().get(0).romanization());
         assertEquals("keep", enriched.lines().get(1).romanization());
         assertEquals("Hello", enriched.lines().get(2).romanization());
+    }
+
+    @Test
+    void rewritesDirtyRomanizationButKeepsGoodSpacedValue() {
+        NekoLyrics.Document document = NekoLyrics.document(List.of(
+                new NekoLyrics.Line(1_000, 2_000, "かっこいいから好きなんじゃない。",
+                        null, "kakkoiikara好kinanjanai。", false, List.of()),
+                new NekoLyrics.Line(2_000, 3_000, "さくら さくら 会いたいよ",
+                        null, "sa ku ra sa ku ra a i ta i yo", false, List.of()),
+                new NekoLyrics.Line(3_000, 4_000, "会いたいよ",
+                        null, "aitaiyo", false, List.of())
+        ));
+
+        NekoLyrics.Document enriched = JapaneseRomanizer.enforceRomanization(document);
+
+        assertEquals("kakkoii kara sukinanjanai.", enriched.lines().get(0).romanization());
+        assertEquals("sa ku ra sa ku ra a i ta i yo", enriched.lines().get(1).romanization());
+        assertEquals("aitai yo", enriched.lines().get(2).romanization());
     }
 
     @Test
