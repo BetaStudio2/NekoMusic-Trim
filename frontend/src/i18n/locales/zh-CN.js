@@ -396,6 +396,8 @@ export default {
     end: '结束（秒）',
     original: '原文歌词',
     textPlaceholder: '输入这一行歌词',
+    plainTextHint: '纯文本歌词（一行一句，不需要填写时间）',
+    plainTextPlaceholder: '每行输入一句歌词，不包含时间轴或翻译',
     translation: '翻译',
     translationPlaceholder: '输入翻译（可选）',
     noOriginal: '这一行还没有原文',

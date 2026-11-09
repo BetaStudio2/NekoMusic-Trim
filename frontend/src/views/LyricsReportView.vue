@@ -77,7 +77,7 @@
                 {{ $t(tab.label) }}
               </button>
             </div>
-            <NButton v-if="activeTab !== 'preview'" size="sm" variant="secondary" icon="plus" @click="addLine">
+            <NButton v-if="activeTab === 'translation'" size="sm" variant="secondary" icon="plus" @click="addLine">
               {{ $t('lyricsReport.addLine') }}
             </NButton>
             <span v-if="draftSaved" class="draft-state">
@@ -100,13 +100,23 @@
             :audio-loading="audioLoading"
           />
 
+          <NCard v-else-if="activeTab === 'text'" pad="md" class="plain-editor-card">
+            <label class="field">
+              <span>{{ $t('lyricsReport.plainTextHint') }}</span>
+              <textarea
+                v-model="plainLyricsText"
+                class="plain-editor"
+                spellcheck="false"
+                :placeholder="$t('lyricsReport.plainTextPlaceholder')"
+                @input="syncPlainTextToLines"
+              />
+            </label>
+          </NCard>
+
           <div v-else class="lines">
             <NCard v-for="(line, index) in lines" :key="line.uid" pad="none" class="line-card">
               <header class="line-card__head">
                 <strong>{{ $t('lyricsReport.line', { index: index + 1 }) }}</strong>
-                <span v-if="activeTab === 'text'">
-                  {{ formatTime(line.startSec) }} – {{ formatTime(line.endSec) }}
-                </span>
                 <button
                   type="button"
                   class="line-card__remove"
@@ -118,41 +128,16 @@
                 </button>
               </header>
 
-              <div v-if="activeTab === 'text'" class="line-card__times">
-                <label>
-                  <span>{{ $t('lyricsReport.start') }}</span>
-                  <input v-model.number="line.startSec" type="number" min="0" step="0.01" />
-                </label>
-                <label>
-                  <span>{{ $t('lyricsReport.end') }}</span>
-                  <input v-model.number="line.endSec" type="number" min="0" step="0.01" />
-                </label>
-              </div>
-
-              <template v-if="activeTab === 'text'">
-                <label class="field">
-                  <span>{{ $t('lyricsReport.original') }}</span>
-                  <NInput
-                    v-model="line.text"
-                    textarea
-                    :rows="2"
-                    :placeholder="$t('lyricsReport.textPlaceholder')"
-                  />
-                </label>
-              </template>
-
-              <template v-else-if="activeTab === 'translation'">
-                <p class="line-card__original">{{ line.text || $t('lyricsReport.noOriginal') }}</p>
-                <label class="field">
-                  <span>{{ $t('lyricsReport.translation') }}</span>
-                  <NInput
-                    v-model="line.translation"
-                    textarea
-                    :rows="2"
-                    :placeholder="$t('lyricsReport.translationPlaceholder')"
-                  />
-                </label>
-              </template>
+              <p class="line-card__original">{{ line.text || $t('lyricsReport.noOriginal') }}</p>
+              <label class="field">
+                <span>{{ $t('lyricsReport.translation') }}</span>
+                <NInput
+                  v-model="line.translation"
+                  textarea
+                  :rows="2"
+                  :placeholder="$t('lyricsReport.translationPlaceholder')"
+                />
+              </label>
 
             </NCard>
           </div>
@@ -225,6 +210,7 @@ const submitting = ref(false)
 const submittedId = ref(null)
 const music = ref(null)
 const lines = ref([])
+const plainLyricsText = ref('')
 const note = ref('')
 const activeTab = ref('text')
 const draftSaved = ref(false)
@@ -241,6 +227,14 @@ watch(
   () => scheduleDraftSave(),
   { deep: true },
 )
+
+watch(activeTab, (tab, previous) => {
+  if (previous === 'text' && tab !== 'text') {
+    syncPlainTextToLines()
+  } else if (tab === 'text' && previous !== 'text') {
+    syncLinesToPlainText()
+  }
+})
 
 onBeforeUnmount(() => {
   if (draftTimer) window.clearTimeout(draftTimer)
@@ -263,6 +257,7 @@ async function load() {
     } else {
       lines.value = (initial.length ? initial : [emptyReportLine()]).map(withUid)
     }
+    syncLinesToPlainText()
     loadAudio()
     applyPageSeo({
       title: `${payload.data.title} - 歌词报错 | Neko歌姬计划`,
@@ -276,6 +271,53 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function syncLinesToPlainText() {
+  plainLyricsText.value = lines.value.map((line) => line.text || '').join('\n')
+}
+
+function syncPlainTextToLines() {
+  const texts = plainLyricsText.value
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const previousLines = lines.value
+  const used = new Set()
+  const next = []
+
+  for (let index = 0; index < texts.length; index++) {
+    const text = texts[index]
+    let sourceIndex = -1
+    if (previousLines[index] && !used.has(index)
+        && String(previousLines[index].text || '').trim() === text) {
+      sourceIndex = index
+    }
+    if (sourceIndex < 0) {
+      sourceIndex = previousLines.findIndex((line, lineIndex) =>
+        !used.has(lineIndex) && String(line.text || '').trim() === text)
+    }
+    if (sourceIndex < 0 && previousLines[index] && !used.has(index)) {
+      sourceIndex = index
+    }
+
+    if (sourceIndex >= 0) {
+      const source = previousLines[sourceIndex]
+      used.add(sourceIndex)
+      const changed = String(source.text || '').trim() !== text
+      next.push({
+        ...source,
+        text,
+        words: changed ? [] : source.words,
+      })
+    } else {
+      const previous = next[next.length - 1]
+      const line = withUid(emptyReportLine(previous ? Number(previous.endSec) || 0 : 0))
+      line.text = text
+      next.push(line)
+    }
+  }
+  lines.value = next
 }
 
 function restoreDraft() {
@@ -426,11 +468,6 @@ async function submitReport() {
   }
 }
 
-function formatTime(seconds) {
-  const value = Number(seconds)
-  if (!Number.isFinite(value)) return '0.00s'
-  return `${Math.max(0, value).toFixed(2)}s`
-}
 </script>
 
 <style scoped>
@@ -565,6 +602,31 @@ function formatTime(seconds) {
 .lines {
   display: grid;
   gap: var(--n-space-3);
+}
+
+.plain-editor-card {
+  min-height: 520px;
+}
+
+.plain-editor {
+  width: 100%;
+  min-height: 62vh;
+  padding: var(--n-space-4);
+  border: 1px solid var(--n-line);
+  border-radius: var(--n-radius-control);
+  outline: none;
+  resize: vertical;
+  background: var(--n-surface-soft);
+  color: var(--n-text);
+  font-family: var(--n-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: clamp(15px, 1.2vw, 18px);
+  line-height: 1.9;
+  tab-size: 2;
+}
+
+.plain-editor:focus {
+  border-color: var(--n-accent-line);
+  box-shadow: var(--n-shadow-glow);
 }
 
 @media (min-width: 1080px) {
