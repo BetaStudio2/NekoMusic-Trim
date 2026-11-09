@@ -82,6 +82,9 @@
               :class="{ 'preview-line__segment--active': segmentActive(segment, index) }"
             >{{ segment.text }}</span>
           </p>
+          <p v-if="line.romanization" class="preview-line__romanization">
+            {{ line.romanization }}
+          </p>
           <p v-if="line.translation" class="preview-line__translation">
             {{ line.translation }}
           </p>
@@ -355,6 +358,14 @@ function formatTime(seconds) {
   margin: 6px 0 0;
   color: var(--n-text-muted);
   font-size: clamp(13px, 1.2vw, 16px);
+}
+
+.preview-line__romanization {
+  margin: 4px 0 0;
+  color: var(--n-text-faint);
+  font-size: clamp(11px, 1vw, 14px);
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 @media (max-width: 900px) {

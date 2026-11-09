@@ -70,6 +70,9 @@
                     <p v-if="line.translation" class="preview-line__translation">
                       {{ line.translation }}
                     </p>
+                    <p v-if="line.romanization" class="preview-line__romanization">
+                      {{ line.romanization }}
+                    </p>
                     <div v-if="line.words?.length" class="preview-line__words">
                       <span v-for="(word, wordIndex) in line.words" :key="wordIndex">
                         {{ word.text }}
@@ -92,6 +95,9 @@
                     <p>{{ line.text || '（空行）' }}</p>
                     <p v-if="line.translation" class="preview-line__translation">
                       {{ line.translation }}
+                    </p>
+                    <p v-if="line.romanization" class="preview-line__romanization">
+                      {{ line.romanization }}
                     </p>
                   </div>
                 </article>
@@ -471,6 +477,13 @@ function formatTime(ms) {
   margin-top: 4px !important;
   color: var(--n-text-muted);
   font-size: var(--n-text-sm);
+}
+
+.preview-line__romanization {
+  margin-top: 3px !important;
+  color: var(--n-text-faint);
+  font-size: var(--n-text-xs);
+  line-height: 1.45;
 }
 
 .preview-line__words {

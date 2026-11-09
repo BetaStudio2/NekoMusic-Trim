@@ -82,13 +82,18 @@
         @click="selectLine(lineIndex)"
       >
         <span class="karaoke-line__time">{{ formatTime(line.startSec) }}</span>
-        <span class="karaoke-line__text">
+        <span class="karaoke-line__content">
+          <span class="karaoke-line__text">
           <span
             v-for="(word, wordIndex) in line.words"
             :key="wordIndex"
             class="karaoke-segment"
             :class="segmentClass(line, lineIndex, word, wordIndex)"
           >{{ word.text }}</span>
+          </span>
+          <span v-if="line.romanization" class="karaoke-line__romanization">
+            {{ line.romanization }}
+          </span>
         </span>
       </button>
     </div>
@@ -486,8 +491,19 @@ function formatTime(seconds) {
 }
 
 .karaoke-line__text {
+  display: block;
   font-size: clamp(18px, 2.2vw, 26px);
   line-height: 1.55;
+  word-break: break-word;
+}
+
+.karaoke-line__romanization {
+  display: block;
+  margin-top: 3px;
+  color: var(--n-text-faint);
+  font-size: clamp(11px, 1vw, 13px);
+  line-height: 1.45;
+  letter-spacing: 0.01em;
   word-break: break-word;
 }
 
