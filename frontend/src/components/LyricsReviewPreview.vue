@@ -126,6 +126,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import NIcon from '@/icons/NIcon.vue'
+import { comparableLyricsText } from '@/utils/timingUnits'
 
 const props = defineProps({
   submittedLines: { type: Array, required: true },
@@ -170,7 +171,9 @@ function findActive(lines) {
 
 function segmentsFor(line) {
   const words = Array.isArray(line.words) ? line.words : []
-  if (words.length && words.map((word) => word.text || '').join('') === String(line.text || '')) {
+  if (words.length
+    && comparableLyricsText(words.map((word) => word.text || '').join(''))
+      === comparableLyricsText(line.text)) {
     return words
   }
   return line.text ? [{ text: line.text, startMs: lineStartMs(line) }] : []

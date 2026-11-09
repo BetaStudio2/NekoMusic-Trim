@@ -186,6 +186,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import NIcon from '@/icons/NIcon.vue'
 import { NButton } from '@/ui'
+import { comparableLyricsText, splitTimingUnits } from '@/utils/timingUnits'
 
 const props = defineProps({
   lines: { type: Array, required: true },
@@ -213,7 +214,7 @@ const targetLabel = computed(() => {
   if (finished.value) return '全部完成'
   if (!currentWords.value.length) return '请先重新拆分本行'
   if (cursor.value >= currentWords.value.length) return '结束本行'
-  return `「${currentWords.value[cursor.value]?.text || ''}」`
+  return `「${(currentWords.value[cursor.value]?.text || '').trim()}」`
 })
 const tapLabel = computed(() => {
   if (finished.value) return '已完成'
@@ -250,28 +251,14 @@ function ensureSegments(line) {
   const joined = Array.isArray(line.words)
     ? line.words.map((word) => word.text || '').join('')
     : ''
-  if (!Array.isArray(line.words) || line.words.length === 0 || joined !== String(line.text || '')) {
-    line.words = splitGraphemes(line.text || '').map((text) => ({
+  if (!Array.isArray(line.words) || line.words.length === 0
+      || comparableLyricsText(joined) !== comparableLyricsText(line.text)) {
+    line.words = splitTimingUnits(line.text || '').map((text) => ({
       text,
       startSec: null,
       endSec: null,
     }))
   }
-}
-
-function splitGraphemes(text) {
-  const value = String(text || '')
-  if (!value) return []
-  try {
-    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
-      return [...new Intl.Segmenter('ja', { granularity: 'grapheme' }).segment(value)]
-        .map((item) => item.segment)
-        .filter((item) => item.trim())
-    }
-  } catch {
-    // fall through
-  }
-  return Array.from(value).filter((item) => item.trim())
 }
 
 function togglePlay() {
@@ -364,7 +351,7 @@ function nextLine() {
 function resplitLine() {
   const line = currentLine.value
   if (!line) return
-  line.words = splitGraphemes(line.text || '').map((text) => ({
+  line.words = splitTimingUnits(line.text || '').map((text) => ({
     text,
     startSec: null,
     endSec: null,
