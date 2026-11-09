@@ -388,6 +388,8 @@ export default {
     tabText: '歌词修改',
     tabTranslation: '翻译添加',
     tabWords: '逐字完善',
+    tabPreview: '效果预览',
+    draftSaved: '本地修改已自动保存',
     addLine: '添加歌词行',
     line: '第 {index} 行',
     start: '开始（秒）',

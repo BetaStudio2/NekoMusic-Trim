@@ -192,7 +192,10 @@ watch(() => props.audioUrl, () => {
 
 function ensureSegments(line) {
   if (!line) return
-  if (!Array.isArray(line.words) || line.words.length === 0) {
+  const joined = Array.isArray(line.words)
+    ? line.words.map((word) => word.text || '').join('')
+    : ''
+  if (!Array.isArray(line.words) || line.words.length === 0 || joined !== String(line.text || '')) {
     line.words = splitGraphemes(line.text || '').map((text) => ({
       text,
       startSec: null,
@@ -603,8 +606,8 @@ function formatTime(seconds) {
     grid-template-areas:
       "player"
       "guide"
-      "lyrics"
-      "tap";
+      "lyrics";
+    padding-bottom: 176px;
   }
 
   .karaoke__guide {
@@ -615,9 +618,57 @@ function formatTime(seconds) {
     grid-template-columns: 44px minmax(0, 1fr);
   }
 
+  .karaoke__tap-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: calc(var(--n-z-player) + 1);
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "target tap"
+      "actions actions";
+    align-items: center;
+    gap: 8px 16px;
+    padding:
+      10px max(16px, env(safe-area-inset-right))
+      calc(10px + var(--n-safe-bottom))
+      max(16px, env(safe-area-inset-left));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+    background: var(--n-surface-strong);
+    box-shadow: 0 -14px 44px rgba(0, 0, 0, 0.46);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .karaoke__target {
+    grid-area: target;
+    justify-items: start;
+  }
+
+  .karaoke__target strong {
+    font-size: 30px;
+  }
+
   .karaoke__tap {
-    width: 112px;
-    height: 112px;
+    grid-area: tap;
+    width: 96px;
+    height: 96px;
+    font-size: var(--n-text-sm);
+  }
+
+  .karaoke__actions {
+    grid-area: actions;
+    justify-content: flex-start;
+    gap: 2px;
+  }
+
+  .karaoke__actions :deep(.n-btn) {
+    height: 28px;
+    padding-inline: 8px;
   }
 }
 </style>

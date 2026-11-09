@@ -77,13 +77,24 @@
                 {{ $t(tab.label) }}
               </button>
             </div>
-            <NButton size="sm" variant="secondary" icon="plus" @click="addLine">
+            <NButton v-if="activeTab !== 'preview'" size="sm" variant="secondary" icon="plus" @click="addLine">
               {{ $t('lyricsReport.addLine') }}
             </NButton>
+            <span v-if="draftSaved" class="draft-state">
+              <NIcon name="check" :size="13" />
+              {{ $t('lyricsReport.draftSaved') }}
+            </span>
           </div>
 
           <KaraokeTimingEditor
             v-if="activeTab === 'words'"
+            :lines="lines"
+            :audio-url="audioUrl"
+            :audio-loading="audioLoading"
+          />
+
+          <LyricsPreviewPanel
+            v-else-if="activeTab === 'preview'"
             :lines="lines"
             :audio-url="audioUrl"
             :audio-loading="audioLoading"
@@ -177,7 +188,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import API_CONFIG from '@/config/apiConfig.js'
 import { useAuth } from '@/composables/useAuth'
@@ -190,6 +201,7 @@ import { resolveMediaUrl } from '@/utils/mediaUrl.js'
 import NIcon from '@/icons/NIcon.vue'
 import { NButton, NCard, NInput, NSpinner, NTag } from '@/ui'
 import KaraokeTimingEditor from '@/components/KaraokeTimingEditor.vue'
+import LyricsPreviewPanel from '@/components/LyricsPreviewPanel.vue'
 import { AmbientBackdrop, PageShell } from '@/layouts'
 
 const route = useRoute()
@@ -205,6 +217,7 @@ const tabs = [
   { id: 'text', label: 'lyricsReport.tabText', icon: 'edit' },
   { id: 'translation', label: 'lyricsReport.tabTranslation', icon: 'languages' },
   { id: 'words', label: 'lyricsReport.tabWords', icon: 'file-text' },
+  { id: 'preview', label: 'lyricsReport.tabPreview', icon: 'eye' },
 ]
 
 const loading = ref(true)
@@ -214,11 +227,25 @@ const music = ref(null)
 const lines = ref([])
 const note = ref('')
 const activeTab = ref('text')
+const draftSaved = ref(false)
+const draftKey = computed(() => `nekoLyricsReportDraft:${musicId.value}`)
 let lineSequence = 0
+let draftTimer = null
 
 const stats = computed(() => reportStats(lines.value))
 
 onMounted(load)
+
+watch(
+  [lines, note, activeTab],
+  () => scheduleDraftSave(),
+  { deep: true },
+)
+
+onBeforeUnmount(() => {
+  if (draftTimer) window.clearTimeout(draftTimer)
+  saveDraft()
+})
 
 async function load() {
   loading.value = true
@@ -231,7 +258,11 @@ async function load() {
     }
     music.value = payload.data
     const initial = toReportLines(payload.data)
-    lines.value = (initial.length ? initial : [emptyReportLine()]).map(withUid)
+    if (restoreDraft()) {
+      toast.success('已恢复本机保存的歌词修改')
+    } else {
+      lines.value = (initial.length ? initial : [emptyReportLine()]).map(withUid)
+    }
     loadAudio()
     applyPageSeo({
       title: `${payload.data.title} - 歌词报错 | Neko歌姬计划`,
@@ -244,6 +275,57 @@ async function load() {
     music.value = null
   } finally {
     loading.value = false
+  }
+}
+
+function restoreDraft() {
+  try {
+    const draft = JSON.parse(window.localStorage.getItem(draftKey.value) || 'null')
+    if (!draft || !Array.isArray(draft.lines) || draft.lines.length === 0) return false
+    lines.value = draft.lines.map((line) => withUid({
+      startSec: Number(line.startSec) || 0,
+      endSec: Number(line.endSec) || 0,
+      text: String(line.text || ''),
+      translation: String(line.translation || ''),
+      romanization: String(line.romanization || ''),
+      words: Array.isArray(line.words)
+        ? line.words.map((word) => ({
+            text: String(word.text || ''),
+            startSec: word.startSec == null ? null : Number(word.startSec),
+            endSec: word.endSec == null ? null : Number(word.endSec),
+          }))
+        : [],
+    }))
+    note.value = String(draft.note || '')
+    if (tabs.some((tab) => tab.id === draft.activeTab)) {
+      activeTab.value = draft.activeTab
+    }
+    draftSaved.value = true
+    return true
+  } catch {
+    return false
+  }
+}
+
+function scheduleDraftSave() {
+  if (loading.value || submittedId.value) return
+  if (draftTimer) window.clearTimeout(draftTimer)
+  draftTimer = window.setTimeout(saveDraft, 350)
+}
+
+function saveDraft() {
+  if (loading.value || submittedId.value || !music.value || !lines.value.length) return
+  try {
+    window.localStorage.setItem(draftKey.value, JSON.stringify({
+      version: 1,
+      updatedAt: Date.now(),
+      activeTab: activeTab.value,
+      note: note.value,
+      lines: lines.value.map(({ uid: _uid, ...line }) => line),
+    }))
+    draftSaved.value = true
+  } catch {
+    draftSaved.value = false
   }
 }
 
@@ -332,6 +414,11 @@ async function submitReport() {
       throw new Error(payload.message || '提交失败')
     }
     submittedId.value = payload.data?.id
+    try {
+      window.localStorage.removeItem(draftKey.value)
+    } catch {
+      // 本地草稿清理失败不影响提交结果。
+    }
   } catch (error) {
     toast.error(error.message || '提交失败')
   } finally {
@@ -440,6 +527,15 @@ function formatTime(seconds) {
   justify-content: space-between;
   gap: var(--n-space-3);
   margin: var(--n-space-5) 0 var(--n-space-3);
+}
+
+.draft-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--n-text-faint);
+  font-size: var(--n-text-xs);
 }
 
 .tabs {
