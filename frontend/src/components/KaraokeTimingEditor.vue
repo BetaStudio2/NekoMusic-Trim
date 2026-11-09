@@ -1,7 +1,7 @@
 <template>
   <div class="karaoke">
     <div class="karaoke__dock">
-      <div class="karaoke__player">
+      <div class="karaoke__player karaoke__player--desktop">
         <button
           type="button"
           class="karaoke__play"
@@ -61,6 +61,53 @@
       />
 
       <div class="karaoke__tap-panel">
+        <div class="karaoke__player karaoke__player--mobile">
+          <button
+            type="button"
+            class="karaoke__play"
+            :aria-label="isPlaying ? '暂停' : '播放'"
+            :disabled="audioLoading || !audioUrl || audioError"
+            @click="togglePlay"
+          >
+            <NIcon :name="isPlaying ? 'pause' : 'play'" :size="20" />
+          </button>
+          <div class="karaoke__timeline">
+            <template v-if="audioLoading">
+              <p class="karaoke__status">正在加载音乐…</p>
+            </template>
+            <template v-else-if="audioError || !audioUrl">
+              <p class="karaoke__status karaoke__status--error">音乐加载失败，请刷新页面重试</p>
+            </template>
+            <template v-else>
+              <input
+                :value="currentTime"
+                type="range"
+                min="0"
+                :max="duration || 0"
+                step="0.01"
+                :disabled="!duration"
+                aria-label="播放进度"
+                @input="seek"
+              />
+            </template>
+            <div class="karaoke__time">
+              <span>{{ formatTime(currentTime) }}</span>
+              <span>{{ formatTime(duration) }}</span>
+            </div>
+          </div>
+          <label class="karaoke__speed">
+            <span>倍速</span>
+            <select v-model.number="playbackRate" @change="applyPlaybackRate">
+              <option :value="0.5">0.5×</option>
+              <option :value="0.75">0.75×</option>
+              <option :value="1">1×</option>
+              <option :value="1.25">1.25×</option>
+              <option :value="1.5">1.5×</option>
+              <option :value="2">2×</option>
+            </select>
+          </label>
+        </div>
+
         <div class="karaoke__target">
           <span>下一个目标</span>
           <strong>{{ targetLabel }}</strong>
@@ -374,6 +421,10 @@ function formatTime(seconds) {
   background: var(--n-surface);
 }
 
+.karaoke__player--mobile {
+  display: none;
+}
+
 .karaoke__play {
   display: grid;
   place-items: center;
@@ -629,7 +680,7 @@ function formatTime(seconds) {
     grid-template-areas:
       "guide"
       "lyrics";
-    padding-bottom: 214px;
+    padding-bottom: 226px;
   }
 
   .karaoke__dock {
@@ -658,6 +709,14 @@ function formatTime(seconds) {
     border: 0;
     border-radius: 0;
     background: transparent;
+  }
+
+  .karaoke__player--desktop {
+    display: none;
+  }
+
+  .karaoke__player--mobile {
+    display: grid;
   }
 
   .karaoke__player .karaoke__play {
@@ -691,6 +750,7 @@ function formatTime(seconds) {
     position: static;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
+      "player player"
       "target tap"
       "actions actions";
     align-items: center;
