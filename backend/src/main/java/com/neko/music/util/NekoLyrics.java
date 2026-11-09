@@ -82,7 +82,7 @@ public final class NekoLyrics {
         }
         List<Line> filtered = new ArrayList<>(lines.size());
         for (Line line : lines) {
-            if (line != null && !LyricsPlaceholderFilter.isSlashPlaceholder(line.text())) {
+            if (line != null && !LyricsPlaceholderFilter.isPlaceholder(line.text())) {
                 filtered.add(line);
             }
         }
@@ -219,13 +219,13 @@ public final class NekoLyrics {
         StringBuilder out = new StringBuilder();
         for (Line line : document.lines()) {
             if (line.text().isBlank()
-                    || LyricsPlaceholderFilter.isSlashPlaceholder(line.text())) {
+                    || LyricsPlaceholderFilter.isPlaceholder(line.text())) {
                 continue;
             }
             out.append(formatTimestamp(line.startMs())).append(line.text()).append('\n');
             if (line.translation() != null
                     && !line.translation().isBlank()
-                    && !LyricsPlaceholderFilter.isSlashPlaceholder(line.translation())) {
+                    && !LyricsPlaceholderFilter.isPlaceholder(line.translation())) {
                 out.append("{\"").append(escapeTranslation(line.translation())).append("\"}\n");
             }
         }
@@ -239,7 +239,7 @@ public final class NekoLyrics {
         StringBuilder out = new StringBuilder();
         for (Line line : document.lines()) {
             if (line.text().isBlank()
-                    || LyricsPlaceholderFilter.isSlashPlaceholder(line.text())) {
+                    || LyricsPlaceholderFilter.isPlaceholder(line.text())) {
                 continue;
             }
             if (!out.isEmpty()) {
@@ -311,6 +311,6 @@ public final class NekoLyrics {
 
     private static String optionalText(String value) {
         String cleaned = blankToNull(value);
-        return LyricsPlaceholderFilter.isSlashPlaceholder(cleaned) ? null : cleaned;
+        return LyricsPlaceholderFilter.isPlaceholder(cleaned) ? null : cleaned;
     }
 }

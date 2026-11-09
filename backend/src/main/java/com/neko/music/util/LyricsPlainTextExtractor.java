@@ -30,7 +30,9 @@ public final class LyricsPlainTextExtractor {
                 continue;
             }
             line = TIME_TAG.matcher(line).replaceAll("").trim();
-            if (line.isEmpty() || LyricsPlaceholderFilter.isSlashPlaceholder(line)) {
+            if (line.isEmpty()
+                    || LyricsPlaceholderFilter.isPlaceholder(line)
+                    || LyricsPlaceholderFilter.isPlaceholderTranslation(line)) {
                 continue;
             }
             if (!sb.isEmpty()) {
