@@ -77,9 +77,6 @@
                 {{ $t(tab.label) }}
               </button>
             </div>
-            <NButton v-if="activeTab === 'translation'" size="sm" variant="secondary" icon="plus" @click="addLine">
-              {{ $t('lyricsReport.addLine') }}
-            </NButton>
             <span v-if="draftSaved" class="draft-state">
               <NIcon name="check" :size="13" />
               {{ $t('lyricsReport.draftSaved') }}
@@ -101,46 +98,29 @@
           />
 
           <NCard v-else-if="activeTab === 'text'" pad="md" class="plain-editor-card">
-            <label class="field">
-              <span>{{ $t('lyricsReport.plainTextHint') }}</span>
-              <textarea
-                v-model="plainLyricsText"
-                class="plain-editor"
-                spellcheck="false"
-                :placeholder="$t('lyricsReport.plainTextPlaceholder')"
-                @input="syncPlainTextToLines"
-              />
-            </label>
-          </NCard>
-
-          <div v-else class="lines">
-            <NCard v-for="(line, index) in lines" :key="line.uid" pad="none" class="line-card">
-              <header class="line-card__head">
-                <strong>{{ $t('lyricsReport.line', { index: index + 1 }) }}</strong>
-                <button
-                  type="button"
-                  class="line-card__remove"
-                  :aria-label="$t('lyricsReport.removeLine')"
-                  :title="$t('lyricsReport.removeLine')"
-                  @click="removeLine(index)"
-                >
-                  <NIcon name="trash-2" :size="15" />
-                </button>
-              </header>
-
-              <p class="line-card__original">{{ line.text || $t('lyricsReport.noOriginal') }}</p>
+            <div class="bilingual-editor">
               <label class="field">
-                <span>{{ $t('lyricsReport.translation') }}</span>
-                <NInput
-                  v-model="line.translation"
-                  textarea
-                  :rows="2"
-                  :placeholder="$t('lyricsReport.translationPlaceholder')"
+                <span>{{ $t('lyricsReport.plainTextHint') }}</span>
+                <textarea
+                  v-model="plainLyricsText"
+                  class="plain-editor"
+                  spellcheck="false"
+                  :placeholder="$t('lyricsReport.plainTextPlaceholder')"
+                  @input="syncBilingualTextToLines"
                 />
               </label>
-
-            </NCard>
-          </div>
+              <label class="field">
+                <span>{{ $t('lyricsReport.translationPlainHint') }}</span>
+                <textarea
+                  v-model="plainTranslationText"
+                  class="plain-editor plain-editor--translation"
+                  spellcheck="false"
+                  :placeholder="$t('lyricsReport.translationPlainPlaceholder')"
+                  @input="syncBilingualTextToLines"
+                />
+              </label>
+            </div>
+          </NCard>
 
           <NCard pad="md" class="submit-card">
             <label class="field">
@@ -200,7 +180,6 @@ const audioUrl = ref('')
 const audioLoading = ref(false)
 const tabs = [
   { id: 'text', label: 'lyricsReport.tabText', icon: 'edit' },
-  { id: 'translation', label: 'lyricsReport.tabTranslation', icon: 'languages' },
   { id: 'words', label: 'lyricsReport.tabWords', icon: 'file-text' },
   { id: 'preview', label: 'lyricsReport.tabPreview', icon: 'eye' },
 ]
@@ -211,6 +190,7 @@ const submittedId = ref(null)
 const music = ref(null)
 const lines = ref([])
 const plainLyricsText = ref('')
+const plainTranslationText = ref('')
 const note = ref('')
 const activeTab = ref('text')
 const draftSaved = ref(false)
@@ -230,9 +210,9 @@ watch(
 
 watch(activeTab, (tab, previous) => {
   if (previous === 'text' && tab !== 'text') {
-    syncPlainTextToLines()
+    syncBilingualTextToLines()
   } else if (tab === 'text' && previous !== 'text') {
-    syncLinesToPlainText()
+    syncLinesToEditors()
   }
 })
 
@@ -257,7 +237,7 @@ async function load() {
     } else {
       lines.value = (initial.length ? initial : [emptyReportLine()]).map(withUid)
     }
-    syncLinesToPlainText()
+    syncLinesToEditors()
     loadAudio()
     applyPageSeo({
       title: `${payload.data.title} - 歌词报错 | Neko歌姬计划`,
@@ -273,21 +253,29 @@ async function load() {
   }
 }
 
-function syncLinesToPlainText() {
+function syncLinesToEditors() {
   plainLyricsText.value = lines.value.map((line) => line.text || '').join('\n')
+  plainTranslationText.value = lines.value.map((line) => line.translation || '').join('\n')
 }
 
-function syncPlainTextToLines() {
-  const texts = plainLyricsText.value
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(Boolean)
+function syncBilingualTextToLines() {
+  const textLines = plainLyricsText.value.split(/\r?\n/u)
+  const translationLines = plainTranslationText.value.split(/\r?\n/u)
+  const entries = []
+  for (let index = 0; index < textLines.length; index++) {
+    const text = textLines[index].trim()
+    if (!text) continue
+    entries.push({
+      text,
+      translation: String(translationLines[index] || '').trim(),
+    })
+  }
   const previousLines = lines.value
   const used = new Set()
   const next = []
 
-  for (let index = 0; index < texts.length; index++) {
-    const text = texts[index]
+  for (let index = 0; index < entries.length; index++) {
+    const { text, translation } = entries[index]
     let sourceIndex = -1
     if (previousLines[index] && !used.has(index)
         && String(previousLines[index].text || '').trim() === text) {
@@ -308,12 +296,14 @@ function syncPlainTextToLines() {
       next.push({
         ...source,
         text,
+        translation,
         words: changed ? [] : source.words,
       })
     } else {
       const previous = next[next.length - 1]
       const line = withUid(emptyReportLine(previous ? Number(previous.endSec) || 0 : 0))
       line.text = text
+      line.translation = translation
       next.push(line)
     }
   }
@@ -389,17 +379,6 @@ function withUid(line) {
     uid: ++lineSequence,
     words: Array.isArray(line.words) ? line.words.map((word) => ({ ...word })) : [],
   }
-}
-
-function addLine() {
-  const previous = lines.value[lines.value.length - 1]
-  const start = previous ? Number(previous.endSec) || 0 : 0
-  lines.value.push(withUid(emptyReportLine(start)))
-  activeTab.value = 'text'
-}
-
-function removeLine(index) {
-  lines.value.splice(index, 1)
 }
 
 function openLogin() {
@@ -608,6 +587,13 @@ async function submitReport() {
   min-height: 520px;
 }
 
+.bilingual-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--n-space-4);
+  align-items: start;
+}
+
 .plain-editor {
   width: 100%;
   min-height: 62vh;
@@ -622,6 +608,10 @@ async function submitReport() {
   font-size: clamp(15px, 1.2vw, 18px);
   line-height: 1.9;
   tab-size: 2;
+}
+
+.plain-editor--translation {
+  background: color-mix(in srgb, var(--n-surface-soft) 82%, var(--n-accent-soft));
 }
 
 .plain-editor:focus {
@@ -735,6 +725,10 @@ async function submitReport() {
 }
 
 @media (max-width: 720px) {
+  .bilingual-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .song-card {
     align-items: flex-start;
   }
