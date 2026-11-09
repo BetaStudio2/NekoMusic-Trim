@@ -350,6 +350,7 @@ function formatTime(seconds) {
   color: inherit;
   font-size: clamp(20px, 2.3vw, 30px);
   line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .preview-line__segment--active {

@@ -186,7 +186,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import NIcon from '@/icons/NIcon.vue'
 import { NButton } from '@/ui'
-import { comparableLyricsText, splitTimingUnits } from '@/utils/timingUnits'
+import { comparableLyricsText, remapTimingUnits, splitTimingUnits } from '@/utils/timingUnits'
 
 const props = defineProps({
   lines: { type: Array, required: true },
@@ -251,14 +251,23 @@ function ensureSegments(line) {
   const joined = Array.isArray(line.words)
     ? line.words.map((word) => word.text || '').join('')
     : ''
+  const needsEnglishResplit = hasLatinWord(line.text) && line.timingVersion !== 2
   if (!Array.isArray(line.words) || line.words.length === 0
-      || comparableLyricsText(joined) !== comparableLyricsText(line.text)) {
-    line.words = splitTimingUnits(line.text || '').map((text) => ({
-      text,
-      startSec: null,
-      endSec: null,
-    }))
+      || comparableLyricsText(joined) !== comparableLyricsText(line.text)
+      || needsEnglishResplit) {
+    line.words = needsEnglishResplit
+      ? remapTimingUnits(line.text || '', line.words)
+      : splitTimingUnits(line.text || '').map((text) => ({
+          text,
+          startSec: null,
+          endSec: null,
+        }))
+    line.timingVersion = 2
   }
+}
+
+function hasLatinWord(text) {
+  return /[\p{Script=Latin}]{2,}/u.test(String(text || ''))
 }
 
 function togglePlay() {
@@ -356,6 +365,7 @@ function resplitLine() {
     startSec: null,
     endSec: null,
   }))
+  line.timingVersion = 2
   cursor.value = 0
   finished.value = false
   emit('change')
@@ -540,6 +550,7 @@ function formatTime(seconds) {
   font-size: clamp(18px, 2.2vw, 26px);
   line-height: 1.55;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .karaoke-line__romanization {

@@ -61,6 +61,35 @@ export function comparableLyricsText(value) {
   return String(value || '').replace(/\s+/gu, '')
 }
 
+/**
+ * 把旧版逐字母时间重新聚合到新的单词/单字拆分上。
+ * 字体拆分边界变化时，保留每个新单位覆盖字符的最早开始与最晚结束时间。
+ */
+export function remapTimingUnits(text, existingWords = []) {
+  const charTimings = []
+  for (const word of Array.isArray(existingWords) ? existingWords : []) {
+    const chars = Array.from(String(word.text || '').replace(/\s+/gu, ''))
+    for (const _char of chars) {
+      charTimings.push({
+        startSec: Number.isFinite(Number(word.startSec)) ? Number(word.startSec) : null,
+        endSec: Number.isFinite(Number(word.endSec)) ? Number(word.endSec) : null,
+      })
+    }
+  }
+  let position = 0
+  return splitTimingUnits(text).map((token) => {
+    let startSec = null
+    let endSec = null
+    const chars = Array.from(token.text.replace(/\s+/gu, ''))
+    for (let index = 0; index < chars.length; index++) {
+      const timing = charTimings[position++]
+      if (timing?.startSec != null && startSec == null) startSec = timing.startSec
+      if (timing?.endSec != null) endSec = timing.endSec
+    }
+    return { ...token, startSec, endSec }
+  })
+}
+
 function graphemeSegments(value) {
   try {
     if (typeof Intl !== 'undefined' && Intl.Segmenter) {

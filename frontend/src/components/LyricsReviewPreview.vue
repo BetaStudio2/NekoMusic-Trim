@@ -378,6 +378,7 @@ function formatTime(seconds) {
   margin: 0;
   font-size: 18px;
   line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .review-word--active {

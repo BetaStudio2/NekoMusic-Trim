@@ -98,28 +98,16 @@
           />
 
           <NCard v-else-if="activeTab === 'text'" pad="md" class="plain-editor-card">
-            <div class="bilingual-editor">
-              <label class="field">
-                <span>{{ $t('lyricsReport.plainTextHint') }}</span>
-                <textarea
-                  v-model="plainLyricsText"
-                  class="plain-editor"
-                  spellcheck="false"
-                  :placeholder="$t('lyricsReport.plainTextPlaceholder')"
-                  @input="syncBilingualTextToLines"
-                />
-              </label>
-              <label class="field">
-                <span>{{ $t('lyricsReport.translationPlainHint') }}</span>
-                <textarea
-                  v-model="plainTranslationText"
-                  class="plain-editor plain-editor--translation"
-                  spellcheck="false"
-                  :placeholder="$t('lyricsReport.translationPlainPlaceholder')"
-                  @input="syncBilingualTextToLines"
-                />
-              </label>
-            </div>
+            <label class="field">
+              <span>{{ $t('lyricsReport.plainTextHint') }}</span>
+              <textarea
+                v-model="combinedLyricsText"
+                class="plain-editor"
+                spellcheck="false"
+                :placeholder="$t('lyricsReport.plainTextPlaceholder')"
+                @input="syncCombinedTextToLines"
+              />
+            </label>
           </NCard>
 
           <NCard pad="md" class="submit-card">
@@ -163,6 +151,7 @@ import { getToken } from '@/utils/userStore.js'
 import { applyPageSeo, PRIVATE_ROBOTS } from '@/utils/seoMeta'
 import { buildNekoDocument, emptyReportLine, reportStats, toReportLines } from '@/utils/lyricsReport'
 import { resolveMediaUrl } from '@/utils/mediaUrl.js'
+import { remapTimingUnits } from '@/utils/timingUnits'
 import NIcon from '@/icons/NIcon.vue'
 import { NButton, NCard, NInput, NSpinner, NTag } from '@/ui'
 import KaraokeTimingEditor from '@/components/KaraokeTimingEditor.vue'
@@ -189,8 +178,7 @@ const submitting = ref(false)
 const submittedId = ref(null)
 const music = ref(null)
 const lines = ref([])
-const plainLyricsText = ref('')
-const plainTranslationText = ref('')
+const combinedLyricsText = ref('')
 const note = ref('')
 const activeTab = ref('text')
 const draftSaved = ref(false)
@@ -210,7 +198,7 @@ watch(
 
 watch(activeTab, (tab, previous) => {
   if (previous === 'text' && tab !== 'text') {
-    syncBilingualTextToLines()
+    syncCombinedTextToLines()
   } else if (tab === 'text' && previous !== 'text') {
     syncLinesToEditors()
   }
@@ -237,6 +225,7 @@ async function load() {
     } else {
       lines.value = (initial.length ? initial : [emptyReportLine()]).map(withUid)
     }
+    normalizeEnglishTimingSegments()
     syncLinesToEditors()
     loadAudio()
     applyPageSeo({
@@ -254,20 +243,25 @@ async function load() {
 }
 
 function syncLinesToEditors() {
-  plainLyricsText.value = lines.value.map((line) => line.text || '').join('\n')
-  plainTranslationText.value = lines.value.map((line) => line.translation || '').join('\n')
+  combinedLyricsText.value = lines.value.map((line) => {
+    const text = line.text || ''
+    const translation = String(line.translation || '').trim()
+    return translation ? `${text} | ${translation}` : text
+  }).join('\n')
 }
 
-function syncBilingualTextToLines() {
-  const textLines = plainLyricsText.value.split(/\r?\n/u)
-  const translationLines = plainTranslationText.value.split(/\r?\n/u)
+function syncCombinedTextToLines() {
   const entries = []
-  for (let index = 0; index < textLines.length; index++) {
-    const text = textLines[index].trim()
+  for (const rawLine of combinedLyricsText.value.split(/\r?\n/u)) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const separator = line.indexOf('|')
+    const text = (separator >= 0 ? line.slice(0, separator) : line).trim()
+    const translation = separator >= 0 ? line.slice(separator + 1).trim() : ''
     if (!text) continue
     entries.push({
       text,
-      translation: String(translationLines[index] || '').trim(),
+      translation,
     })
   }
   const previousLines = lines.value
@@ -298,6 +292,7 @@ function syncBilingualTextToLines() {
         text,
         translation,
         words: changed ? [] : source.words,
+        timingVersion: changed ? 0 : source.timingVersion,
       })
     } else {
       const previous = next[next.length - 1]
@@ -308,6 +303,21 @@ function syncBilingualTextToLines() {
     }
   }
   lines.value = next
+  normalizeEnglishTimingSegments()
+}
+
+function normalizeEnglishTimingSegments() {
+  lines.value = lines.value.map((line) => {
+    if (!/[\p{Script=Latin}]{2,}/u.test(String(line.text || ''))
+        || line.timingVersion === 2) {
+      return line
+    }
+    return {
+      ...line,
+      words: remapTimingUnits(line.text || '', line.words),
+      timingVersion: 2,
+    }
+  })
 }
 
 function restoreDraft() {
@@ -320,6 +330,7 @@ function restoreDraft() {
       text: String(line.text || ''),
       translation: String(line.translation || ''),
       romanization: String(line.romanization || ''),
+      timingVersion: Number(line.timingVersion) || 0,
       words: Array.isArray(line.words)
         ? line.words.map((word) => ({
             text: String(word.text || ''),
@@ -587,13 +598,6 @@ async function submitReport() {
   min-height: 520px;
 }
 
-.bilingual-editor {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--n-space-4);
-  align-items: start;
-}
-
 .plain-editor {
   width: 100%;
   min-height: 62vh;
@@ -608,10 +612,6 @@ async function submitReport() {
   font-size: clamp(15px, 1.2vw, 18px);
   line-height: 1.9;
   tab-size: 2;
-}
-
-.plain-editor--translation {
-  background: color-mix(in srgb, var(--n-surface-soft) 82%, var(--n-accent-soft));
 }
 
 .plain-editor:focus {
@@ -725,10 +725,6 @@ async function submitReport() {
 }
 
 @media (max-width: 720px) {
-  .bilingual-editor {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .song-card {
     align-items: flex-start;
   }
