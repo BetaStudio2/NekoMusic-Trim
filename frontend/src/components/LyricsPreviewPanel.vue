@@ -62,42 +62,21 @@
       @error="audioError = true"
     />
 
-    <section ref="scrollRef" class="preview__stage" aria-live="polite">
-      <article
-        v-for="(line, index) in lines"
-        :key="line.uid || index"
-        class="preview-line"
-        :class="{
-          'preview-line--active': index === activeLineIndex,
-          'preview-line--past': index < activeLineIndex,
-        }"
-        @click="seekToLine(line)"
-      >
-        <span class="preview-line__time">{{ formatTime(line.startSec) }}</span>
-        <div class="preview-line__body">
-          <p class="preview-line__text">
-            <span
-              v-for="(segment, segmentIndex) in segmentsFor(line)"
-              :key="segmentIndex"
-              :class="{ 'preview-line__segment--active': segmentActive(segment, index) }"
-            >{{ segmentText(segment) }}</span>
-          </p>
-          <p v-if="line.romanization" class="preview-line__romanization">
-            {{ line.romanization }}
-          </p>
-          <p v-if="line.translation" class="preview-line__translation">
-            {{ line.translation }}
-          </p>
-        </div>
-      </article>
-    </section>
+    <div class="preview__amll">
+      <LyricsWall
+        :lines="amllLines"
+        :current-time="currentTime"
+        :playing="isPlaying"
+        @seek="seekToSeconds"
+      />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import NIcon from '@/icons/NIcon.vue'
-import { comparableLyricsText } from '@/utils/timingUnits'
+import LyricsWall from '@/components/LyricsWall.vue'
 
 const props = defineProps({
   lines: { type: Array, required: true },
@@ -106,61 +85,40 @@ const props = defineProps({
 })
 
 const audioRef = ref(null)
-const scrollRef = ref(null)
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const playbackRate = ref(1)
 const audioError = ref(false)
 
-const activeLineIndex = computed(() => {
-  if (!props.lines.length) return -1
-  let active = 0
-  for (let index = 0; index < props.lines.length; index++) {
-    const start = Number(props.lines[index].startSec)
-    if (!Number.isFinite(start)) continue
-    if (currentTime.value + 0.02 >= start) {
-      active = index
-    } else {
-      break
-    }
+const amllLines = computed(() => props.lines.map((line, index) => {
+  const next = props.lines[index + 1]
+  const time = lineStartSeconds(line)
+  const endTime = lineEndSeconds(line, next, time)
+  const words = Array.isArray(line.words) && line.words.length
+    ? line.words
+        .filter((word) => word && typeof word.text === 'string')
+        .map((word) => ({
+          text: word.text,
+          startTime: wordStartSeconds(word, time),
+          endTime: wordEndSeconds(word, endTime),
+        }))
+    : []
+  return {
+    time,
+    endTime: Math.max(time, endTime),
+    text: typeof line.text === 'string' ? line.text : '',
+    translation: typeof line.translation === 'string' ? line.translation : '',
+    romanization: typeof line.romanization === 'string' ? line.romanization : '',
+    words,
   }
-  return active
-})
-
-watch(activeLineIndex, () => {
-  nextTick(() => {
-    const line = scrollRef.value?.querySelector('.preview-line--active')
-    line?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  })
-})
+}))
 
 watch(() => props.audioUrl, () => {
   audioError.value = false
   currentTime.value = 0
   duration.value = 0
 })
-
-function segmentsFor(line) {
-  const words = Array.isArray(line.words) ? line.words : []
-  if (words.length
-    && words.every((word) => word && typeof word.text === 'string')
-    && comparableLyricsText(words.map((word) => word.text).join(''))
-      === comparableLyricsText(line.text)) {
-    return words
-  }
-  return line.text ? [{ text: line.text, startSec: line.startSec }] : []
-}
-
-function segmentText(segment) {
-  return segment && typeof segment.text === 'string' ? segment.text : ''
-}
-
-function segmentActive(segment, lineIndex) {
-  if (lineIndex !== activeLineIndex.value) return false
-  const start = Number(segment.startSec)
-  return Number.isFinite(start) && currentTime.value + 0.02 >= start
-}
 
 function togglePlay() {
   const audio = audioRef.value
@@ -196,11 +154,44 @@ function seek(event) {
   currentTime.value = audioRef.value.currentTime
 }
 
-function seekToLine(line) {
+function seekToSeconds(seconds) {
   if (!audioRef.value) return
-  const start = Math.max(0, Number(line.startSec) || 0)
+  const start = Math.max(0, Number(seconds) || 0)
   audioRef.value.currentTime = start
   currentTime.value = start
+}
+
+function lineStartSeconds(line) {
+  const seconds = Number(line?.startSec)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds
+  const millis = Number(line?.startMs)
+  if (Number.isFinite(millis) && millis >= 0) return millis / 1000
+  return 0
+}
+
+function lineEndSeconds(line, next, start) {
+  const seconds = Number(line?.endSec)
+  if (Number.isFinite(seconds) && seconds >= start) return seconds
+  const millis = Number(line?.endMs)
+  if (Number.isFinite(millis) && millis / 1000 >= start) return millis / 1000
+  if (next) return lineStartSeconds(next)
+  return start + 8
+}
+
+function wordStartSeconds(word, fallback) {
+  const seconds = Number(word?.startSec)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds
+  const millis = Number(word?.startMs)
+  if (Number.isFinite(millis) && millis >= 0) return millis / 1000
+  return fallback
+}
+
+function wordEndSeconds(word, fallback) {
+  const seconds = Number(word?.endSec)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds
+  const millis = Number(word?.endMs)
+  if (Number.isFinite(millis) && millis >= 0) return millis / 1000
+  return fallback
 }
 
 function formatTime(seconds) {
@@ -307,6 +298,14 @@ function formatTime(seconds) {
   margin: 0;
   font-size: var(--n-text-sm);
   line-height: var(--n-leading-normal);
+}
+
+.preview__amll {
+  min-width: 0;
+}
+
+.preview__amll :deep(.wall) {
+  height: min(72vh, 760px);
 }
 
 .preview__stage {

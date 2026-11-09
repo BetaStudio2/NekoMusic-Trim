@@ -55,78 +55,35 @@
     <div class="review__columns">
       <section class="review__column">
         <h3>提交版本</h3>
-        <div ref="submittedScrollRef" class="review__lyrics">
-          <article
-            v-for="(line, index) in submittedLines"
-            :key="index"
-            class="review-line"
-            :class="{
-              'review-line--active': index === submittedActive,
-              'review-line--past': index < submittedActive,
-            }"
-            @click="seekToLine(line)"
-          >
-            <span class="review-line__time">{{ formatTime(line.startMs / 1000) }}</span>
-            <div class="review-line__main">
-              <p class="review-line__text">
-                <span
-                  v-for="(word, wordIndex) in segmentsFor(line)"
-                  :key="wordIndex"
-                  :class="{ 'review-word--active': wordActive(word, index === submittedActive) }"
-                >{{ wordText(word) }}</span>
-              </p>
-              <p v-if="line.romanization" class="review-line__romanization">
-                {{ line.romanization }}
-              </p>
-              <p v-if="line.translation" class="review-line__translation">
-                {{ line.translation }}
-              </p>
-            </div>
-          </article>
-        </div>
+        <LyricsWall
+          class="review__wall"
+          :lines="submittedAmll"
+          :current-time="currentTime"
+          :playing="isPlaying"
+          @seek="seekToSeconds"
+        />
       </section>
 
       <section class="review__column">
         <h3>当前正式歌词</h3>
-        <div ref="currentScrollRef" class="review__lyrics">
-          <article
-            v-for="(line, index) in currentLines"
-            :key="index"
-            class="review-line"
-            :class="{
-              'review-line--active': index === currentActive,
-              'review-line--past': index < currentActive,
-            }"
-            @click="seekToLine(line)"
-          >
-            <span class="review-line__time">{{ formatTime(line.startMs / 1000) }}</span>
-            <div class="review-line__main">
-              <p class="review-line__text">
-                <span
-                  v-for="(word, wordIndex) in segmentsFor(line)"
-                  :key="wordIndex"
-                  :class="{ 'review-word--active': wordActive(word, index === currentActive) }"
-                >{{ wordText(word) }}</span>
-              </p>
-              <p v-if="line.romanization" class="review-line__romanization">
-                {{ line.romanization }}
-              </p>
-              <p v-if="line.translation" class="review-line__translation">
-                {{ line.translation }}
-              </p>
-            </div>
-          </article>
-          <p v-if="!currentLines.length" class="review__empty">当前没有可对比的正式歌词</p>
-        </div>
+        <LyricsWall
+          v-if="currentLines.length"
+          class="review__wall"
+          :lines="currentAmll"
+          :current-time="currentTime"
+          :playing="isPlaying"
+          @seek="seekToSeconds"
+        />
+        <p v-else class="review__empty">当前没有可对比的正式歌词</p>
       </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import NIcon from '@/icons/NIcon.vue'
-import { comparableLyricsText } from '@/utils/timingUnits'
+import LyricsWall from '@/components/LyricsWall.vue'
 
 const props = defineProps({
   submittedLines: { type: Array, required: true },
@@ -135,59 +92,45 @@ const props = defineProps({
 })
 
 const audioRef = ref(null)
-const submittedScrollRef = ref(null)
-const currentScrollRef = ref(null)
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const playbackRate = ref(1)
 const audioError = ref(false)
 
-const currentMs = computed(() => currentTime.value * 1000)
-const submittedActive = computed(() => findActive(props.submittedLines))
-const currentActive = computed(() => findActive(props.currentLines))
-
-watch(submittedActive, () => scrollActive(submittedScrollRef.value))
-watch(currentActive, () => scrollActive(currentScrollRef.value))
+const submittedAmll = computed(() => toAmllLines(props.submittedLines))
+const currentAmll = computed(() => toAmllLines(props.currentLines))
 watch(() => props.audioUrl, () => {
   audioError.value = false
   currentTime.value = 0
   duration.value = 0
 })
 
-function findActive(lines) {
-  if (!lines?.length) return -1
-  let active = 0
-  for (let index = 0; index < lines.length; index++) {
-    const start = lineStartMs(lines[index])
-    if (currentMs.value + 20 >= start) {
-      active = index
-    } else {
-      break
+function toAmllLines(lines) {
+  return (Array.isArray(lines) ? lines : []).map((line, index, source) => {
+    const time = lineStartMs(line) / 1000
+    const next = source[index + 1]
+    const endTime = Number(line?.endMs) > 0
+      ? Number(line.endMs) / 1000
+      : (next ? lineStartMs(next) / 1000 : time + 8)
+    const words = Array.isArray(line?.words) && line.words.length
+      ? line.words
+          .filter((word) => word && typeof word.text === 'string')
+          .map((word) => ({
+            text: word.text,
+            startTime: Math.max(0, Number(word.startMs) || 0) / 1000,
+            endTime: Math.max(0, Number(word.endMs) || 0) / 1000,
+          }))
+      : []
+    return {
+      time,
+      endTime,
+      text: typeof line?.text === 'string' ? line.text : '',
+      translation: typeof line?.translation === 'string' ? line.translation : '',
+      romanization: typeof line?.romanization === 'string' ? line.romanization : '',
+      words,
     }
-  }
-  return active
-}
-
-function segmentsFor(line) {
-  const words = Array.isArray(line.words) ? line.words : []
-  if (words.length
-    && words.every((word) => word && typeof word.text === 'string')
-    && comparableLyricsText(words.map((word) => word.text).join(''))
-      === comparableLyricsText(line.text)) {
-    return words
-  }
-  return line.text ? [{ text: line.text, startMs: lineStartMs(line) }] : []
-}
-
-function wordText(word) {
-  return word && typeof word.text === 'string' ? word.text : ''
-}
-
-function wordActive(word, lineActive) {
-  if (!lineActive) return false
-  const start = Number(word.startMs)
-  return Number.isFinite(start) && currentMs.value + 20 >= start
+  })
 }
 
 function lineStartMs(line) {
@@ -195,13 +138,6 @@ function lineStartMs(line) {
   if (Number.isFinite(raw)) return Math.max(0, raw)
   const seconds = Number(line?.startSec)
   return Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : 0
-}
-
-function scrollActive(container) {
-  nextTick(() => {
-    const line = container?.querySelector('.review-line--active')
-    line?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  })
 }
 
 function togglePlay() {
@@ -238,9 +174,9 @@ function seek(event) {
   currentTime.value = audioRef.value.currentTime
 }
 
-function seekToLine(line) {
+function seekToSeconds(seconds) {
   if (!audioRef.value) return
-  const start = lineStartMs(line) / 1000
+  const start = Math.max(0, Number(seconds) || 0)
   audioRef.value.currentTime = Math.max(0, start)
   currentTime.value = audioRef.value.currentTime
 }
@@ -338,6 +274,11 @@ function formatTime(seconds) {
   margin: 0 0 8px;
   color: var(--n-text-muted);
   font-size: var(--n-text-sm);
+}
+
+.review__wall {
+  height: 430px;
+  min-height: 320px;
 }
 
 .review__lyrics {
