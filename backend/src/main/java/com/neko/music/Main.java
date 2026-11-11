@@ -9,7 +9,6 @@ import com.neko.music.database.DatabaseManager;
 import com.neko.music.database.DatabaseInitializer;
 import com.neko.music.database.CommentDatabaseManager;
 import com.neko.music.database.LyricsDatabaseManager;
-import com.neko.music.database.MusicExternalRefDatabaseManager;
 import com.neko.music.database.LogDatabaseManager;
 import com.neko.music.service.*;
 import com.neko.music.database.VipPayOrderDatabaseManager;
@@ -75,7 +74,6 @@ public class Main {
 
     private static Server server;
     private static DatabaseManager databaseManager;
-    private static MusicExternalRefDatabaseManager musicExternalRefDatabaseManager;
     private static ConfigManager configManager;
     private static AdminDatabaseManager adminDatabaseManager;
     private static AdminAuthService adminAuthService;
@@ -113,7 +111,6 @@ public class Main {
     private static NeteaseLoginMonitor neteaseLoginMonitor;
     private static QQLoginMonitor qqLoginMonitor;
     private static NeteaseSearchFillService neteaseSearchFillService;
-    private static LyricsBackfillService lyricsBackfillService;
     private static ExternalImportService externalImportService;
     private static QQMusicClient qqMusicClient;
     private static QQMusicLoginService qqMusicLoginService;
@@ -161,7 +158,6 @@ public class Main {
         databaseManager = new DatabaseManager(configManager);
         databaseManager.init();
         lyricsDatabaseManager = new LyricsDatabaseManager(databaseManager);
-        musicExternalRefDatabaseManager = new MusicExternalRefDatabaseManager(databaseManager);
         
         // 初始化数据库表
         DatabaseInitializer.initializeTables(databaseManager);
@@ -261,14 +257,6 @@ public class Main {
                 adminMusicIngestService,
                 redisService);
         Runtime.getRuntime().addShutdownHook(new Thread(neteaseSearchFillService::shutdown, "netease-fill-shutdown"));
-        lyricsBackfillService = new LyricsBackfillService(
-                configManager,
-                neteaseCloudMusicClient,
-                qqMusicClient,
-                lyricsDatabaseManager,
-                musicExternalRefDatabaseManager);
-        Runtime.getRuntime().addShutdownHook(
-                new Thread(lyricsBackfillService::shutdown, "lyrics-backfill-shutdown"));
         kugouMusicClient = new KugouMusicClient(objectMapper);
         dailyRecommendationService = new DailyRecommendationService(
                 databaseManager, redisService, configManager, objectMapper);
@@ -668,10 +656,6 @@ public class Main {
 
     public static LyricsDatabaseManager getLyricsDatabaseManager() {
         return lyricsDatabaseManager;
-    }
-
-    public static MusicExternalRefDatabaseManager getMusicExternalRefDatabaseManager() {
-        return musicExternalRefDatabaseManager;
     }
 
     public static MusicRecognitionService getMusicRecognitionService() {
