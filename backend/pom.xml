@@ -362,6 +362,8 @@
                                         <exclude>META-INF/versions/*/OSGI-INF/MANIFEST.MF</exclude>
                                         <!-- 许可证文件已由各依赖在源码/发布包中保留，uber JAR 只保留一份会触发重复告警。 -->
                                         <exclude>META-INF/LICENSE.md</exclude>
+                                        <exclude>META-INF/NOTICE.md</exclude>
+                                        <exclude>META-INF/CONTRIBUTORS.md</exclude>
                                         <!-- 依赖 JAR 自带的签名文件不能跟随 shaded JAR：
                                              类内容被重新打包后签名摘要必然失效，JVM 会拒绝启动。
                                              这些 JAR 已由 Maven 校验，运行时不需要再验签。 -->
