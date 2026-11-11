@@ -56,11 +56,13 @@ public final class MusicRecognitionService implements AutoCloseable {
     private final ConfigManager config;
     private final TrackCatalog catalog;
     private final FingerprintDecoder decoder;
+    private final AudioFingerprintEngine liveQueryEngine;
     private final FingerprintDiskCache diskCache;
     private final FullIndexDiskCache fullIndexCache;
     private final ExecutorService indexExecutor;
     private final ExecutorService fingerprintExecutor;
     private final Semaphore querySlots;
+    private final Semaphore liveStreamSlots;
     private final Object buildLock = new Object();
     private volatile long buildRetryNotBeforeMillis;
 
@@ -86,9 +88,11 @@ public final class MusicRecognitionService implements AutoCloseable {
         this.config = config;
         this.catalog = catalog;
         this.decoder = decoder;
+        this.liveQueryEngine = new AudioFingerprintEngine();
         this.diskCache = diskCache;
         this.fullIndexCache = fullIndexCache;
         this.querySlots = new Semaphore(config.getMusicRecognitionMaxConcurrentRequests(), true);
+        this.liveStreamSlots = new Semaphore(config.getMusicRecognitionMaxConcurrentRequests(), true);
         this.indexExecutor = Executors.newSingleThreadExecutor(runnable -> {
             Thread thread = new Thread(runnable, "music-fingerprint-index");
             thread.setDaemon(true);
@@ -127,35 +131,90 @@ public final class MusicRecognitionService implements AutoCloseable {
                     uploadedAudio,
                     config.getMusicRecognitionMaxSampleDurationSeconds(),
                     Duration.ofSeconds(config.getMusicRecognitionFfmpegTimeoutSeconds()));
-            if (query.durationSeconds() < config.getMusicRecognitionMinSampleDurationSeconds()) {
-                throw new InvalidAudioException("录音过短，请至少录制 "
-                        + config.getMusicRecognitionMinSampleDurationSeconds() + " 秒");
-            }
-            if (query.landmarks().isEmpty()) {
-                throw new InvalidAudioException("录音中没有足够清晰的声音");
-            }
-
-            Optional<AudioFingerprintEngine.Match> match = snapshot.index.findBest(
-                    query,
-                    config.getMusicRecognitionMinimumMatchingLandmarks(),
-                    config.getMusicRecognitionMinimumConfidence());
-            if (match.isEmpty()) {
-                return Optional.empty();
-            }
-            Track track = snapshot.tracks.get(match.get().musicId());
-            if (track == null) {
-                return Optional.empty();
-            }
-            AudioFingerprintEngine.Match value = match.get();
-            return Optional.of(new RecognitionResult(
-                    track,
-                    value.confidence(),
-                    value.alignedLandmarks(),
-                    Math.max(0d, value.offsetSeconds()),
-                    query.durationSeconds()));
+            return matchFingerprint(snapshot, query);
         } finally {
             querySlots.release();
         }
+    }
+
+    /**
+     * Matches a growing 16 kHz mono signed-16-bit little-endian PCM sample.
+     * The caller may invoke this repeatedly as audio arrives over a live connection.
+     */
+    public Optional<RecognitionResult> recognizePcm16k(byte[] pcm)
+            throws IOException, InvalidAudioException, AudioTooLongException,
+            BusyException, IndexUnavailableException {
+        if (pcm == null || pcm.length == 0 || (pcm.length & 1) != 0) {
+            throw new InvalidAudioException("PCM 数据为空或长度无效");
+        }
+        if (!querySlots.tryAcquire()) {
+            throw new BusyException("识曲任务繁忙，请稍后重试");
+        }
+        try {
+            long inputSamples = pcm.length / 2L;
+            double inputDuration = inputSamples / 16_000d;
+            int maxDuration = config.getMusicRecognitionMaxSampleDurationSeconds();
+            if (inputDuration > maxDuration) {
+                throw new AudioTooLongException("音频时长不得超过 " + maxDuration + " 秒", null);
+            }
+            if (inputDuration < config.getMusicRecognitionMinSampleDurationSeconds()) {
+                throw new InvalidAudioException("录音过短，请至少录制 "
+                        + config.getMusicRecognitionMinSampleDurationSeconds() + " 秒");
+            }
+
+            short[] source = new short[(int) inputSamples];
+            for (int i = 0, offset = 0; i < source.length; i++, offset += 2) {
+                source[i] = (short) ((pcm[offset] & 0xff) | (pcm[offset + 1] << 8));
+            }
+            IndexSnapshot snapshot = getUsableIndex();
+            AudioFingerprintEngine.Fingerprint query =
+                    liveQueryEngine.fingerprint(resample16kToEngineRate(source));
+            return matchFingerprint(snapshot, query);
+        } finally {
+            querySlots.release();
+        }
+    }
+
+    private Optional<RecognitionResult> matchFingerprint(
+            IndexSnapshot snapshot, AudioFingerprintEngine.Fingerprint query) throws InvalidAudioException {
+        if (query.durationSeconds() < config.getMusicRecognitionMinSampleDurationSeconds()) {
+            throw new InvalidAudioException("录音过短，请至少录制 "
+                    + config.getMusicRecognitionMinSampleDurationSeconds() + " 秒");
+        }
+        if (query.landmarks().isEmpty()) {
+            throw new InvalidAudioException("录音中没有足够清晰的声音");
+        }
+        Optional<AudioFingerprintEngine.Match> match = snapshot.index.findBest(
+                query,
+                config.getMusicRecognitionMinimumMatchingLandmarks(),
+                config.getMusicRecognitionMinimumConfidence());
+        if (match.isEmpty()) {
+            return Optional.empty();
+        }
+        Track track = snapshot.tracks.get(match.get().musicId());
+        if (track == null) {
+            return Optional.empty();
+        }
+        AudioFingerprintEngine.Match value = match.get();
+        return Optional.of(new RecognitionResult(
+                track,
+                value.confidence(),
+                value.alignedLandmarks(),
+                Math.max(0d, value.offsetSeconds()),
+                query.durationSeconds()));
+    }
+
+    private static short[] resample16kToEngineRate(short[] input) {
+        int outputLength = (int) ((long) input.length * AudioFingerprintEngine.SAMPLE_RATE / 16_000L);
+        short[] output = new short[outputLength];
+        for (int i = 0; i < output.length; i++) {
+            double sourcePosition = i * (16_000d / AudioFingerprintEngine.SAMPLE_RATE);
+            int left = Math.min(input.length - 1, (int) sourcePosition);
+            int right = Math.min(input.length - 1, left + 1);
+            double fraction = sourcePosition - left;
+            output[i] = (short) Math.round(input[left] * (1d - fraction) + input[right] * fraction);
+        }
+        return output;
     }
 
     public IndexStatus status() {
@@ -167,6 +226,15 @@ public final class MusicRecognitionService implements AutoCloseable {
                 snapshot == null ? 0 : snapshot.index.musicCount(),
                 snapshot == null ? 0 : snapshot.index.uniqueHashCount(),
                 snapshot == null ? 0 : snapshot.builtAtMillis);
+    }
+
+    /** Reserves a bounded server slot for the lifetime of a streaming recognition connection. */
+    public boolean tryAcquireLiveStreamSlot() {
+        return liveStreamSlots.tryAcquire();
+    }
+
+    public void releaseLiveStreamSlot() {
+        liveStreamSlots.release();
     }
 
     /** Keep serving the last good snapshot while an updated index is rebuilt and atomically swapped in. */

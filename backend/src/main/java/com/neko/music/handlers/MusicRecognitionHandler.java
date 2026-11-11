@@ -29,7 +29,11 @@ public final class MusicRecognitionHandler extends HttpServlet {
     private static final Logger logger = LoggerFactory.getLogger(MusicRecognitionHandler.class);
     private static final long MULTIPART_OVERHEAD_ALLOWANCE = 1024L * 1024L;
 
-    private final RecognitionRateLimiter rateLimiter = new RecognitionRateLimiter();
+    static final RecognitionRateLimiter RATE_LIMITER = new RecognitionRateLimiter();
+
+    public static RecognitionRateLimiter.Decision acquireRecognitionSlot(String address, int limit) {
+        return RATE_LIMITER.tryAcquire(address, limit);
+    }
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -39,7 +43,7 @@ public final class MusicRecognitionHandler extends HttpServlet {
             return;
         }
 
-        RecognitionRateLimiter.Decision rateDecision = rateLimiter.tryAcquire(
+        RecognitionRateLimiter.Decision rateDecision = RATE_LIMITER.tryAcquire(
                 clientAddress(request),
                 Main.getConfigManager().getMusicRecognitionRateLimitPerMinute());
         if (!rateDecision.allowed()) {
@@ -116,6 +120,10 @@ public final class MusicRecognitionHandler extends HttpServlet {
     private static void writeMatch(
             HttpServletResponse response,
             MusicRecognitionService.RecognitionResult result) throws IOException {
+        writeJson(response, HttpStatus.OK_200, matchResponse(result));
+    }
+
+    static ObjectNode matchResponse(MusicRecognitionService.RecognitionResult result) {
         MusicRecognitionService.Track track = result.track();
         ObjectNode data = Main.getObjectMapper().createObjectNode();
         data.put("id", track.id());
@@ -139,16 +147,30 @@ public final class MusicRecognitionHandler extends HttpServlet {
         root.put("matched", true);
         root.put("message", ApiMessages.translate("recognition.ok"));
         root.set("data", data);
-        writeJson(response, HttpStatus.OK_200, root);
+        return root;
     }
 
     private static void writeNoMatch(HttpServletResponse response) throws IOException {
+        writeJson(response, HttpStatus.OK_200, noMatchResponse());
+    }
+
+    static ObjectNode noMatchResponse() {
         ObjectNode root = Main.getObjectMapper().createObjectNode();
         root.put("success", true);
         root.put("matched", false);
         root.put("message", ApiMessages.translate("recognition.not_in_library"));
         root.putNull("data");
-        writeJson(response, HttpStatus.OK_200, root);
+        return root;
+    }
+
+    public static ObjectNode errorResponse(String message) {
+        ObjectNode root = Main.getObjectMapper().createObjectNode();
+        root.put("success", false);
+        root.put("matched", false);
+        root.put("message", message == null || message.isBlank()
+                ? ApiMessages.translate("recognition.request_failed") : message);
+        root.putNull("data");
+        return root;
     }
 
     private static void writeError(HttpServletResponse response, int status, String message) throws IOException {

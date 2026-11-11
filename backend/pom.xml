@@ -37,6 +37,11 @@
             <artifactId>jetty-ee10-servlet</artifactId>
             <version>12.1.14</version>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.jetty.ee10.websocket</groupId>
+            <artifactId>jetty-ee10-websocket-jakarta-server</artifactId>
+            <version>12.1.14</version>
+        </dependency>
 
         <!-- Jakarta Servlet API (compile scope for shaded JAR) -->
         <dependency>

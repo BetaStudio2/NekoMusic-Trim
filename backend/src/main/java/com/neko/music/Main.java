@@ -35,6 +35,7 @@ import com.neko.music.filter.IPRateLimitFilter;
 import com.neko.music.filter.SecurityHeadersFilter;
 import com.neko.music.filter.SourceBanFilter;
 import com.neko.music.filter.StaticPageSeoFilter;
+import com.neko.music.filter.MusicRecognitionWebSocketAdmissionFilter;
 import com.neko.music.util.ClientReleaseStorage;
 import com.neko.music.util.SiteResourceStorage;
 import org.slf4j.Logger;
@@ -394,6 +395,8 @@ public class Main {
 
         // 动态接口默认禁止缓存；需要公开缓存的接口自行覆盖 Cache-Control
         context.addFilter(CacheControlFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
+        context.addFilter(MusicRecognitionWebSocketAdmissionFilter.class,
+                MusicRecognitionWebSocketEndpoint.PATH, EnumSet.of(DispatcherType.REQUEST));
 
         // 前端静态资源 + 全部 API/页面路由（详见 ServletRegistrar）
         ServletRegistrar.register(context, configManager);
