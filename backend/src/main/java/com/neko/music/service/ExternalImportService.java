@@ -357,6 +357,12 @@ public class ExternalImportService {
             logger.warn("{} 导入被中断，剩余曲目可能未处理", source);
         }
         appender.flushPending();
+        if (appender.playlistMissing()) {
+            String message = "目标歌单已被删除，导入已停止";
+            syncListener.onError(message);
+            notifyImportFailed(target, message);
+            return;
+        }
         Summary summary = new Summary(total, imported.get(), existed.get(), failed.get());
         syncListener.onComplete(summary);
         notifyImportFinished(source, target, playlistAdded.get(), playlistSkipped.get(),
@@ -378,6 +384,7 @@ public class ExternalImportService {
         private final Set<Integer> addedInThisRun = new HashSet<>();
         private final Map<Integer, TrackResult> pending = new HashMap<>();
         private int nextIndex;
+        private boolean playlistMissing;
 
         OrderedPlaylistAppender(int playlistId, int total, Listener listener,
                                 AtomicInteger addedCount, AtomicInteger skippedCount,
@@ -417,11 +424,24 @@ public class ExternalImportService {
                 // 失败的曲目与歌单无关，不计入歌单侧口径
                 return trackResult;
             }
-            boolean added = ExternalImportService.this.appendToPlaylist(playlistId, trackResult.musicId());
+            if (playlistMissing) {
+                return new TrackResult(trackResult.index(), trackResult.total(), trackResult.source(),
+                        trackResult.sourceId(), trackResult.title(), trackResult.artist(), trackResult.status(),
+                        trackResult.musicId(), false, trackResult.message());
+            }
+            PlaylistService.AppendMusicResult appendResult =
+                    ExternalImportService.this.appendToPlaylist(playlistId, trackResult.musicId());
+            if (appendResult == PlaylistService.AppendMusicResult.PLAYLIST_MISSING) {
+                playlistMissing = true;
+            }
+            boolean added = appendResult == PlaylistService.AppendMusicResult.ADDED;
             if (added) {
                 addedCount.incrementAndGet();
                 addedInThisRun.add(trackResult.musicId());
-            } else if (addedInThisRun.contains(trackResult.musicId())) {
+            } else if (playlistMissing) {
+                // 目标歌单已被删除，后续曲目不再重复尝试写库；导入结束时报一次明确错误。
+            } else if (appendResult == PlaylistService.AppendMusicResult.ALREADY_EXISTS
+                    && addedInThisRun.contains(trackResult.musicId())) {
                 // 同一首歌在本次导入里又来了一次（源歌单重复，或两条源记录去重成同一条曲库记录）
                 duplicatedCount.incrementAndGet();
                 logger.info("曲目在本次导入中重复，跳过: playlistId={}, musicId={}, title={}, artist={}, source={}",
@@ -436,6 +456,10 @@ public class ExternalImportService {
             return new TrackResult(trackResult.index(), trackResult.total(), trackResult.source(),
                     trackResult.sourceId(), trackResult.title(), trackResult.artist(), trackResult.status(),
                     trackResult.musicId(), added, trackResult.message());
+        }
+
+        synchronized boolean playlistMissing() {
+            return playlistMissing;
         }
     }
 
@@ -504,14 +528,14 @@ public class ExternalImportService {
      * 追加曲目到歌单末尾。这里必须用末尾追加：{@link PlaylistService#addMusicToPlaylist(int, int)}
      * 是插到首位，逐个调用会把顺序整体倒过来。
      */
-    private boolean appendToPlaylist(int targetPlaylistId, int musicId) {
+    private PlaylistService.AppendMusicResult appendToPlaylist(int targetPlaylistId, int musicId) {
         ReentrantLock lock = PLAYLIST_LOCKS.computeIfAbsent(targetPlaylistId, k -> new ReentrantLock());
         lock.lock();
         try {
-            return playlistService.appendMusicToPlaylist(targetPlaylistId, musicId);
+            return playlistService.appendMusicToPlaylistDetailed(targetPlaylistId, musicId);
         } catch (Exception e) {
             logger.warn("追加曲目到歌单失败 playlistId={} musicId={}: {}", targetPlaylistId, musicId, e.getMessage());
-            return false;
+            return PlaylistService.AppendMusicResult.FAILED;
         } finally {
             lock.unlock();
         }

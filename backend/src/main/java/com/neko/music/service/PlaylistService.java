@@ -14,6 +14,13 @@ import java.util.Optional;
 public class PlaylistService {
     private static final Logger logger = LoggerFactory.getLogger(PlaylistService.class);
 
+    public enum AppendMusicResult {
+        ADDED,
+        ALREADY_EXISTS,
+        PLAYLIST_MISSING,
+        FAILED
+    }
+
     /**
      * 歌单搜索：先 LIMIT 候选歌单，再通过一次聚合 JOIN 取首曲，避免对每个歌单执行相关子查询。
      */
@@ -273,16 +280,29 @@ public class PlaylistService {
      * 之后，因此按来源顺序依次调用即可让歌单顺序与来源一致。曲目已存在时返回 {@code false}。</p>
      */
     public boolean appendMusicToPlaylist(int playlistId, int musicId) {
+        return appendMusicToPlaylistDetailed(playlistId, musicId) == AppendMusicResult.ADDED;
+    }
+
+    /**
+     * 与 {@link #appendMusicToPlaylist(int, int)} 相同，但区分目标歌单已被删除与普通数据库失败，
+     * 让长耗时导入能在用户删除目标歌单后及时停止并给出明确提示。
+     */
+    public AppendMusicResult appendMusicToPlaylistDetailed(int playlistId, int musicId) {
         logger.info("追加音乐到歌单: playlistId={}, musicId={}", playlistId, musicId);
 
         try (Connection conn = databaseManager.getConnection()) {
             conn.setAutoCommit(false);
 
             try {
+                if (!playlistExists(conn, playlistId)) {
+                    conn.rollback();
+                    logger.warn("目标歌单不存在，停止追加: playlistId={}, musicId={}", playlistId, musicId);
+                    return AppendMusicResult.PLAYLIST_MISSING;
+                }
                 if (playlistMusicExists(conn, playlistId, musicId)) {
                     logger.warn("音乐已存在于歌单中: playlistId={}, musicId={}", playlistId, musicId);
                     conn.rollback();
-                    return false;
+                    return AppendMusicResult.ALREADY_EXISTS;
                 }
 
                 String insertSql = "INSERT INTO playlist_music (playlist_id, music_id, position) VALUES (?, ?, ?)";
@@ -294,22 +314,50 @@ public class PlaylistService {
                     if (stmt.executeUpdate() == 0) {
                         logger.warn("音乐追加到歌单失败: playlistId={}, musicId={}", playlistId, musicId);
                         conn.rollback();
-                        return false;
+                        return AppendMusicResult.FAILED;
                     }
                 }
 
                 conn.commit();
                 logger.info("音乐追加到歌单成功: playlistId={}, musicId={}", playlistId, musicId);
                 updateMusicCount(playlistId);
-                return true;
+                return AppendMusicResult.ADDED;
             } catch (SQLException e) {
                 conn.rollback();
+                if (!playlistExistsAfterRollback(playlistId)) {
+                    logger.warn("目标歌单已被删除，停止追加: playlistId={}, musicId={}",
+                            playlistId, musicId);
+                    return AppendMusicResult.PLAYLIST_MISSING;
+                }
                 logger.error("追加音乐到歌单失败: {}", e.getMessage(), e);
-                return false;
+                return AppendMusicResult.FAILED;
             }
         } catch (SQLException e) {
             logger.error("获取数据库连接失败: {}", e.getMessage(), e);
-            return false;
+            return AppendMusicResult.FAILED;
+        }
+    }
+
+    private static boolean playlistExists(Connection conn, int playlistId) throws SQLException {
+        String sql = "SELECT 1 FROM playlists WHERE id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, playlistId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    /**
+     * 用独立连接复查目标歌单，避免当前事务的快照仍能看到刚被其他事务删除的歌单。
+     * 复查失败时按普通数据库错误处理，不能把真实故障误报成「歌单已删除」。
+     */
+    private boolean playlistExistsAfterRollback(int playlistId) {
+        try (Connection check = databaseManager.getConnection()) {
+            return playlistExists(check, playlistId);
+        } catch (SQLException e) {
+            logger.warn("复查目标歌单是否存在失败: playlistId={}, {}", playlistId, e.getMessage());
+            return true;
         }
     }
 
