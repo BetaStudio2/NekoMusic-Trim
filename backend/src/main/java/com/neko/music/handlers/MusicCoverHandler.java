@@ -2,6 +2,7 @@ package com.neko.music.handlers;
 
 import com.neko.music.util.ClientAborts;
 import com.neko.music.util.CoverThumbnails;
+import com.neko.music.util.CoverArtCache;
 
 import com.neko.music.util.MusicLookup;
 
@@ -54,6 +55,8 @@ public class MusicCoverHandler extends HttpServlet {
             return;
         }
 
+        // 兼容期的优先级：遗留的 Music/covers 文件 > 音频内嵌封面。
+        // 存量封面迁移完成后删掉目录分支即可，接口路径与响应头契约不变。
         Optional<Path> coverOpt = MusicAssetLocator.findCoverFile(musicId);
         if (coverOpt.isPresent()) {
             Path coverFile = coverOpt.get();
@@ -64,6 +67,12 @@ public class MusicCoverHandler extends HttpServlet {
                 sendImageFile(request, servePath, response);
                 return;
             }
+        }
+
+        Optional<CoverArtCache.Snapshot> embedded = CoverArtCache.find(musicId);
+        if (embedded.isPresent()) {
+            sendEmbeddedCover(request, embedded.get(), size, response);
+            return;
         }
 
         sendDefaultIcon(request, size, response);
@@ -83,7 +92,41 @@ public class MusicCoverHandler extends HttpServlet {
         }
     }
 
-    
+    /**
+     * 发送从音频中解析出的内嵌封面。
+     *
+     * <p>ETag 取封面内容哈希而不是音频 mtime：只改标题/歌词时音频 mtime 会变，但封面字节没变，
+     * 客户端与 CDN 才能继续用 304 命中。缩略图按同一哈希做缓存键。</p>
+     */
+    private void sendEmbeddedCover(HttpServletRequest request, CoverArtCache.Snapshot cover,
+                                   int size, HttpServletResponse response) throws IOException {
+        String etag = "\"c-" + cover.etag() + (size > 0 ? "-" + size : "") + "\"";
+        if (HttpResourceCache.sendNotModifiedIfFresh(request, response, etag)) {
+            return;
+        }
+        if (size > 0) {
+            Optional<Path> thumb = CoverThumbnails.fromBytes(cover.data(), cover.etag(), size);
+            if (thumb.isPresent()) {
+                sendImageFile(request, thumb.get(), response);
+                return;
+            }
+        }
+        response.setStatus(HttpStatus.OK_200);
+        response.setContentType(cover.mime());
+        response.setHeader("ETag", etag);
+        response.setHeader("Cache-Control", HttpResourceCache.CACHE_CONTROL_FILE);
+        response.setContentLength(cover.data().length);
+        try (OutputStream outputStream = response.getOutputStream()) {
+            outputStream.write(cover.data());
+        } catch (IOException e) {
+            if (ClientAborts.isClientAbort(e)) {
+                logger.debug("客户端在内嵌封面发送完成前断开连接");
+                return;
+            }
+            throw e;
+        }
+    }
+
     private void sendImageFile(HttpServletRequest request, Path imagePath, HttpServletResponse response) throws IOException {
         // ETag、Last-Modified、Content-Length 都来自这一次 stat；304 分支到此为止，不打开文件
         BasicFileAttributes attrs = Files.readAttributes(imagePath, BasicFileAttributes.class);

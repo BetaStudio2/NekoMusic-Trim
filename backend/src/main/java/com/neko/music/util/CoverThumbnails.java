@@ -24,8 +24,8 @@ import java.util.Set;
 /**
  * 封面缩略图：把原始封面按需缩放成方形 JPEG 并缓存，供 /api/music/cover/{id}?size= 使用。
  *
- * <p>缓存放在 tmpfs（{@code ${java.io.tmpdir}/.neko/cover-cache}），文件名包含源文件
- * 的最后修改时间，源封面被替换后会自动生成新的缩略图，无需手动失效。
+ * <p>缓存放在 tmpfs（{@code ${java.io.tmpdir}/.neko/cover-cache}）。文件名包含源版本键：
+ * 文件来源用「文件名 + mtime」，内嵌封面用封面内容哈希，源被替换后自动生成新缩略图。</p>
  */
 public final class CoverThumbnails {
     private static final Logger logger = LoggerFactory.getLogger(CoverThumbnails.class);
@@ -55,16 +55,54 @@ public final class CoverThumbnails {
             mtime = 0L;
         }
         String key = stripExtension(source.getFileName().toString()) + "-" + size + "-" + mtime + ".jpg";
+        return fromBytes(() -> Files.newInputStream(source), key, size);
+    }
+
+    /**
+     * 由内存中的封面字节生成/获取缩略图。
+     *
+     * <p>{@code versionKey} 必须是封面内容的稳定摘要（如 SHA-256 前缀），否则换封面后仍会命中旧缩略图。</p>
+     */
+    public static Optional<Path> fromBytes(byte[] data, String versionKey, int size) {
+        if (data == null || data.length == 0) {
+            return Optional.empty();
+        }
+        String key = sanitize(versionKey) + "-" + size + ".jpg";
+        return fromBytes(() -> new java.io.ByteArrayInputStream(data), key, size);
+    }
+
+    /** 打开输入流的工厂；缩略图已存在时不会被调用。 */
+    private interface InputStreamSupplier {
+        InputStream open() throws IOException;
+    }
+
+    private static Optional<Path> fromBytes(InputStreamSupplier source, String key, int size) {
         Path target = cacheDir().resolve(key);
         if (Files.isRegularFile(target)) {
             return Optional.of(target);
         }
-        try (InputStream in = Files.newInputStream(source)) {
+        try (InputStream in = source.open()) {
             return writeResized(in, target, size);
         } catch (IOException e) {
-            logger.warn("生成封面缩略图失败 source={} size={}: {}", source, size, e.toString());
+            logger.warn("生成封面缩略图失败 key={} size={}: {}", key, size, e.toString());
             return Optional.empty();
         }
+    }
+
+    /** 版本键只保留安全字符，避免路径穿越与非法文件名。 */
+    private static String sanitize(String key) {
+        if (key == null || key.isBlank()) {
+            return "cover";
+        }
+        StringBuilder sb = new StringBuilder(key.length());
+        for (int i = 0; i < key.length() && sb.length() < 64; i++) {
+            char c = key.charAt(i);
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+                sb.append(c);
+            }
+        }
+        return sb.isEmpty() ? "cover" : sb.toString();
     }
 
     /** 由 classpath 资源（如默认封面 DefaultIcon.png）生成/获取缩略图。 */

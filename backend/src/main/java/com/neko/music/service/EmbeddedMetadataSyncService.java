@@ -4,6 +4,7 @@ import com.neko.music.Main;
 import com.neko.music.database.LyricsDatabaseManager;
 import com.neko.music.util.MusicAdMetadataPatcher;
 import com.neko.music.util.MusicAssetLocator;
+import com.neko.music.util.CoverArtCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +52,9 @@ public final class EmbeddedMetadataSyncService {
         } catch (Exception e) {
             logger.warn("同步内嵌元数据失败 musicId={}: {}", musicId, e.toString());
             return false;
+        } finally {
+            // 即使标签写入报错，也可能已触碰文件；下次请求必须重新检查封面版本。
+            CoverArtCache.invalidate(audio.get());
         }
     }
 
