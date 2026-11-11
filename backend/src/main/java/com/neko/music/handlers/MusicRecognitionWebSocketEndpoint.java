@@ -13,6 +13,7 @@ import jakarta.websocket.OnError;
 import jakarta.websocket.OnMessage;
 import jakarta.websocket.OnOpen;
 import jakarta.websocket.Session;
+import jakarta.websocket.server.ServerEndpoint;
 import jakarta.websocket.server.ServerEndpointConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,7 @@ import java.util.Arrays;
 import java.util.Optional;
 
 /** Streams raw PCM frames and checks the growing sample against the local music index. */
+@ServerEndpoint(MusicRecognitionWebSocketEndpoint.PATH)
 public final class MusicRecognitionWebSocketEndpoint {
     public static final String PATH = "/api/music/recognize/ws";
     private static final Logger logger = LoggerFactory.getLogger(MusicRecognitionWebSocketEndpoint.class);
