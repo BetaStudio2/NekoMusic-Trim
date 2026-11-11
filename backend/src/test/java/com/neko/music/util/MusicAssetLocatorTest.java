@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 资产定位：优先直接探测 {@code {id}.<ext>}，白名单扩展名都不命中时才回退一次目录扫描。
  *
- * <p>这里锁住的是「直接探测与原来的全目录扫描结果一致」——{@code Music/music} 有数万个条目，
+ * <p>这里锁住的是「直接探测与原来的全目录扫描结果一致」——{@code Music} 有数万个条目，
  * 定位方式退化回全目录扫描会把每次音频请求的固定开销从微秒级拉回几十毫秒。</p>
  */
 class MusicAssetLocatorTest {

@@ -20,7 +20,7 @@ class UploadStorageRecoveryTest {
     @Test
     void restoreLegacyTempFileMovesItBackWhenSourceIsMissing() throws Exception {
         Path source = tempDir.resolve("user_upload").resolve("music_1.mp3");
-        Path legacyTemp = tempDir.resolve("Music").resolve("music").resolve("temp_7.mp3");
+        Path legacyTemp = tempDir.resolve("Music").resolve("temp_7.mp3");
         byte[] content = new byte[]{4, 5, 6};
         Files.createDirectories(legacyTemp.getParent());
         Files.write(legacyTemp, content);
@@ -34,7 +34,7 @@ class UploadStorageRecoveryTest {
     @Test
     void restoreLegacyTempFileKeepsSourceAndRemovesDuplicate() throws Exception {
         Path source = tempDir.resolve("user_upload").resolve("music_1.mp3");
-        Path legacyTemp = tempDir.resolve("Music").resolve("music").resolve("temp_7.mp3");
+        Path legacyTemp = tempDir.resolve("Music").resolve("temp_7.mp3");
         byte[] content = new byte[]{7, 8, 9};
         Files.createDirectories(source.getParent());
         Files.createDirectories(legacyTemp.getParent());
@@ -69,7 +69,7 @@ class UploadStorageRecoveryTest {
 
     @Test
     void cleanupMediaDirDeletesStagingAndUnknownMusicIdFiles() throws Exception {
-        Path mediaDir = tempDir.resolve("Music").resolve("music");
+        Path mediaDir = tempDir.resolve("Music");
         Path known = mediaDir.resolve("7.mp3");
         Path orphan = mediaDir.resolve("8.mp3");
         Path staging = mediaDir.resolve(".neko-staging-123.part");
@@ -91,7 +91,7 @@ class UploadStorageRecoveryTest {
 
     @Test
     void cleanupMediaDirWithoutDatabaseIdsOnlyDeletesStaging() throws Exception {
-        Path mediaDir = tempDir.resolve("Music").resolve("music");
+        Path mediaDir = tempDir.resolve("Music");
         Path orphan = mediaDir.resolve("8.mp3");
         Path staging = mediaDir.resolve(".neko-staging-123.part");
         Files.createDirectories(mediaDir);
@@ -107,7 +107,7 @@ class UploadStorageRecoveryTest {
 
     @Test
     void cleanupMediaDirSkipsRecentFilesDuringRollingRestart() throws Exception {
-        Path mediaDir = tempDir.resolve("Music").resolve("music");
+        Path mediaDir = tempDir.resolve("Music");
         Path recentOrphan = mediaDir.resolve("8.mp3");
         Path recentStaging = mediaDir.resolve(".neko-staging-123.part");
         Files.createDirectories(mediaDir);

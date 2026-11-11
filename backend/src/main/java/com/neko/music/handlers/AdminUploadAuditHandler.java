@@ -35,7 +35,7 @@ import java.util.concurrent.Executors;
 
 public class AdminUploadAuditHandler extends ApiServlet {
     private static final Logger logger = LoggerFactory.getLogger(AdminUploadAuditHandler.class);
-    private static final String MUSIC_AUDIO_DIR = "Music/music";
+    private static final String MUSIC_AUDIO_DIR = "Music";
 
     /** 审核提交后的歌词索引、声纹刷新与通知均不阻塞接口响应。 */
     private static final ExecutorService POST_AUDIT_EXECUTOR = Executors.newThreadPerTaskExecutor(

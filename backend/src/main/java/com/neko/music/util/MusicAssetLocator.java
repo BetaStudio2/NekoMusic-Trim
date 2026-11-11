@@ -12,12 +12,12 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * 在运行目录下按 {@code Music/music/{id}.*} 定位音频，不依赖数据库路径列；曲库封面保存在音频标签内。
+ * 在运行目录下按 {@code Music/{id}.*} 定位音频，不依赖数据库路径列；曲库封面保存在音频标签内。
  */
 public final class MusicAssetLocator {
     private static final Logger log = LoggerFactory.getLogger(MusicAssetLocator.class);
 
-    public static final String AUDIO_REL_DIR = "Music/music";
+    public static final String AUDIO_REL_DIR = "Music";
 
     private static final List<String> AUDIO_EXT_PRIORITY = List.of(
             "flac", "wav", "mp3", "m4a", "aac", "ogg");
@@ -107,14 +107,14 @@ public final class MusicAssetLocator {
         return "/media/music/" + musicId;
     }
 
-    /** 尽力删除 {@code Music/music/{musicId}.*}；单文件失败只打 WARN，不抛异常。 */
+    /** 尽力删除 {@code Music/{musicId}.*}；单文件失败只打 WARN，不抛异常。 */
     public static void deleteAudioVariants(int musicId) {
         deleteIdNamedFiles(audioDir(), musicId, "audio");
         deleteDerivedVariants(musicId);
     }
 
     /**
-     * 尽力删除 {@code Music/music/{musicId}.*} 中除 {@code keep} 之外的变体。
+     * 尽力删除 {@code Music/{musicId}.*} 中除 {@code keep} 之外的变体。
      *
      * <p>替换音频时先写入新文件、再清理旧扩展名的残留，避免新文件写失败时旧文件已被删除。
      */
@@ -160,7 +160,7 @@ public final class MusicAssetLocator {
     /**
      * 定位 {@code {id}.<ext>}：按扩展名优先级逐个直接探测，不做全目录扫描。
      *
-     * <p>{@code Music/music} 有数万个条目，先前每次请求都 {@code Files.list} 整个目录，
+     * <p>{@code Music} 有数万个条目，先前每次请求都 {@code Files.list} 整个目录，
      * 在并发下（目录不在页缓存时要真读盘）会放大到秒级；
      * 直接拼路径后正常情况只需几次 {@code stat}。</p>
      *

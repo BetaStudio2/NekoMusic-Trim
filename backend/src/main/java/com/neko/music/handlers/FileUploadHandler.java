@@ -51,7 +51,7 @@ public class FileUploadHandler extends HttpServlet {
     private static final Logger logger = LoggerFactory.getLogger(FileUploadHandler.class);
 
     // 定义上传目录（相对于JAR运行目录）
-    private static final String MUSIC_DIR = "Music/music";
+    private static final String MUSIC_DIR = "Music";
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {

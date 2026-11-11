@@ -15,7 +15,7 @@
 cd backend
 cp src/main/resources/config.yml config.yml
 # 编辑 config.yml：只需填写 MySQL 连接信息（连库前无法从库里读配置）
-mkdir -p Music/music releases user_upload
+mkdir -p Music releases user_upload
 NEKO_WEB_VERSION="$(git describe --tags --always)" docker compose build --pull
 docker compose up -d
 docker compose logs -f neko-music
@@ -27,7 +27,7 @@ docker compose logs -f neko-music
 curl -fsS http://127.0.0.1:65535/version
 ```
 
-音乐文件及内嵌封面、声纹索引、待审核上传和客户端发布包分别持久化在 `backend/Music/`、`backend/user_upload/` 与 `backend/releases/`。曲库封面直接存储在音频元数据中，不单独落盘。头像统一由 NekoAuth 保存。复用已有部署的数据时，可在 `backend/.env` 设置 `NEKO_DATA_DIR=/原后端运行目录`；配置文件为 `backend/config.yml`（只含 MySQL 引导信息，密码等敏感项请勿提交到 Git）；运行时配置存
+音频文件位于 `backend/Music/{id}.*`，封面嵌入音频；声纹索引位于 `backend/Music/.fingerprints/`，待审核上传与客户端发布包分别位于 `backend/user_upload/` 与 `backend/releases/`。头像统一由 NekoAuth 保存。升级已有部署时，将原音频子目录中的音频文件及 `derived/{id}` 派生音质目录移到 `Music/` 与 `Music/derived/{id}`，保留 `.fingerprints/`。复用已有部署的数据时，可在 `backend/.env` 设置 `NEKO_DATA_DIR=/原后端运行目录`；配置文件为 `backend/config.yml`（只含 MySQL 引导信息，密码等敏感项请勿提交到 Git）；运行时配置存
 主库 `system_settings` 表，同样不要外泄。升级代码后执行
 `NEKO_WEB_VERSION="$(git describe --tags --always)" docker compose build --pull && docker compose up -d`。
 
@@ -131,7 +131,7 @@ dev server（默认 `http://localhost:5173`）会把 `/api`、`/version` 反向�
 
 ## 本地听歌识曲（后端）
 
-后端提供 `POST /api/music/recognize`，接收 `multipart/form-data` 的 `audio` 字段。服务端使用本地 FFmpeg 将录音转换为 PCM，并用本站 `Music/music/{id}.*` 曲库建立声纹索引；不会调用第三方识曲 API，也不会把音频转发到外部服务。服务启动时会主动预热索引；单曲声纹及可直接恢复的全曲库倒排索引持久化在 `Music/.fingerprints/`，音频或曲库元数据变更后会在后台重建并原子切换，重建期间继续使用上一份可用索引。
+后端提供 `POST /api/music/recognize`，接收 `multipart/form-data` 的 `audio` 字段。服务端使用本地 FFmpeg 将录音转换为 PCM，并用本站 `Music/{id}.*` 曲库建立声纹索引；不会调用第三方识曲 API，也不会把音频转发到外部服务。服务启动时会主动预热索引；单曲声纹及可直接恢复的全曲库倒排索引持久化在 `Music/.fingerprints/`，音频或曲库元数据变更后会在后台重建并原子切换，重建期间继续使用上一份可用索引。
 
 示例：
 
