@@ -79,13 +79,13 @@ public class RequestAuditFilter implements Filter {
     record OperationRule(String pathPrefix, Set<String> methods, String module, String action) {
     }
 
-    /**
-     * 语义化操作规则表：把「接口做了什么」写成人看得懂的短语（修改系统设置 / 审核通过 / 上传音乐 /
-     * 修改歌词……），而不是一律记成「提交 / 更新 / 删除」。
-     *
-     * <p>规则只决定「怎么写」，不决定「要不要记」：后台写操作即使没有命中规则也会留痕，动作退化为
-     * 方法名对应的通用说法。反过来要注意，管理员的音乐上传 / 修改 / 删除挂在 {@code /api/music/*}
-     * 而不是 {@code /api/admin/*}，不在这里显式登记就会整类漏记。</p>
+    /*
+      语义化操作规则表：把「接口做了什么」写成人看得懂的短语（修改系统设置 / 审核通过 / 上传音乐 /
+      修改歌词……），而不是一律记成「提交 / 更新 / 删除」。
+
+      <p>规则只决定「怎么写」，不决定「要不要记」：后台写操作即使没有命中规则也会留痕，动作退化为
+      方法名对应的通用说法。反过来要注意，管理员的音乐上传 / 修改 / 删除挂在 {@code /api/music/*}
+      而不是 {@code /api/admin/*}，不在这里显式登记就会整类漏记。</p>
      */
     /**
      * 与管理员音乐接口共用 {@code /api/music} 前缀、但不属于后台操作的路径。
@@ -291,23 +291,23 @@ public class RequestAuditFilter implements Filter {
     private static void logThreat(HttpServletRequest request, String path, int status,
                                   String clientIp, String userAgent,
                                   ThreatAssessment threat) {
-        String level = threat.level();
-        if (ThreatAssessment.NORMAL.equals(level)) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("[安全审计][正常] method={} path={} status={} ip={} score={}",
-                        request.getMethod(), safeLog(path, 300), status, clientIp, threat.score());
-            }
-            return;
-        }
-        String message = "[安全审计][" + (threat.isAttack() ? "攻击" : "疑似攻击") + "]"
-                + " method={} path={} status={} ip={} score={} ua={} reasons={}";
-        Object[] args = {request.getMethod(), safeLog(path, 300), status, clientIp,
-                threat.score(), safeLog(userAgent, 160), safeLog(threat.reasons(), 400)};
-        if (threat.isAttack()) {
-            logger.warn(message, args);
-        } else {
-            logger.info(message, args);
-        }
+//        String level = threat.level();
+//        if (ThreatAssessment.NORMAL.equals(level)) {
+//            if (logger.isDebugEnabled()) {
+//                logger.debug("[安全审计][正常] method={} path={} status={} ip={} score={}",
+//                        request.getMethod(), safeLog(path, 300), status, clientIp, threat.score());
+//            }
+//            return;
+//        }
+//        String message = "[安全审计][" + (threat.isAttack() ? "攻击" : "疑似攻击") + "]"
+//                + " method={} path={} status={} ip={} score={} ua={} reasons={}";
+//        Object[] args = {request.getMethod(), safeLog(path, 300), status, clientIp,
+//                threat.score(), safeLog(userAgent, 160), safeLog(threat.reasons(), 400)};
+//        if (threat.isAttack()) {
+//            logger.warn(message, args);
+//        } else {
+//            logger.info(message, args);
+//        }
     }
 
     /** 日志字段去控制字符，避免 UA / 路径里的换行伪造日志行（CWE-117）。 */
