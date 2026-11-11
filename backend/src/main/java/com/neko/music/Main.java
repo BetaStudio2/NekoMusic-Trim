@@ -25,7 +25,9 @@ import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
-import org.eclipse.jetty.server.handler.gzip.GzipHandler;
+import org.eclipse.jetty.compression.gzip.GzipCompression;
+import org.eclipse.jetty.compression.server.CompressionConfig;
+import org.eclipse.jetty.compression.server.CompressionHandler;
 import com.neko.music.filter.CacheControlFilter;
 import com.neko.music.filter.RequestAuditFilter;
 import com.neko.music.filter.RequestLocaleFilter;
@@ -343,22 +345,26 @@ public class Main {
         // 文本资源 gzip：前端 JS/CSS/HTML 传输体积可省 ~80%。
         // 只压缩文本类 MIME；text/event-stream（SSE）、图片、音频、视频不在白名单内，
         // 避免破坏流式响应或对已压缩内容二次压缩。
-        GzipHandler gzipHandler = new GzipHandler();
-        gzipHandler.setMinGzipSize(256);
-        gzipHandler.setIncludedMethods("GET", "HEAD");
-        gzipHandler.setIncludedMimeTypes(
-                "text/html",
-                "text/css",
-                "text/plain",
-                "text/javascript",
-                "application/javascript",
-                "application/json",
-                "application/xml",
-                "text/xml",
-                "image/svg+xml",
-                "application/manifest+json");
-        gzipHandler.setHandler(context);
-        server.setHandler(gzipHandler);
+        GzipCompression gzipCompression = new GzipCompression();
+        gzipCompression.setMinCompressSize(256);
+        CompressionHandler compressionHandler = new CompressionHandler();
+        compressionHandler.putCompression(gzipCompression);
+        compressionHandler.putConfiguration("/", CompressionConfig.builder()
+                .compressIncludeMethod("GET")
+                .compressIncludeMethod("HEAD")
+                .compressIncludeMimeType("text/html")
+                .compressIncludeMimeType("text/css")
+                .compressIncludeMimeType("text/plain")
+                .compressIncludeMimeType("text/javascript")
+                .compressIncludeMimeType("application/javascript")
+                .compressIncludeMimeType("application/json")
+                .compressIncludeMimeType("application/xml")
+                .compressIncludeMimeType("text/xml")
+                .compressIncludeMimeType("image/svg+xml")
+                .compressIncludeMimeType("application/manifest+json")
+                .build());
+        compressionHandler.setHandler(context);
+        server.setHandler(compressionHandler);
 
         // 注册服务到 ServletContext，供 Filter 使用
         context.setAttribute("configManager", configManager);
