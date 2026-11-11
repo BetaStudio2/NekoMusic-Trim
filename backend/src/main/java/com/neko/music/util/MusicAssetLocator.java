@@ -12,25 +12,22 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * 在运行目录下按 {@code Music/music/{id}.*}、{@code Music/covers/{id}.*} 定位音频与封面，不依赖数据库路径列。
+ * 在运行目录下按 {@code Music/music/{id}.*} 定位音频，不依赖数据库路径列；曲库封面保存在音频标签内。
  */
 public final class MusicAssetLocator {
     private static final Logger log = LoggerFactory.getLogger(MusicAssetLocator.class);
 
     public static final String AUDIO_REL_DIR = "Music/music";
-    public static final String COVER_REL_DIR = "Music/covers";
 
     private static final List<String> AUDIO_EXT_PRIORITY = List.of(
             "flac", "wav", "mp3", "m4a", "aac", "ogg");
-    private static final List<String> COVER_EXT_PRIORITY = List.of(
-            "png", "jpg", "jpeg", "webp", "gif", "bmp");
 
     private MusicAssetLocator() {
     }
 
     /**
      * 运行目录（{@code user.dir}）在进程内不变。写成静态常量，省掉每次资产请求都做一遍
-     * {@code System.getProperty} + {@code Paths.get}：封面/音频请求里 {@link #audioDir()}
+     * {@code System.getProperty} + {@code Paths.get}：音频请求里 {@link #audioDir()}
      * 一类方法会被调用好几次。
      */
     private static final Path BASE_DIR = Paths.get(System.getProperty("user.dir"));
@@ -45,10 +42,6 @@ public final class MusicAssetLocator {
 
     public static Path derivedDir(int musicId) {
         return audioDir().resolve("derived").resolve(Integer.toString(musicId));
-    }
-
-    public static Path coverDir() {
-        return baseDir().resolve(COVER_REL_DIR);
     }
 
     public static Optional<Path> findAudioFile(int musicId) {
@@ -96,18 +89,6 @@ public final class MusicAssetLocator {
         return Map.copyOf(selected);
     }
 
-    public static Optional<Path> findCoverFile(int musicId) {
-        if (musicId <= 0) {
-            return Optional.empty();
-        }
-        try {
-            return findIdNamedFile(coverDir(), musicId, COVER_EXT_PRIORITY);
-        } catch (IOException e) {
-            log.warn("定位封面文件失败: {}", e.toString());
-            return Optional.empty();
-        }
-    }
-
     public static String fileApiUrl(int musicId) {
         return "/api/music/file/" + musicId;
     }
@@ -130,11 +111,6 @@ public final class MusicAssetLocator {
     public static void deleteAudioVariants(int musicId) {
         deleteIdNamedFiles(audioDir(), musicId, "audio");
         deleteDerivedVariants(musicId);
-    }
-
-    /** 尽力删除 {@code Music/covers/{musicId}.*}；单文件失败只打 WARN，不抛异常。 */
-    public static void deleteCoverVariants(int musicId) {
-        deleteIdNamedFiles(coverDir(), musicId, "cover");
     }
 
     /**
@@ -163,11 +139,6 @@ public final class MusicAssetLocator {
         }
     }
 
-    /** 尽力删除 {@code Music/covers/{musicId}.*} 中除 {@code keep} 之外的变体。 */
-    public static void deleteCoverVariantsExcept(int musicId, Path keep) {
-        deleteIdNamedFilesExcept(coverDir(), musicId, keep, "cover");
-    }
-
     /** 防止路径逃逸：仅当 {@code file} 规范化后位于 {@code expectedDir} 下时返回 true。 */
     public static boolean isUnderDirectory(Path file, Path expectedDir) {
         Path base = expectedDir.toAbsolutePath().normalize();
@@ -189,8 +160,8 @@ public final class MusicAssetLocator {
     /**
      * 定位 {@code {id}.<ext>}：按扩展名优先级逐个直接探测，不做全目录扫描。
      *
-     * <p>{@code Music/music} 与 {@code Music/covers} 各有数万个条目，先前每次请求都
-     * {@code Files.list} 整个目录，在并发下（目录不在页缓存时要真读盘）会放大到秒级；
+     * <p>{@code Music/music} 有数万个条目，先前每次请求都 {@code Files.list} 整个目录，
+     * 在并发下（目录不在页缓存时要真读盘）会放大到秒级；
      * 直接拼路径后正常情况只需几次 {@code stat}。</p>
      *
      * <p>白名单扩展名全部未命中时才回退一次目录扫描，保证历史遗留的非常规扩展名仍能被找到。</p>

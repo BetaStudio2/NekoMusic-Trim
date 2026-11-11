@@ -26,6 +26,18 @@ public final class VideoRenderPaths {
         return VIDEO_RENDER_DIR.resolve(jobId + ".mp4");
     }
 
+    /** 视频任务所需封面是可再生成的临时文件，不属于曲库媒体存储。 */
+    public static Path coverFile(String jobId, String mime) {
+        String extension = switch (mime == null ? "" : mime.toLowerCase(java.util.Locale.ROOT)) {
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            case "image/bmp" -> ".bmp";
+            case "image/webp" -> ".webp";
+            default -> ".jpg";
+        };
+        return VIDEO_RENDER_DIR.resolve(jobId + ".cover" + extension);
+    }
+
     public static String outputRelPath(String jobId) {
         return outputFile(jobId).toAbsolutePath().normalize().toString();
     }

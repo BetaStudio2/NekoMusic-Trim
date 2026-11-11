@@ -61,6 +61,48 @@ class EmbeddedCoverReaderTest {
         assertEquals("image/png", cover.mime());
     }
 
+    @Test
+    void metadataSyncEmbedsWaveCoverAndRestoresGlobalOptions() throws Exception {
+        assumeTrue(hasFfmpeg(), "需要 ffmpeg 生成测试 WAV");
+        Path audio = createAudio("wav");
+        Path image = createPng();
+        TagOptionSingleton options = TagOptionSingleton.getInstance();
+        WavOptions previousRead = options.getWavOptions();
+        WavSaveOptions previousSave = options.getWavSaveOptions();
+
+        MusicAdMetadataPatcher.syncLibraryMetadata(audio,
+                new MusicAdMetadataPatcher.LibraryMetadata(
+                        "标题", "歌手", "专辑", "[00:01.00]歌词", image));
+
+        assertEquals(previousRead, options.getWavOptions());
+        assertEquals(previousSave, options.getWavSaveOptions());
+        EmbeddedCoverReader.Cover cover = EmbeddedCoverReader.read(audio).orElseThrow();
+        assertArrayEquals(Files.readAllBytes(image), cover.data());
+        assertEquals("image/png", cover.mime());
+    }
+
+    @Test
+    void metadataSyncEmbedsWebpCoverIntoFlac() throws Exception {
+        assumeTrue(hasFfmpeg(), "需要 ffmpeg 生成测试音频与 WebP");
+        Path audio = createAudio("flac");
+        Path image = tempDir.resolve("cover.webp");
+        Process process = new ProcessBuilder(
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i", "color=c=blue:s=64x64:d=1",
+                "-frames:v", "1", "-c:v", "libwebp", image.toString())
+                .redirectErrorStream(true)
+                .start();
+        assumeTrue(process.waitFor(30, TimeUnit.SECONDS) && process.exitValue() == 0,
+                "ffmpeg build does not include the WebP encoder");
+
+        MusicAdMetadataPatcher.syncLibraryMetadata(audio,
+                new MusicAdMetadataPatcher.LibraryMetadata("标题", "歌手", "专辑", "", image));
+
+        EmbeddedCoverReader.Cover cover = EmbeddedCoverReader.read(audio).orElseThrow();
+        assertArrayEquals(Files.readAllBytes(image), cover.data());
+        assertEquals("image/webp", cover.mime());
+    }
+
     private Path createAudio(String format) throws Exception {
         Path audio = tempDir.resolve("sample." + format);
         String codec = switch (format) {

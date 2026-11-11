@@ -36,7 +36,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 管理员后台入库：校验临时音频/歌词/封面后写入 Music 目录与数据库（与 FileUploadHandler 规则一致）。
+ * 管理员后台入库：校验临时音频/歌词/封面后将封面嵌入音频，再写入曲库与数据库。
  */
 public class AdminMusicIngestService {
     private static final Logger logger = LoggerFactory.getLogger(AdminMusicIngestService.class);
@@ -157,13 +157,6 @@ public class AdminMusicIngestService {
             TempAudioSpool.commitReplace(musicTemp, musicDest);
             MusicIngestSupport.refreshQualityAfterIngest(musicId, musicDest, logger);
 
-            if (coverTempOrNull != null && Files.isRegularFile(coverTempOrNull)) {
-                String coverExt = extensionFromPath(coverTempOrNull);
-                String coverRelPath = MusicAssetLocator.COVER_REL_DIR + File.separator + musicId + "." + coverExt;
-                Files.createDirectories(Paths.get(MusicAssetLocator.COVER_REL_DIR));
-                Files.copy(coverTempOrNull, Paths.get(coverRelPath), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            }
-
             String lyricsContent = Files.readString(lyricsTemp, StandardCharsets.UTF_8);
             if (!Main.getLyricsDatabaseManager().upsert(musicId, lyricsContent, "ingest")) {
                 throw new SQLException("保存歌词到数据库失败");
@@ -172,8 +165,10 @@ public class AdminMusicIngestService {
                 com.neko.music.Main.getLyricsSearchIndex().rebuildOne(musicId);
             }
 
-            // 曲库落盘后把歌词/封面/基础标签同步进音频文件（同时保留广告元数据）
-            EmbeddedMetadataSyncService.syncOne(musicId);
+            // 曲库落盘后把歌词/封面/基础标签同步进音频文件；封面写入失败则回滚本次入库。
+            if (!EmbeddedMetadataSyncService.syncOne(musicId, coverTempOrNull)) {
+                throw new IOException("同步音频内嵌元数据失败");
+            }
 
             IngestedMusic row = loadIngestedMusic(musicId);
             MusicIngestSupport.invalidateRecognitionIndex();
@@ -185,7 +180,6 @@ public class AdminMusicIngestService {
                 if (musicRelPath != null) {
                     Files.deleteIfExists(Paths.get(musicRelPath));
                 }
-                MusicAssetLocator.deleteCoverVariants(musicId);
                 Main.getLyricsDatabaseManager().delete(musicId);
             }
             throw e;

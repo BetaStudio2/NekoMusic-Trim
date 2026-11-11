@@ -32,6 +32,14 @@ public final class EmbeddedMetadataSyncService {
      * 同步单首音乐的内嵌元数据；曲库无记录、磁盘无文件或写入失败都返回 false，不抛异常。
      */
     public static boolean syncOne(int musicId) {
+        return syncOne(musicId, null);
+    }
+
+    /**
+     * 同步曲库元数据，并可选地把调用方提供的临时封面嵌入音频。
+     * {@code coverFile == null} 时保留音频里已有的封面。
+     */
+    public static boolean syncOne(int musicId, Path coverFile) {
         if (musicId <= 0) {
             return false;
         }
@@ -46,7 +54,7 @@ public final class EmbeddedMetadataSyncService {
             }
             MusicAdMetadataPatcher.LibraryMetadata metadata = new MusicAdMetadataPatcher.LibraryMetadata(
                     row.title(), row.artist(), row.album(),
-                    loadLyricsBody(musicId), MusicAssetLocator.findCoverFile(musicId).orElse(null));
+                    loadLyricsBody(musicId), coverFile);
             MusicAdMetadataPatcher.syncLibraryMetadata(audio.get(), metadata);
             return true;
         } catch (Exception e) {

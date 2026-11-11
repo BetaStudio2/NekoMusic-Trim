@@ -14,13 +14,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 资产定位：优先直接探测 {@code {id}.<ext>}，白名单扩展名都不命中时才回退一次目录扫描。
  *
- * <p>这里锁住的是「直接探测与原来的全目录扫描结果一致」——{@code Music/music} 与
- * {@code Music/covers} 各有数万个条目，定位方式退化回全目录扫描会把每次封面/音频请求
- * 的固定开销从微秒级拉回几十毫秒。</p>
+ * <p>这里锁住的是「直接探测与原来的全目录扫描结果一致」——{@code Music/music} 有数万个条目，
+ * 定位方式退化回全目录扫描会把每次音频请求的固定开销从微秒级拉回几十毫秒。</p>
  */
 class MusicAssetLocatorTest {
 
-    private static final List<String> COVER_EXT = List.of("png", "jpg", "jpeg", "webp", "gif", "bmp");
     private static final List<String> AUDIO_EXT = List.of("flac", "wav", "mp3", "m4a", "aac", "ogg");
 
     @TempDir
@@ -69,7 +67,7 @@ class MusicAssetLocatorTest {
     @Test
     void returnsEmptyForMissingDirAndMissingId() throws IOException {
         assertTrue(MusicAssetLocator.findIdNamedFile(dir.resolve("nope"), 7, AUDIO_EXT).isEmpty());
-        touch("7.jpg");
-        assertTrue(MusicAssetLocator.findIdNamedFile(dir, 8, COVER_EXT).isEmpty());
+        touch("7.mp3");
+        assertTrue(MusicAssetLocator.findIdNamedFile(dir, 8, AUDIO_EXT).isEmpty());
     }
 }

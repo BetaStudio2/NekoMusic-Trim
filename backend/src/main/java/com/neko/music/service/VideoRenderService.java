@@ -4,6 +4,7 @@ import com.neko.music.Main;
 import com.neko.music.config.ConfigManager;
 import com.neko.music.model.VideoRenderJob;
 import com.neko.music.util.BundledFfmpegSupport;
+import com.neko.music.util.CoverArtCache;
 import com.neko.music.util.BundledRenderFontSupport;
 import com.neko.music.util.BundledWatermarkSupport;
 import com.neko.music.util.LrcParser;
@@ -155,6 +156,13 @@ public class VideoRenderService {
                 } catch (IOException ignored) {
                 }
             }
+            coverFile.ifPresent(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException e) {
+                    logger.warn("删除视频任务临时封面失败: {}", path, e);
+                }
+            });
         }
     }
 
@@ -703,8 +711,15 @@ public class VideoRenderService {
         }
     }
 
-    public static Optional<Path> resolveCover(int musicId) {
-        return MusicAssetLocator.findCoverFile(musicId);
+    public static Optional<Path> resolveCover(int musicId, String jobId) throws IOException {
+        Optional<CoverArtCache.Snapshot> cover = CoverArtCache.find(musicId);
+        if (cover.isEmpty()) {
+            return Optional.empty();
+        }
+        Path tempCover = VideoRenderPaths.coverFile(jobId, cover.get().mime());
+        Files.createDirectories(tempCover.getParent());
+        Files.write(tempCover, cover.get().data());
+        return Optional.of(tempCover);
     }
 
     public static Optional<Path> resolveAudio(int musicId) {

@@ -304,7 +304,7 @@ public final class EmbeddedCoverReader {
     }
 
     /** 按文件头判断图片类型，比标签里声明的 MIME 更可靠。 */
-    static String sniffMime(byte[] d) {
+    public static String sniffMime(byte[] d) {
         if (d.length >= 8 && (d[0] & 0xff) == 0x89 && d[1] == 'P' && d[2] == 'N' && d[3] == 'G') {
             return "image/png";
         }

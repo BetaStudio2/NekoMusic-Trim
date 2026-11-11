@@ -6,7 +6,8 @@ import com.neko.music.model.ErrorResponse;
 import com.neko.music.Main;
 import com.neko.music.service.EmbeddedMetadataSyncService;
 import com.neko.music.service.MusicIngestSupport;
-import com.neko.music.util.AtomicFiles;
+import com.neko.music.util.CoverArtCache;
+import com.neko.music.util.EmbeddedCoverReader;
 import com.neko.music.util.MusicAssetLocator;
 import com.neko.music.util.MusicPinyinColumns;
 import com.neko.music.util.RuntimeDiskGuard;
@@ -51,7 +52,6 @@ public class FileUploadHandler extends HttpServlet {
 
     // 定义上传目录（相对于JAR运行目录）
     private static final String MUSIC_DIR = "Music/music";
-    private static final String COVER_DIR = "Music/covers";
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
@@ -98,11 +98,9 @@ public class FileUploadHandler extends HttpServlet {
                 return;
             }
             
-            // 创建上传目录
+            // 创建音频目录
             Path musicPath = Paths.get(MUSIC_DIR);
-            Path coverPath = Paths.get(COVER_DIR);
             Files.createDirectories(musicPath);
-            Files.createDirectories(coverPath);
             
             // 检查封面文件类型（如果是上传了的话）
             ImageUploadValidator.ValidationResult coverImageValidation = null;
@@ -118,12 +116,15 @@ public class FileUploadHandler extends HttpServlet {
             String musicFileName = getFileName(musicFilePart);
             String fileExtension = getFileExtension(musicFileName).toLowerCase();
             Path musicTemp = Files.createTempFile("neko_admin_music_", "." + fileExtension);
+            Path coverTemp = null;
             boolean deleteMusicTempIfPresent = true;
             int musicId = 0;
             String musicFilePath = null;
-            String coverFilePath = null;
             String fileFormat = null;
             try {
+                if (coverFilePart != null) {
+                    coverTemp = copyCoverToTemp(coverFilePart, coverImageValidation);
+                }
                 Files.copy(musicFilePart.getInputStream(), musicTemp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
                 AudioValidation audio = validateAudioFile(musicTemp, fileExtension, duration);
@@ -144,19 +145,10 @@ public class FileUploadHandler extends HttpServlet {
 
                 musicId = insertMusicToDatabase(title, artist, album, language, tags, duration, uploadUserId, fileFormat);
                 musicFilePath = MUSIC_DIR + File.separator + musicId + "." + fileFormat;
-                if (coverFilePart != null) {
-                    String extension = coverImageValidation.getExtensionWithoutDot();
-                    coverFilePath = COVER_DIR + File.separator + musicId + "." + extension;
-                }
                 TempAudioSpool.commitReplace(musicTemp, Paths.get(musicFilePath));
                 deleteMusicTempIfPresent = false;
                 logger.info("音乐文件已保存到: {}", musicFilePath);
                 MusicIngestSupport.refreshQualityAfterIngest(musicId, Paths.get(musicFilePath), logger);
-
-                if (coverFilePart != null) {
-                    AtomicFiles.writeAndReplace(coverFilePart.getInputStream(), Paths.get(coverFilePath));
-                    logger.info("封面文件已保存到: {}", coverFilePath);
-                }
 
                 // 歌词保存失败必须让整个请求失败，否则会返回「上传成功」但歌词没入库
                 saveLyricsToDatabase(musicId, form.lyricsFilePart);
@@ -168,11 +160,14 @@ public class FileUploadHandler extends HttpServlet {
                         updateDurationInDatabase(musicId, duration);
                     }
                 }
+                if (coverTemp != null && !EmbeddedMetadataSyncService.syncOne(musicId, coverTemp)) {
+                    throw new IOException("无法将封面嵌入音频文件");
+                }
             } catch (Exception e) {
                 if (musicId > 0) {
                     deleteMusicRecordById(musicId);
                     deleteQuietly(musicFilePath);
-                    deleteQuietly(coverFilePath);
+                    Main.getLyricsDatabaseManager().delete(musicId);
                 }
                 logger.error("处理管理员上传音乐文件失败", e);
                 HandlerResponses.writeJson(response, HttpStatus.INTERNAL_SERVER_ERROR_500,
@@ -186,10 +181,13 @@ public class FileUploadHandler extends HttpServlet {
                         logger.warn("删除临时音乐文件失败: {}", musicTemp, io);
                     }
                 }
+                deleteQuietly(coverTemp);
             }
 
-            // 歌词/封面/基础标签同步进音频文件（保留广告元数据）
-            EmbeddedMetadataSyncService.syncOne(musicId);
+            if (coverTemp == null) {
+                // 歌词/基础标签同步进音频文件（保留已有内嵌封面与广告元数据）
+                EmbeddedMetadataSyncService.syncOne(musicId);
+            }
 
             // 获取完整的音乐信息
             Music music = getMusicById(musicId);
@@ -215,6 +213,7 @@ public class FileUploadHandler extends HttpServlet {
             return;
         }
         
+        Path coverTempForSync = null;
         try {
             // 设置请求为multipart类型，用于文件上传
             request.setCharacterEncoding("UTF-8");
@@ -251,11 +250,24 @@ public class FileUploadHandler extends HttpServlet {
                 return;
             }
             
-            // 创建上传目录
+            // 创建音频目录
             Path musicPath = Paths.get(MUSIC_DIR);
-            Path coverPath = Paths.get(COVER_DIR);
             Files.createDirectories(musicPath);
-            Files.createDirectories(coverPath);
+
+            if (coverFilePart != null) {
+                ImageUploadValidator.ValidationResult coverImageValidation =
+                        validateCoverOrReject(response, coverFilePart);
+                if (coverImageValidation == null) {
+                    return;
+                }
+                coverTempForSync = copyCoverToTemp(coverFilePart, coverImageValidation);
+            } else if (musicFilePart != null) {
+                // 换音频但未提供新封面时，把旧音频内嵌封面暂存后嵌入新音频。
+                var existingCover = CoverArtCache.find(id);
+                if (existingCover.isPresent()) {
+                    coverTempForSync = writeCoverTemp(existingCover.get().data());
+                }
+            }
             
             // 检查是否上传了新的音乐文件
             if (musicFilePart != null) {
@@ -308,31 +320,19 @@ public class FileUploadHandler extends HttpServlet {
                 }
             }
             
-            // 检查是否上传了新的封面文件
-            if (coverFilePart != null) {
-                ImageUploadValidator.ValidationResult coverImageValidation = validateCoverOrReject(response, coverFilePart);
-                if (coverImageValidation == null) {
-                    return;
-                }
-                
-                // 获取文件扩展名
-                String extension = coverImageValidation.getExtensionWithoutDot();
-                Path coverFile = Paths.get(COVER_DIR, id + "." + extension);
-
-                // 先原子写入新封面，成功后再清理旧扩展名残留
-                AtomicFiles.writeAndReplace(coverFilePart.getInputStream(), coverFile);
-                MusicAssetLocator.deleteCoverVariantsExcept(id, coverFile);
-                logger.info("封面文件已保存到: {}", coverFile);
-            }
-            
             // 更新数据库中的音乐信息
             updateMusicInDatabase(id, title, artist, album, language, tags, duration, uploadUserId);
 
             // 语种先落库，随后写歌词时才能按“日语”硬性补全罗马音。
             saveLyricsToDatabase(id, form.lyricsFilePart);
 
-            // 歌词/封面/基础标签同步进音频文件（保留广告元数据）
-            EmbeddedMetadataSyncService.syncOne(id);
+            // 歌词/基础标签与新封面同步进音频文件；未上传封面时保留音频原封面。
+            boolean metadataSynced = EmbeddedMetadataSyncService.syncOne(id, coverTempForSync);
+            if (coverTempForSync != null && !metadataSynced) {
+                HandlerResponses.writeJson(response, HttpStatus.INTERNAL_SERVER_ERROR_500,
+                        new ErrorResponse(ApiMessages.translate("music.update_file.failed")));
+                return;
+            }
 
             // 获取更新后的音乐信息
             Music updatedMusic = getMusicById(id);
@@ -344,6 +344,8 @@ public class FileUploadHandler extends HttpServlet {
             logger.error("更新音乐时出错", e);
             HandlerResponses.writeJson(response, HttpStatus.INTERNAL_SERVER_ERROR_500,
                     new ErrorResponse(ApiMessages.translate("music.update.failed")));
+        } finally {
+            deleteQuietly(coverTempForSync);
         }
     }
 
@@ -388,6 +390,37 @@ public class FileUploadHandler extends HttpServlet {
             return null;
         }
         return result;
+    }
+
+    private static Path copyCoverToTemp(Part coverPart,
+                                        ImageUploadValidator.ValidationResult validation) throws IOException {
+        Path temp = Files.createTempFile("neko_music_cover_", "." + validation.getExtensionWithoutDot());
+        try (InputStream input = coverPart.getInputStream()) {
+            Files.copy(input, temp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return temp;
+        } catch (IOException e) {
+            Files.deleteIfExists(temp);
+            throw e;
+        }
+    }
+
+    private static Path writeCoverTemp(byte[] data) throws IOException {
+        String mime = EmbeddedCoverReader.sniffMime(data);
+        String extension = switch (mime == null ? "" : mime) {
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            case "image/bmp" -> ".bmp";
+            case "image/webp" -> ".webp";
+            default -> ".jpg";
+        };
+        Path temp = Files.createTempFile("neko_music_cover_", extension);
+        try {
+            Files.write(temp, data);
+            return temp;
+        } catch (IOException e) {
+            Files.deleteIfExists(temp);
+            throw e;
+        }
     }
 
     /** 音频校验结果：valid=false 时 errorMessage 为响应文案；valid=true 时 fileFormat/duration 可用。 */
@@ -752,6 +785,17 @@ public class FileUploadHandler extends HttpServlet {
             Files.deleteIfExists(Paths.get(filePath));
         } catch (IOException e) {
             logger.warn("删除文件失败: {}", filePath, e);
+        }
+    }
+
+    private void deleteQuietly(Path path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            logger.warn("删除临时封面失败: {}", path, e);
         }
     }
 }

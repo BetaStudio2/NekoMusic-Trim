@@ -221,10 +221,17 @@ public class VideoRenderHandler extends ApiServlet {
             return;
         }
 
-        Optional<Path> coverOpt = VideoRenderService.resolveCover(musicId);
+        Optional<Path> coverOpt;
+        try {
+            coverOpt = VideoRenderService.resolveCover(musicId, jobId);
+        } catch (IOException e) {
+            logger.warn("读取视频渲染封面失败 jobId={} musicId={}: {}", jobId, musicId, e.getMessage());
+            coverOpt = Optional.empty();
+        }
         try {
             Main.getVideoRenderService().submit(job, meta.title, meta.artist, audioOpt.get(), coverOpt);
         } catch (RejectedExecutionException e) {
+            coverOpt.ifPresent(VideoRenderHandler::deleteTempCoverQuietly);
             jobDbMarkFailed(jobId, "video.queue_full");
             sendJson(resp, HttpServletResponse.SC_SERVICE_UNAVAILABLE, false, "video.queue_full");
             return;
@@ -246,6 +253,14 @@ public class VideoRenderHandler extends ApiServlet {
         out.addProperty("message", ApiMessages.translate("video.task_created"));
         out.add("data", data);
         sendRawJson(resp, HttpServletResponse.SC_ACCEPTED, out);
+    }
+
+    private static void deleteTempCoverQuietly(Path coverPath) {
+        try {
+            Files.deleteIfExists(coverPath);
+        } catch (IOException e) {
+            logger.warn("删除排队失败的视频临时封面失败: {}", coverPath, e);
+        }
     }
 
     private static void jobDbMarkFailed(String jobId, String message) {

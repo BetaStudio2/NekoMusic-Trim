@@ -13,8 +13,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 曲目封面读取入口：优先返回 {@code Music/covers/{id}.*} 的遗留文件，没有则从
- * {@code Music/music/{id}.*} 的内嵌封面解析，并做进程内缓存。
+ * 曲目封面读取入口：从 {@code Music/music/{id}.*} 的内嵌封面解析并做进程内缓存。
  *
  * <p>缓存以音频文件的 {@code mtime + size} 为版本：音频被替换（含内嵌封面重写）时自动失效，
  * 无需显式清理；条目数按容量上限淘汰，内存占用有界。封面字节同时给出 SHA-256，用于 HTTP

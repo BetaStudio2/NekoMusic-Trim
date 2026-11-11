@@ -7,7 +7,6 @@ import com.neko.music.util.CoverArtCache;
 import com.neko.music.util.MusicLookup;
 
 import com.neko.music.util.HttpResourceCache;
-import com.neko.music.util.MusicAssetLocator;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,20 +52,6 @@ public class MusicCoverHandler extends HttpServlet {
         if (!MusicLookup.musicRowExists(musicId)) {
             sendDefaultIcon(request, size, response);
             return;
-        }
-
-        // 兼容期的优先级：遗留的 Music/covers 文件 > 音频内嵌封面。
-        // 存量封面迁移完成后删掉目录分支即可，接口路径与响应头契约不变。
-        Optional<Path> coverOpt = MusicAssetLocator.findCoverFile(musicId);
-        if (coverOpt.isPresent()) {
-            Path coverFile = coverOpt.get();
-            if (MusicAssetLocator.isUnderDirectory(coverFile, MusicAssetLocator.coverDir()) && Files.exists(coverFile)) {
-                Path servePath = size > 0
-                        ? CoverThumbnails.fromFile(coverFile, size).orElse(coverFile)
-                        : coverFile;
-                sendImageFile(request, servePath, response);
-                return;
-            }
         }
 
         Optional<CoverArtCache.Snapshot> embedded = CoverArtCache.find(musicId);

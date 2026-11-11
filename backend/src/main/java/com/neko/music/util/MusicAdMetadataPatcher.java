@@ -4,8 +4,12 @@ import org.jaudiotagger.audio.AudioFile;
 import org.jaudiotagger.audio.AudioFileIO;
 import org.jaudiotagger.audio.exceptions.CannotReadException;
 import org.jaudiotagger.audio.exceptions.InvalidAudioFrameException;
+import org.jaudiotagger.audio.flac.metadatablock.MetadataBlockDataPicture;
+import org.jaudiotagger.audio.wav.WavOptions;
+import org.jaudiotagger.audio.wav.WavSaveOptions;
 import org.jaudiotagger.tag.FieldKey;
 import org.jaudiotagger.tag.Tag;
+import org.jaudiotagger.tag.TagOptionSingleton;
 import org.jaudiotagger.tag.TagException;
 import org.jaudiotagger.tag.flac.FlacTag;
 import org.jaudiotagger.tag.images.Artwork;
@@ -43,6 +47,7 @@ import java.util.Set;
 public final class MusicAdMetadataPatcher {
 
     private static final Logger logger = LoggerFactory.getLogger(MusicAdMetadataPatcher.class);
+    private static final Object WAV_TAG_OPTIONS_LOCK = new Object();
 
     public static final String COMMENT
             = "更多免费无损音乐就来Neko歌姬计划 https://music.nekocore.cn "
@@ -101,9 +106,7 @@ public final class MusicAdMetadataPatcher {
         throw new IllegalArgumentException("不支持的扩展名: " + ext);
     }
 
-    /**
-     * 曲库元数据快照（来自数据库 / 封面目录）。字段为空时保持文件中的原值。
-     */
+    /** 曲库元数据快照；封面源仅为即将嵌入音频的临时文件，字段为空时保留音频内已有封面。 */
     public record LibraryMetadata(String title, String artist, String album, String lyrics, Path coverFile) {
 
     }
@@ -117,7 +120,10 @@ public final class MusicAdMetadataPatcher {
 
         String ext = extension(audioPath);
         if (".wav".equals(ext) || ".wave".equals(ext)) {
-            syncTaggedAudio(audioPath, metadata, false);
+            withWavId3TagOptions(() -> {
+                syncTaggedAudio(audioPath, metadata, false);
+                return null;
+            });
             return;
         }
         if (".flac".equals(ext)) {
@@ -166,6 +172,57 @@ public final class MusicAdMetadataPatcher {
         }
     }
 
+    /** 仅替换音频内嵌封面，供审核事务在删除待审源图片前调用。 */
+    public static void embedCoverOnly(Path audioPath, Path coverFile) throws Exception {
+        if (audioPath == null || !Files.isRegularFile(audioPath)
+                || coverFile == null || !Files.isRegularFile(coverFile)) {
+            throw new IOException("音频或封面文件不存在");
+        }
+        ensureUserWritable(audioPath);
+        if (isWav(audioPath)) {
+            withWavId3TagOptions(() -> {
+                AudioFile audio = AudioFileIO.read(audioPath.toFile());
+                setCoverArt(audio.getTagOrCreateAndSetDefault(), coverFile);
+                AudioFileIO.write(audio);
+                return null;
+            });
+            return;
+        }
+        AudioFile audio = AudioFileIO.read(audioPath.toFile());
+        setCoverArt(audio.getTagOrCreateAndSetDefault(), coverFile);
+        AudioFileIO.write(audio);
+    }
+
+    private static boolean isWav(Path path) {
+        String ext = extension(path);
+        return ".wav".equals(ext) || ".wave".equals(ext);
+    }
+
+    @FunctionalInterface
+    private interface WavTagOperation<T> {
+        T run() throws Exception;
+    }
+
+    /**
+     * WAV 的封面/歌词保存在 ID3 chunk；临时切换 JAudiotagger 全局选项并串行执行，避免 INFO tag
+     * 对 COVER_ART / LYRICS 的不支持导致同步失败，完成后恢复进程原设置。
+     */
+    private static <T> T withWavId3TagOptions(WavTagOperation<T> operation) throws Exception {
+        synchronized (WAV_TAG_OPTIONS_LOCK) {
+            TagOptionSingleton options = TagOptionSingleton.getInstance();
+            WavOptions previousRead = options.getWavOptions();
+            WavSaveOptions previousSave = options.getWavSaveOptions();
+            try {
+                options.setWavOptions(WavOptions.READ_ID3_ONLY);
+                options.setWavSaveOptions(WavSaveOptions.SAVE_EXISTING_AND_ACTIVE);
+                return operation.run();
+            } finally {
+                options.setWavOptions(previousRead);
+                options.setWavSaveOptions(previousSave);
+            }
+        }
+    }
+
     /**
      * 内嵌歌词整段替换为「横幅 + 曲库正文」。
      */
@@ -198,20 +255,24 @@ public final class MusicAdMetadataPatcher {
         }
     }
 
-    /**
-     * 内嵌封面：删除旧封面后写入封面目录中的当前文件；格式不支持时只记日志。
-     */
-    private static void setCoverArt(Tag tag, Path coverFile) {
-        if (coverFile == null || !Files.isRegularFile(coverFile)) {
+    /** 内嵌封面：成功读取新图后再替换旧图，失败时向入库流程报告，禁止静默丢封面。 */
+    private static void setCoverArt(Tag tag, Path coverFile) throws Exception {
+        if (coverFile == null) {
             return;
         }
-        try {
-            Artwork artwork = ArtworkFactory.createArtworkFromFile(coverFile.toFile());
-            tag.deleteArtworkField();
-            tag.setField(artwork);
-        } catch (Exception e) {
-            logger.warn("写入内嵌封面失败 file={}: {}", coverFile, e.toString());
+        if (!Files.isRegularFile(coverFile)) {
+            throw new IOException("封面文件不存在: " + coverFile);
         }
+        byte[] imageData = Files.readAllBytes(coverFile);
+        String mime = EmbeddedCoverReader.sniffMime(imageData);
+        if (tag instanceof FlacTag flac && "image/webp".equals(mime)) {
+            flac.deleteArtworkField();
+            flac.setField(new MetadataBlockDataPicture(imageData, 3, mime, "", 0, 0, 0, 0));
+            return;
+        }
+        Artwork artwork = ArtworkFactory.createArtworkFromFile(coverFile.toFile());
+        tag.deleteArtworkField();
+        tag.setField(artwork);
     }
 
     private static void patchMp3(Path path) throws Exception {

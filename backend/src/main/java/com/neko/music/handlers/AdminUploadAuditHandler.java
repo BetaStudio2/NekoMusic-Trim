@@ -7,6 +7,7 @@ import com.neko.music.service.EmbeddedMetadataSyncService;
 import com.neko.music.service.MusicIngestSupport;
 import com.neko.music.service.UploadStorageRecovery;
 import com.neko.music.util.AtomicFiles;
+import com.neko.music.util.MusicAdMetadataPatcher;
 import com.neko.music.util.MusicPinyinColumns;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,7 +36,6 @@ import java.util.concurrent.Executors;
 public class AdminUploadAuditHandler extends ApiServlet {
     private static final Logger logger = LoggerFactory.getLogger(AdminUploadAuditHandler.class);
     private static final String MUSIC_AUDIO_DIR = "Music/music";
-    private static final String MUSIC_COVERS_DIR = "Music/covers";
 
     /** 审核提交后的歌词索引、声纹刷新与通知均不阻塞接口响应。 */
     private static final ExecutorService POST_AUDIT_EXECUTOR = Executors.newThreadPerTaskExecutor(
@@ -233,14 +233,10 @@ public class AdminUploadAuditHandler extends ApiServlet {
                 return;
             }
 
-            // 创建Music目录及音频/封面子目录
+            // 创建曲库音频目录
             File audioDir = new File(MUSIC_AUDIO_DIR);
-            File coversDir = new File(MUSIC_COVERS_DIR);
             if (!audioDir.exists()) {
                 audioDir.mkdirs();
-            }
-            if (!coversDir.exists()) {
-                coversDir.mkdirs();
             }
 
             // 使用事务确保原子性
@@ -295,9 +291,6 @@ public class AdminUploadAuditHandler extends ApiServlet {
 
             // 使用音乐ID生成最终的文件名
             String newMusicFileName = musicId + getFileExtension(upload.getMusicFilePath());
-            String newCoverFileName = (upload.getCoverFilePath() != null && !upload.getCoverFilePath().isEmpty())
-                    ? musicId + getFileExtension(upload.getCoverFilePath())
-                    : null;
 
             // 从仍保留的源文件生成正式文件；数据库提交前绝不删除源文件，因此重启后仍可重试。
             String newMusicPath = Paths.get(MUSIC_AUDIO_DIR, newMusicFileName).toString();
@@ -305,12 +298,9 @@ public class AdminUploadAuditHandler extends ApiServlet {
             fileUndoLog.push(() -> deleteQuietly(Paths.get(newMusicPath)));
             logger.info("生成正式音乐文件: {} -> {}", sourceMusicPath, newMusicPath);
 
-            // 生成正式封面文件（如果有）
-            if (sourceCoverPath != null && newCoverFileName != null) {
-                String newCoverPath = Paths.get(MUSIC_COVERS_DIR, newCoverFileName).toString();
-                AtomicFiles.linkOrCopyAndReplace(sourceCoverPath, Paths.get(newCoverPath));
-                fileUndoLog.push(() -> deleteQuietly(Paths.get(newCoverPath)));
-                logger.info("生成正式封面文件: {} -> {}", sourceCoverPath, newCoverPath);
+            // 在事务提交和删除待审源图前先把封面写入正式音频；失败时保留上传记录供重试。
+            if (sourceCoverPath != null) {
+                MusicAdMetadataPatcher.embedCoverOnly(Paths.get(newMusicPath), sourceCoverPath);
             }
 
             if (upload.getLyricsFilePath() != null && !upload.getLyricsFilePath().isEmpty()

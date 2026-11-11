@@ -35,7 +35,6 @@ public final class UploadStorageRecovery {
 
     static final String UPLOAD_DIR = "user_upload";
     private static final String AUDIO_DIR = MusicAssetLocator.AUDIO_REL_DIR;
-    private static final String COVER_DIR = MusicAssetLocator.COVER_REL_DIR;
     private static final String STAGING_PREFIX = ".neko-staging-";
     private static final Pattern ID_NAMED_FILE = Pattern.compile("^(\\d+)\\.[^.]+$");
     /** 滚动重启时新旧实例可能短暂并存，只清理已静止一段时间的残留。 */
@@ -55,7 +54,6 @@ public final class UploadStorageRecovery {
 
         Set<Integer> musicIds = loadMusicIds(databaseManager);
         cleanupMediaDir(Paths.get(AUDIO_DIR), musicIds, cutoffMillis);
-        cleanupMediaDir(Paths.get(COVER_DIR), musicIds, cutoffMillis);
     }
 
     /** 审核前也复用该恢复逻辑，兼容旧版本已经移动到 {@code temp_*} 的待审核文件。 */
@@ -65,10 +63,6 @@ public final class UploadStorageRecovery {
         }
         restoreLegacyTempFileQuietly(upload.getMusicFilePath(),
                 legacyMusicTempPath(upload.getId(), upload.getMusicFilePath()));
-        if (upload.getCoverFilePath() != null && !upload.getCoverFilePath().isBlank()) {
-            restoreLegacyTempFileQuietly(upload.getCoverFilePath(),
-                    Paths.get(COVER_DIR, "temp_" + upload.getId() + "_cover.jpg"));
-        }
     }
 
     private static Set<Path> restorePendingUploads(List<StoredUpload> uploads) {
@@ -83,10 +77,6 @@ public final class UploadStorageRecovery {
 
             restoreLegacyTempFileQuietly(upload.musicFilePath(),
                     legacyMusicTempPath(upload.id(), upload.musicFilePath()));
-            if (upload.coverFilePath() != null && !upload.coverFilePath().isBlank()) {
-                restoreLegacyTempFileQuietly(upload.coverFilePath(),
-                        Paths.get(COVER_DIR, "temp_" + upload.id() + "_cover.jpg"));
-            }
         }
         return keep;
     }

@@ -8,6 +8,7 @@ import com.neko.music.model.ErrorResponse;
 import com.neko.music.Main;
 import com.neko.music.service.EmbeddedMetadataSyncService;
 import com.neko.music.service.MusicIngestSupport;
+import com.neko.music.util.CoverArtCache;
 import com.neko.music.util.MusicAssetLocator;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -148,8 +149,8 @@ public class MusicManagementHandler extends HttpServlet {
             return;
         }
 
+        CoverArtCache.invalidate(id);
         MusicAssetLocator.deleteAudioVariants(id);
-        MusicAssetLocator.deleteCoverVariants(id);
 
         Main.getLyricsDatabaseManager().delete(id);
         if (Main.getLyricsSearchIndex() != null) {

@@ -50,6 +50,7 @@ public class VideoRenderArtifactCleanup {
     public void deleteJobArtifacts(String jobId) {
         deleteQuiet(VideoRenderPaths.outputFile(jobId));
         deleteQuiet(VideoRenderPaths.videoRenderDir().resolve("ass").resolve(jobId + ".ass"));
+        deleteJobCoverFiles(jobId);
     }
 
     public void sweepExpiredArtifacts() {
@@ -60,6 +61,13 @@ public class VideoRenderArtifactCleanup {
                 try (Stream<Path> mp4s = Files.list(renderDir)) {
                     mp4s.filter(Files::isRegularFile)
                             .filter(p -> p.getFileName().toString().endsWith(".mp4"))
+                            .filter(p -> isOlderThan(p, cutoff))
+                            .forEach(this::deleteQuiet);
+                }
+                try (Stream<Path> covers = Files.list(renderDir)) {
+                    covers.filter(Files::isRegularFile)
+                            .filter(p -> p.getFileName().toString().matches(
+                                    "^[0-9a-fA-F-]{36}\\.cover\\.[a-zA-Z0-9]+$"))
                             .filter(p -> isOlderThan(p, cutoff))
                             .forEach(this::deleteQuiet);
                 }
@@ -76,6 +84,21 @@ public class VideoRenderArtifactCleanup {
             sweepMp4InDir(LEGACY_VIDEO_DIR, cutoff);
         } catch (IOException e) {
             logger.warn("扫描过期渲染文件失败: {}", e.getMessage());
+        }
+    }
+
+    private void deleteJobCoverFiles(String jobId) {
+        Path renderDir = VideoRenderPaths.videoRenderDir();
+        if (!Files.isDirectory(renderDir)) {
+            return;
+        }
+        String prefix = jobId + ".cover.";
+        try (Stream<Path> files = Files.list(renderDir)) {
+            files.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().startsWith(prefix))
+                    .forEach(this::deleteQuiet);
+        } catch (IOException e) {
+            logger.warn("清理视频任务临时封面失败 jobId={}: {}", jobId, e.getMessage());
         }
     }
 
