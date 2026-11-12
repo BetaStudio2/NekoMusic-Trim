@@ -76,7 +76,7 @@ public class FileUploadHandler extends HttpServlet {
             String album = form.album;
             String language = form.language;
             String tags = form.tags;
-            Integer duration = form.duration;
+            int duration = form.duration != null ? form.duration : 0;
             Integer uploadUserId = form.uploadUserId;
             Part musicFilePart = form.musicFilePart;
             Part coverFilePart = form.coverFilePart;
@@ -89,7 +89,7 @@ public class FileUploadHandler extends HttpServlet {
             }
             
             // 验证歌词文件必填、类型与格式
-            if (!validateLyricsOrReject(response, form.lyricsFilePart)) {
+            if (!validateLyricsOrReject(response, form.lyricsFilePart, true)) {
                 return;
             }
             
@@ -222,31 +222,31 @@ public class FileUploadHandler extends HttpServlet {
             Collection<Part> parts = request.getParts();
             MusicForm form = parseMusicForm(request, parts, true);
             Integer id = form.id;
-            String title = form.title;
-            String artist = form.artist;
-            String album = form.album;
-            String language = form.language;
-            String tags = form.tags;
-            Integer duration = form.duration;
-            Integer uploadUserId = form.uploadUserId;
-            Part musicFilePart = form.musicFilePart;
-            Part coverFilePart = form.coverFilePart;
-            
-            // 验证必要字段
-            if (id == null || title == null || title.trim().isEmpty() || artist == null || artist.trim().isEmpty()) {
-                HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse(ApiMessages.translate("music.meta.required")));
+            if (id == null) {
+                HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse("music.id_required"));
                 return;
             }
-            
-            // 验证歌词文件必填、类型与格式
-            if (!validateLyricsOrReject(response, form.lyricsFilePart)) {
-                return;
-            }
-            
+
             // 获取当前音乐信息
             Music currentMusic = getMusicById(id);
             if (currentMusic == null) {
                 HandlerResponses.writeJson(response, HttpStatus.NOT_FOUND_404, new ErrorResponse("music.not_found"));
+                return;
+            }
+
+            // 编辑采用部分更新：未提交的字段沿用数据库当前值。
+            String title = form.title != null ? form.title : currentMusic.getTitle();
+            String artist = form.artist != null ? form.artist : currentMusic.getArtist();
+            String album = form.album != null ? form.album : currentMusic.getAlbum();
+            String language = form.language != null ? form.language : currentMusic.getLanguage();
+            String tags = form.tags != null ? form.tags : currentMusic.getTags();
+            int duration = form.duration != null ? form.duration : currentMusic.getDuration();
+            Integer uploadUserId = form.uploadUserId != null ? form.uploadUserId : currentMusic.getUploadUserId();
+            Part musicFilePart = form.musicFilePart;
+            Part coverFilePart = form.coverFilePart;
+
+            // 歌词文件在编辑时可选；仅在提供时校验格式。
+            if (!validateLyricsOrReject(response, form.lyricsFilePart, false)) {
                 return;
             }
             
@@ -280,7 +280,9 @@ public class FileUploadHandler extends HttpServlet {
                 try {
                     Files.copy(musicFilePart.getInputStream(), musicTemp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-                    AudioValidation audio = validateAudioFile(musicTemp, fileExtension, duration);
+                    // 换文件时未提交时长则由音频本身重新解析，不能沿用旧时长。
+                    int audioDuration = form.duration != null ? form.duration : 0;
+                    AudioValidation audio = validateAudioFile(musicTemp, fileExtension, audioDuration);
                     duration = audio.duration();
                     if (!audio.valid()) {
                         HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse(audio.errorMessage()));
@@ -313,18 +315,15 @@ public class FileUploadHandler extends HttpServlet {
                         }
                     }
                 }
-            } else {
-                // 如果没有上传新音乐文件，但前端提供了时长，更新时长
-                if (duration != 0) {
-                    currentMusic.setDuration(duration);
-                }
             }
             
             // 更新数据库中的音乐信息
             updateMusicInDatabase(id, title, artist, album, language, tags, duration, uploadUserId);
 
             // 语种先落库，随后写歌词时才能按“日语”硬性补全罗马音。
-            saveLyricsToDatabase(id, form.lyricsFilePart);
+            if (form.lyricsFilePart != null) {
+                saveLyricsToDatabase(id, form.lyricsFilePart);
+            }
 
             // 歌词/基础标签与新封面同步进音频文件；未上传封面时保留音频原封面。
             boolean metadataSynced = EmbeddedMetadataSyncService.syncOne(id, coverTempForSync);
@@ -349,10 +348,13 @@ public class FileUploadHandler extends HttpServlet {
         }
     }
 
-    /** 校验歌词文件（必填 + .lrc 扩展名 + LrcValidator），失败时写出对应响应并返回 false。 */
-    private boolean validateLyricsOrReject(HttpServletResponse response, Part lyricsFilePart) throws IOException {
-        // 验证歌词文件必填
+    /** 校验歌词文件（可选时未提供直接通过；提供时校验 .lrc 扩展名与格式）。 */
+    private boolean validateLyricsOrReject(HttpServletResponse response, Part lyricsFilePart,
+                                           boolean required) throws IOException {
         if (lyricsFilePart == null) {
+            if (!required) {
+                return true;
+            }
             HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse(ApiMessages.translate("music.lyrics_file.required")));
             return false;
         }
@@ -472,7 +474,7 @@ public class FileUploadHandler extends HttpServlet {
         String album;
         String language;
         String tags;
-        Integer duration = 0;
+        Integer duration;
         Integer uploadUserId;
         Part musicFilePart;
         Part coverFilePart;
@@ -632,9 +634,10 @@ public class FileUploadHandler extends HttpServlet {
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, title);
                 stmt.setString(2, artist);
-                stmt.setString(3, album != null ? album : "未知专辑");
-                stmt.setString(4, language != null ? language : "未知语言");
-                stmt.setString(5, tags != null ? tags : "");
+                // 编辑接口做部分更新，null/空值均按调用方提交（或数据库当前值）原样写回。
+                stmt.setString(3, album);
+                stmt.setString(4, language);
+                stmt.setString(5, tags);
                 stmt.setInt(6, duration);
                 stmt.setObject(7, validUploadUserId); // 使用验证后的用户ID或null
                 // 预计算拼音列

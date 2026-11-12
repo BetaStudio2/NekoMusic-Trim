@@ -302,42 +302,60 @@ public class MusicManagementHandler extends HttpServlet {
         try {
             // 解析JSON请求体
             EditMusicRequest editRequest = Main.getObjectMapper().readValue(requestBody, EditMusicRequest.class);
-            
-            // 验证必填字段
-            if (editRequest.id() == null || editRequest.title() == null || editRequest.title().trim().isEmpty() ||
-                editRequest.artist() == null || editRequest.artist().trim().isEmpty() ||
-                editRequest.language() == null || editRequest.language().trim().isEmpty()) {
-                HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse("music.manage.fields_required"));
+
+            if (editRequest.id() == null) {
+                HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse("music.id_required"));
                 return;
             }
-            
-            // 验证歌词必填
-            if (editRequest.lyrics() == null || editRequest.lyrics().trim().isEmpty()) {
-                HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse("music.lyrics.content_required"));
+
+            Music currentMusic = null;
+            try (Connection conn = Main.getDatabaseManager().getConnection()) {
+                String sql = "SELECT id, title, artist, album, duration, language, tags, upload_user_id, created_at, updated_at, max_quality FROM music WHERE id = ?";
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setInt(1, editRequest.id());
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        if (rs.next()) {
+                            currentMusic = mapMusic(rs);
+                        }
+                    }
+                }
+            }
+
+            if (currentMusic == null) {
+                HandlerResponses.writeJson(response, HttpStatus.NOT_FOUND_404, new ErrorResponse("music.not_found"));
                 return;
             }
-            
+
+            // 编辑采用部分更新：未提交的字段沿用数据库当前值。
+            String title = editRequest.title() != null ? editRequest.title() : currentMusic.title();
+            String artist = editRequest.artist() != null ? editRequest.artist() : currentMusic.artist();
+            String album = editRequest.album() != null ? editRequest.album() : currentMusic.album();
+            int duration = editRequest.duration() != null ? editRequest.duration() : currentMusic.duration();
+            String language = editRequest.language() != null ? editRequest.language() : currentMusic.language();
+            String tags = editRequest.tags() != null ? editRequest.tags() : currentMusic.tags();
+            Integer uploadUserId = editRequest.uploadUserId() != null
+                    ? editRequest.uploadUserId() : currentMusic.uploadUserId();
+
             int rowsUpdated;
             try (Connection conn = Main.getDatabaseManager().getConnection()) {
                 String sql = "UPDATE music SET title = ?, artist = ?, album = ?, duration = ?, language = ?, tags = ?, upload_user_id = ?, title_pinyin = ?, title_pinyin_initials = ?, title_word_initials = ?, artist_pinyin = ?, artist_pinyin_initials = ?, artist_word_initials = ?, album_pinyin = ?, updated_at = NOW() WHERE id = ?";
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                    stmt.setString(1, editRequest.title());
-                    stmt.setString(2, editRequest.artist());
-                    stmt.setString(3, editRequest.album() != null ? editRequest.album() : "未知专辑");
-                    stmt.setInt(4, editRequest.duration() != null ? editRequest.duration() : 0);
-                    stmt.setString(5, editRequest.language() != null ? editRequest.language() : "未知语言");
-                    stmt.setString(6, editRequest.tags() != null ? editRequest.tags() : "");
-                    // 使用NULL而不是0以避免外键约束问题
-                    stmt.setObject(7, null);
+                    stmt.setString(1, title);
+                    stmt.setString(2, artist);
+                    stmt.setString(3, album);
+                    stmt.setInt(4, duration);
+                    stmt.setString(5, language);
+                    stmt.setString(6, tags);
+                    stmt.setObject(7, resolveValidUploadUserId(conn, uploadUserId));
                     // 预计算拼音列
-                    MusicPinyinColumns.bind(stmt, 8, editRequest.title(), editRequest.artist(), editRequest.album());
+                    MusicPinyinColumns.bind(stmt, 8, title, artist, album);
                     stmt.setInt(15, editRequest.id());
                     
                     rowsUpdated = stmt.executeUpdate();
                 }
                 
-                // 保存歌词到数据库；失败必须让请求失败，不能返回「编辑成功」但歌词没入库
-                if (rowsUpdated > 0) {
+                // 未提交歌词时保持原歌词不变；提交后才保存并重建检索索引。
+                if (rowsUpdated > 0 && editRequest.lyrics() != null) {
                     try {
                         saveLyricsToDatabase(editRequest.id(), editRequest.lyrics());
                     } catch (Exception lyricsEx) {
@@ -395,6 +413,17 @@ public class MusicManagementHandler extends HttpServlet {
             logger.warn("编辑音乐请求处理失败", e);
             HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse("auth.bad_request"));
         }
+    }
+
+    private Integer resolveValidUploadUserId(Connection conn, Integer uploadUserId) throws SQLException {
+        if (uploadUserId == null) {
+            return null;
+        }
+        if (MusicIngestSupport.isUserExists(conn, uploadUserId)) {
+            return uploadUserId;
+        }
+        logger.warn("提供的upload_user_id {} 不存在于users表中，将使用NULL", uploadUserId);
+        return null;
     }
 
     /** 从 music 查询结果行映射为 Music（列与顺序一致，提取自 3 处相同内联代码）。 */

@@ -117,10 +117,11 @@
             <p v-else-if="editingMusic.filePath" class="field__file">
               当前文件：{{ editingMusic.filePath.split('/').pop() }}
             </p>
+            <p class="field__hint">可选；不选择时保留当前音乐文件。</p>
           </div>
 
           <div class="field field--last">
-            <label class="field__label" for="edit-lang">语言 <span class="req">*</span></label>
+            <label class="field__label" for="edit-lang">语言</label>
             <select id="edit-lang" v-model="editingMusic.language" class="select">
               <option value="" disabled>请选择语言</option>
               <option value="中文">中文</option>
@@ -139,12 +140,12 @@
 
         <div class="col">
           <div class="field">
-            <label class="field__label" for="edit-title">音乐名称 <span class="req">*</span></label>
+            <label class="field__label" for="edit-title">音乐名称</label>
             <NInput id="edit-title" v-model="editingMusic.title" placeholder="请输入音乐名称" />
           </div>
 
           <div class="field">
-            <label class="field__label" for="edit-artist">艺术家 <span class="req">*</span></label>
+            <label class="field__label" for="edit-artist">艺术家</label>
             <NInput id="edit-artist" v-model="editingMusic.artist" placeholder="请输入艺术家" />
           </div>
 
@@ -159,10 +160,10 @@
           </div>
 
           <div class="field field--last">
-            <label class="field__label">歌词文件 <span class="req">*</span></label>
+            <label class="field__label">歌词文件</label>
             <input type="file" class="file" accept=".lrc" @change="handleEditLyricsFileChange" />
             <p v-if="editingMusic.lyricsFileName" class="field__file">已选择：{{ editingMusic.lyricsFileName }}</p>
-            <p class="field__hint">请上传 .lrc 格式的歌词文件。</p>
+            <p class="field__hint">可选；不选择时保留当前歌词。选择后请使用 .lrc 格式。</p>
           </div>
         </div>
       </div>
@@ -1096,6 +1097,7 @@ const newMusic = ref({
   lyricsFileName: ''
 })
 const editingMusic = ref(null)
+const editOriginalMusic = ref(null)
 const searchQuery = ref('')
 const isLoading = ref(false)
 
@@ -1230,11 +1232,19 @@ const closeAddModal = () => {
 // 编辑音乐
 const editMusic = async (music) => {
   editingMusic.value = { ...music, lyricsFile: null, lyricsFileName: '' } // 复制音乐对象以避免直接修改原数据
+  editOriginalMusic.value = {
+    title: music.title ?? '',
+    artist: music.artist ?? '',
+    language: music.language ?? '',
+    tags: music.tags ?? '',
+    album: music.album ?? ''
+  }
 }
 
 // 关闭编辑悬浮窗
 const closeEditModal = () => {
   editingMusic.value = null
+  editOriginalMusic.value = null
 }
 
 // 开始拖动悬浮窗
@@ -1290,36 +1300,31 @@ const stopDrag = () => {
 
 // 保存编辑
 const saveEdit = async () => {
-  if (!editingMusic.value.title || !editingMusic.value.artist || !editingMusic.value.language) {
-    toast.error('请填写音乐名称、艺术家和语言')
-    return
-  }
-  
-  // 验证歌词文件必填
-  if (!editingMusic.value.lyricsFile) {
-    toast.error('请选择歌词文件（必填项）')
-    return
-  }
-  
   try {
     // 创建FormData对象，用于上传文件
     const formData = new FormData()
     formData.append('id', editingMusic.value.id)
-    formData.append('title', editingMusic.value.title)
-    formData.append('artist', editingMusic.value.artist)
-    formData.append('language', editingMusic.value.language)
-    formData.append('tags', editingMusic.value.tags || '')
-    formData.append('album', editingMusic.value.album || '未知专辑')
-    formData.append('duration', editingMusic.value.duration || 0)
-    formData.append('uploadUserId', editingMusic.value.uploadUserId || 0)
-    formData.append('lyricsFile', editingMusic.value.lyricsFile)
+
+    // 只提交实际修改的文本字段，未提交的字段由后端保持原值。
+    for (const field of ['title', 'artist', 'language', 'tags', 'album']) {
+      const currentValue = editingMusic.value[field] ?? ''
+      const originalValue = editOriginalMusic.value?.[field] ?? ''
+      if (currentValue !== originalValue) {
+        formData.append(field, currentValue)
+      }
+    }
     
     if (editingMusic.value.file) {
       formData.append('musicFile', editingMusic.value.file)
+      formData.append('duration', editingMusic.value.duration ?? 0)
     }
     
     if (editingMusic.value.coverFile) {
       formData.append('coverFile', editingMusic.value.coverFile)
+    }
+
+    if (editingMusic.value.lyricsFile) {
+      formData.append('lyricsFile', editingMusic.value.lyricsFile)
     }
     
     const response = await fetch(`${API_CONFIG.BASE_URL}/api/music/upload`, {
@@ -1343,6 +1348,7 @@ const saveEdit = async () => {
         updateSearchResults()
       }
       editingMusic.value = null
+      editOriginalMusic.value = null
       toast.success('编辑音乐成功')
     } else {
       console.error('编辑音乐失败:', data.message)
@@ -1357,6 +1363,7 @@ const saveEdit = async () => {
 // 取消编辑
 const cancelEdit = () => {
   editingMusic.value = null
+  editOriginalMusic.value = null
 }
 
 // 删除音乐
