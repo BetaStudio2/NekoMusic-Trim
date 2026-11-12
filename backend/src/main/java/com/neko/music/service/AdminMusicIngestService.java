@@ -106,7 +106,7 @@ public class AdminMusicIngestService {
         if (duplicate.isPresent()) {
             logger.info("跳过入库，曲库已有重复 id={}: title={} artist={}",
                     duplicate.get().id(), title, artist);
-            return duplicate;
+            return java.util.Optional.empty();
         }
 
         String ext = extensionFromPath(musicTemp);
@@ -158,7 +158,7 @@ public class AdminMusicIngestService {
             MusicIngestSupport.refreshQualityAfterIngest(musicId, musicDest, logger);
 
             String lyricsContent = Files.readString(lyricsTemp, StandardCharsets.UTF_8);
-            if (!Main.getLyricsDatabaseManager().upsert(musicId, lyricsContent, "ingest")) {
+            if (!Main.getLyricsDatabaseManager().upsert(musicId, lyricsContent)) {
                 throw new SQLException("保存歌词到数据库失败");
             }
             if (com.neko.music.Main.getLyricsSearchIndex() != null) {

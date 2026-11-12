@@ -79,7 +79,7 @@ public class LyricsDatabaseManager {
             return Optional.empty();
         }
         String sql = """
-                SELECT music_id, content, plain_text, content_hash, format, source, is_placeholder,
+                SELECT music_id, content, plain_text, content_hash, format, is_placeholder,
                        size_bytes, created_at, updated_at
                 FROM music_lyrics
                 WHERE music_id = ?
@@ -101,7 +101,7 @@ public class LyricsDatabaseManager {
 
     public List<StoredLyrics> findAllForIndex() {
         String sql = """
-                SELECT ml.music_id, ml.content, ml.plain_text, ml.content_hash, ml.format, ml.source,
+                SELECT ml.music_id, ml.content, ml.plain_text, ml.content_hash, ml.format,
                        ml.is_placeholder, ml.size_bytes, ml.created_at, ml.updated_at
                 FROM music_lyrics ml
                 JOIN music m ON m.id = ml.music_id
@@ -150,13 +150,13 @@ public class LyricsDatabaseManager {
         return rows;
     }
 
-    public boolean upsert(int musicId, String content, String source) {
-        return upsert(musicId, content, "lrc", source);
+    public boolean upsert(int musicId, String content) {
+        return upsert(musicId, content, "lrc");
     }
 
-    public boolean upsert(int musicId, String content, String format, String source) {
+    public boolean upsert(int musicId, String content, String format) {
         try (Connection conn = databaseManager.getConnection()) {
-            upsert(conn, musicId, content, format, source);
+            upsert(conn, musicId, content, format);
             return true;
         } catch (SQLException e) {
             logger.warn("保存歌词失败 musicId={}: {}", musicId, e.toString());
@@ -164,12 +164,11 @@ public class LyricsDatabaseManager {
         }
     }
 
-    public void upsert(Connection conn, int musicId, String content, String source) throws SQLException {
-        upsert(conn, musicId, content, "lrc", source);
+    public void upsert(Connection conn, int musicId, String content) throws SQLException {
+        upsert(conn, musicId, content, "lrc");
     }
 
-    public void upsert(Connection conn, int musicId, String content,
-                       String format, String source) throws SQLException {
+    public void upsert(Connection conn, int musicId, String content, String format) throws SQLException {
         if (musicId <= 0 || content == null) {
             throw new SQLException("无效的歌词参数");
         }
@@ -203,19 +202,17 @@ public class LyricsDatabaseManager {
                 placeholder = LyricsPlainTextExtractor.isPlaceholder(plain);
             }
         }
-        String normalizedSource = source == null || source.isBlank() ? "manual" : source.trim();
         int sizeBytes = content.getBytes(StandardCharsets.UTF_8).length;
         String hash = sha256Hex(content);
         String sql = """
                 INSERT INTO music_lyrics
-                    (music_id, content, plain_text, content_hash, format, source, is_placeholder, size_bytes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (music_id, content, plain_text, content_hash, format, is_placeholder, size_bytes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     content = VALUES(content),
                     plain_text = VALUES(plain_text),
                     content_hash = VALUES(content_hash),
                     format = VALUES(format),
-                    source = VALUES(source),
                     is_placeholder = VALUES(is_placeholder),
                     size_bytes = VALUES(size_bytes),
                     updated_at = CURRENT_TIMESTAMP
@@ -226,9 +223,8 @@ public class LyricsDatabaseManager {
             stmt.setString(3, plain);
             stmt.setString(4, hash);
             stmt.setString(5, normalizedFormat);
-            stmt.setString(6, normalizedSource);
-            stmt.setBoolean(7, placeholder);
-            stmt.setInt(8, sizeBytes);
+            stmt.setBoolean(6, placeholder);
+            stmt.setInt(7, sizeBytes);
             stmt.executeUpdate();
         }
         invalidateCached(musicId);
@@ -268,7 +264,6 @@ public class LyricsDatabaseManager {
                 rs.getString("plain_text"),
                 rs.getString("content_hash"),
                 rs.getString("format"),
-                rs.getString("source"),
                 rs.getBoolean("is_placeholder"),
                 rs.getInt("size_bytes"),
                 rs.getTimestamp("created_at"),
@@ -291,7 +286,6 @@ public class LyricsDatabaseManager {
             String plainText,
             String contentHash,
             String format,
-            String source,
             boolean placeholder,
             int sizeBytes,
             Timestamp createdAt,

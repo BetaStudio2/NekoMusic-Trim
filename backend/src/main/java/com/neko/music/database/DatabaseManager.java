@@ -89,7 +89,6 @@ public class DatabaseManager {
                     plain_text MEDIUMTEXT NULL,
                     content_hash CHAR(64) NOT NULL,
                     format VARCHAR(16) NOT NULL DEFAULT 'lrc',
-                    source VARCHAR(32) NOT NULL DEFAULT 'manual',
                     is_placeholder BOOLEAN NOT NULL DEFAULT FALSE,
                     size_bytes INT UNSIGNED NOT NULL DEFAULT 0,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

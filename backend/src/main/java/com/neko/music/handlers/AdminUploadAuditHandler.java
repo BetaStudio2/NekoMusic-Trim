@@ -306,7 +306,7 @@ public class AdminUploadAuditHandler extends ApiServlet {
             if (upload.getLyricsFilePath() != null && !upload.getLyricsFilePath().isEmpty()
                     && Files.exists(Paths.get(upload.getLyricsFilePath()))) {
                 String lyricsContent = Files.readString(Paths.get(upload.getLyricsFilePath()), StandardCharsets.UTF_8);
-                Main.getLyricsDatabaseManager().upsert(conn, musicId, lyricsContent, "user_upload");
+                Main.getLyricsDatabaseManager().upsert(conn, musicId, lyricsContent);
                 logger.info("审核通过歌词已保存到数据库 musicId={}", musicId);
             }
 

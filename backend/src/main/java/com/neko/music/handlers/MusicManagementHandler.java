@@ -481,7 +481,7 @@ public class MusicManagementHandler extends HttpServlet {
     
     // 保存歌词到数据库（失败时抛异常，由调用方返回明确错误）
     private void saveLyricsToDatabase(Integer musicId, String lyricsContent) {
-        MusicIngestSupport.saveLyricsAndRebuild(musicId, lyricsContent, "admin", logger);
+        MusicIngestSupport.saveLyricsAndRebuild(musicId, lyricsContent, logger);
     }
     
     // 内部类用于表示成功响应

@@ -109,8 +109,8 @@ public final class MusicIngestSupport {
      * <p>写入失败时抛出 {@link IllegalStateException}，由调用方决定回滚或返回错误，
      * 避免「接口返回成功但歌词没入库」的静默失败。
      */
-    public static void saveLyricsAndRebuild(int musicId, String lyricsContent, String source, Logger logger) {
-        if (!Main.getLyricsDatabaseManager().upsert(musicId, lyricsContent, source)) {
+    public static void saveLyricsAndRebuild(int musicId, String lyricsContent, Logger logger) {
+        if (!Main.getLyricsDatabaseManager().upsert(musicId, lyricsContent)) {
             logger.error("保存数据库歌词失败 musicId={}", musicId);
             throw new IllegalStateException("保存歌词到数据库失败 musicId=" + musicId);
         }

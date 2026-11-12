@@ -611,12 +611,9 @@ public class NeteaseSearchFillService {
                 config.getNeteaseFillUploadUserId(),
                 exactTitleOnly
         );
-        Optional<AdminMusicIngestService.IngestedMusic> result = ingested.isPresent()
-                ? ingested
-                : findDuplicateByMode(title, artist, album, exactTitleOnly);
-        if (result.isPresent()) {
-            int ingestedMusicId = result.get().id();
-            saveRichLyrics(ingestedMusicId, lyricsPrep.rich(), "netease_fill");
+        if (ingested.isPresent()) {
+            int ingestedMusicId = ingested.get().id();
+            saveRichLyricsForNewMusic(ingestedMusicId, lyricsPrep.rich());
             lyricsPrep.invalidLyricsAlert().ifPresent(alert ->
                     {
                         Main.getEmailService().scheduleNeteaseInvalidLyricsAlertToAdmins(
@@ -634,8 +631,10 @@ public class NeteaseSearchFillService {
                                 alert.fullOriginalLyrics(),
                                 alert.reason());
                     });
+            return ingested;
         }
-        return result;
+        // 旧曲只返回已有记录，不回写歌词；旧歌歌词升级功能已移除。
+        return findDuplicateByMode(title, artist, album, exactTitleOnly);
     }
 
     /** 按调用方要求的判重口径查曲库重复（导入用严格完整歌名，补全用宽松合并）。 */
@@ -852,11 +851,12 @@ public class NeteaseSearchFillService {
                 config.getNeteaseFillUploadUserId(),
                 false
         );
-        Optional<AdminMusicIngestService.IngestedMusic> result = ingested.isPresent()
-                ? ingested
-                : ingestService.findExistingDuplicate(title, artist, album);
-        result.ifPresent(music -> saveRichLyrics(music.id(), richLyrics, "qq_fill"));
-        return result;
+        if (ingested.isPresent()) {
+            saveRichLyricsForNewMusic(ingested.get().id(), richLyrics);
+            return ingested;
+        }
+        // 旧曲只返回已有记录，不回写歌词；旧歌歌词升级功能已移除。
+        return ingestService.findExistingDuplicate(title, artist, album);
     }
 
     private static int scoreQqCandidate(
@@ -988,34 +988,22 @@ public class NeteaseSearchFillService {
         return null;
     }
 
-    private void saveRichLyrics(int musicId, NekoLyrics.Document rich, String source) {
+    private void saveRichLyricsForNewMusic(int musicId, NekoLyrics.Document rich) {
         if (musicId <= 0 || rich == null || rich.isEmpty()) {
             return;
         }
         try {
-            var stored = Main.getLyricsDatabaseManager().findByMusicId(musicId);
-            if (stored.isPresent() && !stored.get().placeholder()) {
-                String storedSource = stored.get().source();
-                if (storedSource != null
-                        && !"ingest".equals(storedSource)
-                        && !storedSource.endsWith("_fill")) {
-                    logger.info("保留已有歌词，不覆盖为字级歌词 musicId={} source={}",
-                            musicId, storedSource);
-                    return;
-                }
-            }
             String content = NekoLyrics.serialize(rich);
             if (!Main.getLyricsDatabaseManager().upsert(
-                    musicId, content, NekoLyrics.FORMAT, source)) {
-                logger.warn("保存 Neko 字级歌词失败 musicId={} source={}", musicId, source);
+                    musicId, content, NekoLyrics.FORMAT)) {
+                logger.warn("保存 Neko 字级歌词失败 musicId={}", musicId);
                 return;
             }
             if (Main.getLyricsSearchIndex() != null) {
                 Main.getLyricsSearchIndex().rebuildOne(musicId);
             }
         } catch (Exception e) {
-            logger.warn("保存 Neko 字级歌词异常 musicId={} source={}: {}",
-                    musicId, source, e.getMessage());
+            logger.warn("保存 Neko 字级歌词异常 musicId={}: {}", musicId, e.getMessage());
         }
     }
 

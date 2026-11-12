@@ -776,7 +776,7 @@ public class FileUploadHandler extends HttpServlet {
         try (InputStream inputStream = lyricsFilePart.getInputStream()) {
             lyricsContent = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
         }
-        MusicIngestSupport.saveLyricsAndRebuild(musicId, lyricsContent, "admin_upload", logger);
+        MusicIngestSupport.saveLyricsAndRebuild(musicId, lyricsContent, logger);
     }
 
     /** 尽力删除文件，失败只打 WARN（用于回滚已落盘但不完整的产物）。 */

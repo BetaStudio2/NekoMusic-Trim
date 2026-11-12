@@ -102,7 +102,7 @@ public class AdminLyricsFileHandler extends ApiServlet {
             sendErrorResponse(response, "music.not_found_no_lyrics");
             return;
         }
-        if (!Main.getLyricsDatabaseManager().upsert(musicId, saveRequest.content(), "admin")) {
+        if (!Main.getLyricsDatabaseManager().upsert(musicId, saveRequest.content())) {
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR_500);
             sendErrorResponse(response, "admin.lyrics.save_failed");
             return;

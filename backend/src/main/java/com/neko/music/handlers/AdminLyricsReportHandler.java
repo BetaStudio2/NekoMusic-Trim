@@ -141,7 +141,7 @@ public final class AdminLyricsReportHandler extends ApiServlet {
                     return;
                 }
                 Main.getLyricsDatabaseManager().upsert(
-                        conn, report.musicId(), report.content(), NekoLyrics.FORMAT, "lyrics_report");
+                        conn, report.musicId(), report.content(), NekoLyrics.FORMAT);
                 if (!reportDatabaseManager.markReviewed(conn, id, "approved", admin.id(), reviewNote)) {
                     throw new SQLException("歌词报错状态更新失败");
                 }
