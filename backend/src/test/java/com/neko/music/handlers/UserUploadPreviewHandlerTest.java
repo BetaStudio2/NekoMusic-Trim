@@ -115,7 +115,9 @@ class UserUploadPreviewHandlerTest {
         assertEquals("audio/flac", UserUploadPreviewHandler.getContentType("a.FLAC"));
         assertEquals("audio/wav", UserUploadPreviewHandler.getContentType("a.wav"));
         assertEquals("image/jpeg", UserUploadPreviewHandler.getContentType("cover.jpg"));
-        assertEquals("text/plain; charset=utf-8", UserUploadPreviewHandler.getContentType("song.lrc"));
+        assertEquals("application/octet-stream", UserUploadPreviewHandler.getContentType("song.lrc"),
+                "歌词预览必须使用不可压缩 MIME，避免 CDN gzip 后保留未压缩 Content-Length");
+        assertEquals("application/octet-stream", UserUploadPreviewHandler.getContentType("song.txt"));
         assertEquals("application/octet-stream", UserUploadPreviewHandler.getContentType("noext"));
     }
 

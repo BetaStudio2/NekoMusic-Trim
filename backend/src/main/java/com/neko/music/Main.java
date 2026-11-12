@@ -69,6 +69,9 @@ public class Main {
     
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
+    /** 源站压缩默认关闭，传输压缩统一交给 CDN。 */
+    private static final boolean SOURCE_COMPRESSION_ENABLED = false;
+
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final Gson gson = new Gson();
 
@@ -331,29 +334,32 @@ public class Main {
         ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
         context.setContextPath("/");
 
-        // 文本资源 gzip：前端 JS/CSS/HTML 传输体积可省 ~80%。
-        // 只压缩文本类 MIME；text/event-stream（SSE）、图片、音频、视频不在白名单内，
-        // 避免破坏流式响应或对已压缩内容二次压缩。
-        GzipCompression gzipCompression = new GzipCompression();
-        gzipCompression.setMinCompressSize(256);
-        CompressionHandler compressionHandler = new CompressionHandler();
-        compressionHandler.putCompression(gzipCompression);
-        compressionHandler.putConfiguration("/", CompressionConfig.builder()
-                .compressIncludeMethod("GET")
-                .compressIncludeMethod("HEAD")
-                .compressIncludeMimeType("text/html")
-                .compressIncludeMimeType("text/css")
-                .compressIncludeMimeType("text/plain")
-                .compressIncludeMimeType("text/javascript")
-                .compressIncludeMimeType("application/javascript")
-                .compressIncludeMimeType("application/json")
-                .compressIncludeMimeType("application/xml")
-                .compressIncludeMimeType("text/xml")
-                .compressIncludeMimeType("image/svg+xml")
-                .compressIncludeMimeType("application/manifest+json")
-                .build());
-        compressionHandler.setHandler(context);
-        server.setHandler(compressionHandler);
+        // 源站压缩默认关闭，避免与 CDN 的 gzip 二次处理叠加；前端与 API 的传输压缩统一由 CDN 负责。
+        if (SOURCE_COMPRESSION_ENABLED) {
+            GzipCompression gzipCompression = new GzipCompression();
+            gzipCompression.setMinCompressSize(256);
+            CompressionHandler compressionHandler = new CompressionHandler();
+            compressionHandler.putCompression(gzipCompression);
+            compressionHandler.putConfiguration("/", CompressionConfig.builder()
+                    .compressIncludeMethod("GET")
+                    .compressIncludeMethod("HEAD")
+                    .compressIncludeMimeType("text/html")
+                    .compressIncludeMimeType("text/css")
+                    .compressIncludeMimeType("text/plain")
+                    .compressIncludeMimeType("text/javascript")
+                    .compressIncludeMimeType("application/javascript")
+                    .compressIncludeMimeType("application/json")
+                    .compressIncludeMimeType("application/xml")
+                    .compressIncludeMimeType("text/xml")
+                    .compressIncludeMimeType("image/svg+xml")
+                    .compressIncludeMimeType("application/manifest+json")
+                    .build());
+            compressionHandler.setHandler(context);
+            server.setHandler(compressionHandler);
+        } else {
+            logger.info("源站 HTTP 压缩已默认关闭，传输压缩由 CDN 统一处理");
+            server.setHandler(context);
+        }
 
         // 注册服务到 ServletContext，供 Filter 使用
         context.setAttribute("configManager", configManager);

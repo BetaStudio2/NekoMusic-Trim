@@ -258,8 +258,9 @@ public class UserUploadPreviewHandler extends HttpServlet {
             case "png" -> "image/png";
             case "gif" -> "image/gif";
             case "webp" -> "image/webp";
-            case "lrc" -> "text/plain; charset=utf-8";
-            case "txt" -> "text/plain; charset=utf-8";
+            // 审核页通过 response.text() 读取，不需要浏览器按 text/plain 渲染。
+            // 使用不可压缩 MIME，避免 CDN 对 gzip 表示写入未压缩正文的 Content-Length。
+            case "lrc", "txt" -> "application/octet-stream";
             default -> "application/octet-stream";
         };
     }
