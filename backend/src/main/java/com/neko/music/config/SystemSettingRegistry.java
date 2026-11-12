@@ -180,6 +180,15 @@ public final class SystemSettingRegistry {
             number("music_recognition.index_ffmpeg_timeout_seconds", Group.RECOGNITION, "索引 FFmpeg 超时（秒）", "180",
                     1, 3600, "构建索引时解析曲目的超时时间").restart(),
 
+            // ---------- 本地搜索索引（SQLite FTS5） ----------
+            flag("search_index.enabled", Group.SEARCH, "启用索引召回", true,
+                    "开启后搜索使用本地 FTS5 索引召回（歌名 / 歌手 / 专辑 / 歌词 / 拼音 / 读音 / 模糊）；"
+                            + "关闭后只保留元数据 LIKE 检索，歌词正文无法被搜索"),
+            text("search_index.path", Group.SEARCH, "索引文件路径", "data/search.db",
+                    "SQLite 索引文件位置；相对路径按进程工作目录解析").restart(),
+            number("search_index.refresh_seconds", Group.SEARCH, "刷新间隔（秒）", "300",
+                    0, 86400, "周期增量刷新的间隔；0 表示关闭周期刷新").restart(),
+
             // ---------- 支付 ----------
             flag("zpay.enabled", Group.PAY, "启用支付", true, "关闭后不再受理充值下单"),
             text("zpay.pid", Group.PAY, "商户 PID", "", "易支付平台分配的商户号"),

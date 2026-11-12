@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.neko.music.Main;
 import com.neko.music.database.LyricsDatabaseManager;
 import com.neko.music.service.EmbeddedMetadataSyncService;
+import com.neko.music.service.SearchIndexService;
 import com.neko.music.util.AdminPermissionUtil;
 import com.neko.music.util.PermissionHelper;
 import org.eclipse.jetty.http.HttpStatus;
@@ -107,9 +108,7 @@ public class AdminLyricsFileHandler extends ApiServlet {
             sendErrorResponse(response, "admin.lyrics.save_failed");
             return;
         }
-        if (Main.getLyricsSearchIndex() != null) {
-            Main.getLyricsSearchIndex().rebuildOne(musicId);
-        }
+        SearchIndexService.notifyMusicChanged(musicId);
 
         // 歌词变更后同步进音频文件（保留广告元数据与横幅）
         EmbeddedMetadataSyncService.syncOne(musicId);
@@ -144,9 +143,7 @@ public class AdminLyricsFileHandler extends ApiServlet {
         }
 
         Main.getLyricsDatabaseManager().delete(musicId);
-        if (Main.getLyricsSearchIndex() != null) {
-            Main.getLyricsSearchIndex().rebuildOne(musicId);
-        }
+        SearchIndexService.notifyMusicChanged(musicId);
 
         // 歌词删除后同步进音频文件（保留广告元数据与横幅）
         EmbeddedMetadataSyncService.syncOne(musicId);

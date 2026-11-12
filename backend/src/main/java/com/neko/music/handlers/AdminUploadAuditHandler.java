@@ -5,6 +5,7 @@ import com.neko.music.Main;
 import com.neko.music.model.UserUpload;
 import com.neko.music.service.EmbeddedMetadataSyncService;
 import com.neko.music.service.MusicIngestSupport;
+import com.neko.music.service.SearchIndexService;
 import com.neko.music.service.UploadStorageRecovery;
 import com.neko.music.util.AtomicFiles;
 import com.neko.music.util.LyricsFileValidator;
@@ -353,9 +354,7 @@ public class AdminUploadAuditHandler extends ApiServlet {
                         "/detail/" + approvedMusicId);
 
                 try {
-                    if (Main.getLyricsSearchIndex() != null) {
-                        Main.getLyricsSearchIndex().rebuildOne(approvedMusicId);
-                    }
+                    SearchIndexService.notifyMusicChanged(approvedMusicId);
                 } catch (Exception e) {
                     logger.warn("重建歌词索引失败 musicId={}", approvedMusicId, e);
                 }

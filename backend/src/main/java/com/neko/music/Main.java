@@ -120,7 +120,7 @@ public class Main {
     private static KugouMusicClient kugouMusicClient;
     private static AppReleaseService appReleaseService;
     private static DailyRecommendationService dailyRecommendationService;
-    private static LyricsSearchIndex lyricsSearchIndex;
+    private static SearchIndexService searchIndexService;
     private static LyricsDatabaseManager lyricsDatabaseManager;
     private static MusicRecognitionService musicRecognitionService;
     private static ScheduledExecutorService dailyRecommendationScheduler;
@@ -265,8 +265,9 @@ public class Main {
                 databaseManager, redisService, configManager, objectMapper);
         startDailyRecommendationScheduler();
 
-        lyricsSearchIndex = new LyricsSearchIndex();
-        lyricsSearchIndex.buildIndexAsync();
+        searchIndexService = new SearchIndexService(configManager, databaseManager);
+        searchIndexService.start();
+        Runtime.getRuntime().addShutdownHook(new Thread(searchIndexService::close, "search-index-shutdown"));
 
         musicRecognitionService = new MusicRecognitionService(databaseManager, configManager);
         musicRecognitionService.warmUp();
@@ -656,8 +657,8 @@ public class Main {
         return userSearchHistoryService;
     }
 
-    public static LyricsSearchIndex getLyricsSearchIndex() {
-        return lyricsSearchIndex;
+    public static SearchIndexService getSearchIndexService() {
+        return searchIndexService;
     }
 
     public static LyricsDatabaseManager getLyricsDatabaseManager() {
