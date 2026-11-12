@@ -8,13 +8,13 @@
           <span class="lyrics-tool__eyebrow">NEKO LYRICS STUDIO</span>
           <h1>逐字歌词制作工具</h1>
           <p>
-            选择本地音乐，粘贴或输入歌词，听着音乐逐字打轴。完成后直接导出
+            选择本地音乐，粘贴或输入歌词，听着音乐逐字打轴。完成后直接下载
             <code>.neko</code>，可上传到音乐投稿的歌词入口。
           </p>
           <div class="lyrics-tool__privacy">
             <span><NIcon name="shield-check" :size="15" /> 全程本地处理</span>
             <span><NIcon name="cloud-upload" :size="15" /> 不上传音频或歌词</span>
-            <span><NIcon name="file-text" :size="15" /> 导出 neko-v1</span>
+            <span><NIcon name="file-text" :size="15" /> 下载 .neko 歌词</span>
           </div>
         </div>
         <div class="lyrics-tool__format-card" aria-hidden="true">
@@ -67,10 +67,17 @@
             <span class="lyrics-tool__step-no">02</span>
             <div>
               <h2>粘贴或输入歌词</h2>
-              <p>每行一句。可直接粘贴纯文本，也可粘贴带时间轴的 LRC。</p>
+              <p>支持纯文本、LRC 或完整 neko-v1 JSON，也可以直接导入 .lrc / .neko 文件。</p>
             </div>
           </div>
 
+          <input
+            ref="lyricsImportInput"
+            class="lyrics-tool__hidden-input"
+            type="file"
+            accept=".lrc,.neko,text/plain,application/json"
+            @change="handleLyricsFileImport"
+          />
           <NInput
             v-model="lyricsText"
             textarea
@@ -79,10 +86,15 @@
             placeholder="第一句歌词&#10;第二句歌词&#10;第三句歌词"
           />
           <div class="lyrics-tool__lyrics-actions">
-            <span>{{ rawLineCount }} 行非空内容</span>
-            <NButton variant="primary" icon="sparkles" @click="applyLyrics">
-              生成逐字编辑
-            </NButton>
+            <span>{{ lyricsInputSummary }}</span>
+            <div class="lyrics-tool__lyrics-buttons">
+              <NButton variant="secondary" icon="upload" @click="lyricsImportInput?.click()">
+                导入歌词文件
+              </NButton>
+              <NButton variant="primary" icon="sparkles" @click="applyLyrics">
+                生成逐字编辑
+              </NButton>
+            </div>
           </div>
         </NCard>
       </section>
@@ -115,17 +127,16 @@
           <div class="lyrics-tool__export-state">
             <NIcon :name="timingStats.complete ? 'circle-check' : 'timer'" :size="19" />
             <div>
-              <strong>{{ timingStats.complete ? '时间轴已完成，可以导出' : '还没有完成全部歌词打轴' }}</strong>
+              <strong>{{ timingStats.complete ? '时间轴已完成，可以下载歌词' : '还没有完成全部歌词打轴' }}</strong>
               <p v-if="!timingStats.complete">
                 还有 {{ timingStats.totalLines - timingStats.timedLines }} 行需要完成逐字和时间轴。
               </p>
-              <p v-else>导出只包含歌词和时间轴，不包含你选择的音乐文件。</p>
+              <p v-else>下载文件只包含歌词和时间轴，不包含你选择的音乐文件。</p>
             </div>
           </div>
           <div class="lyrics-tool__export-actions">
             <NButton variant="ghost" icon="trash" @click="resetWorkspace">清空</NButton>
-            <NButton variant="secondary" icon="copy" @click="copyNeko">复制 JSON</NButton>
-            <NButton variant="primary" icon="download" @click="downloadNeko">导出 .neko</NButton>
+            <NButton variant="primary" icon="download" @click="downloadNeko">下载歌词</NButton>
           </div>
         </footer>
       </NCard>
@@ -150,12 +161,13 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import NIcon from '@/icons/NIcon.vue'
 import { NButton, NCard, NInput } from '@/ui'
 import { useToast } from '@/composables/useToast'
-import { buildNekoDocument } from '@/utils/lyricsReport'
+import { buildNekoDocument, toReportLines } from '@/utils/lyricsReport'
 import { isTimingText } from '@/utils/timingUnits'
 import { AmbientBackdrop, PageShell } from '@/layouts'
 import KaraokeTimingEditor from '@/components/KaraokeTimingEditor.vue'
 
 const MAX_NEKO_BYTES = 1024 * 1024
+const MAX_LRC_BYTES = 200 * 1024
 const MAX_LINES = 5000
 const AUDIO_FILE_PATTERN = /\.(mp3|flac|wav|m4a|aac|ogg|opus)$/i
 const LRC_TIME = /^\s*\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,5}))?\]\s*(.*)$/u
@@ -164,6 +176,7 @@ const LRC_TRANSLATION = /^\{\s*["'](.*)["']\s*\}\s*$/u
 
 const toast = useToast()
 const audioInput = ref(null)
+const lyricsImportInput = ref(null)
 const audioFile = ref(null)
 const audioUrl = ref('')
 const audioDragging = ref(false)
@@ -178,6 +191,21 @@ const rawLineCount = computed(() => lyricsText.value
   .split('\n')
   .filter((line) => line.trim())
   .length)
+
+const nekoInputLineCount = computed(() => {
+  const text = lyricsText.value.trim()
+  if (!text.startsWith('{')) return 0
+  try {
+    const document = JSON.parse(text)
+    return Array.isArray(document?.lines) ? document.lines.length : 0
+  } catch {
+    return 0
+  }
+})
+
+const lyricsInputSummary = computed(() => nekoInputLineCount.value
+  ? `${nekoInputLineCount.value} 行 neko-v1 歌词`
+  : `${rawLineCount.value} 行非空内容`)
 
 const timingStats = computed(() => {
   timingRevision.value
@@ -242,6 +270,30 @@ function handleAudioDrop(event) {
   if (file) setAudioFile(file)
 }
 
+async function handleLyricsFileImport(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  if (!/\.(lrc|neko)$/i.test(file.name || '')) {
+    toast.error('请选择 .lrc 或 .neko 歌词文件')
+    return
+  }
+  if (/\.neko$/i.test(file.name) && file.size > MAX_NEKO_BYTES) {
+    toast.error('NEKO 歌词文件不能超过 1MiB')
+    return
+  }
+  if (/\.lrc$/i.test(file.name) && file.size > MAX_LRC_BYTES) {
+    toast.error('LRC 歌词文件不能超过 200KiB')
+    return
+  }
+  try {
+    lyricsText.value = await file.text()
+    applyLyrics()
+  } catch {
+    toast.error('读取歌词文件失败')
+  }
+}
+
 function applyLyrics() {
   const raw = lyricsText.value.trim()
   if (!raw) {
@@ -253,6 +305,7 @@ function applyLyrics() {
   }
 
   const parsed = parseLyrics(raw)
+  if (parsed == null) return
   if (!parsed.length) {
     toast.error('没有识别到有效歌词')
     return
@@ -267,9 +320,25 @@ function applyLyrics() {
 }
 
 function parseLyrics(raw) {
+  const text = String(raw || '').trim()
+  if (text.startsWith('{')) {
+    const rich = parseNekoInput(text)
+    if (!rich) return null
+    try {
+      return toReportLines({ lyricsRich: rich }).map(withUid)
+    } catch {
+      toast.error('无法读取 neko-v1 歌词内容')
+      return null
+    }
+  }
+  if (new Blob([text]).size > MAX_LRC_BYTES) {
+    toast.error('LRC 或纯文本歌词不能超过 200KiB')
+    return null
+  }
+
   const result = []
   let lastTimedIndex = -1
-  const rows = String(raw || '').replace(/\r\n?/g, '\n').split('\n')
+  const rows = text.replace(/\r\n?/g, '\n').split('\n')
 
   for (const rawRow of rows) {
     const row = rawRow.trim()
@@ -328,6 +397,24 @@ function parseLyrics(raw) {
   return result
 }
 
+function parseNekoInput(text) {
+  if (new Blob([text]).size > MAX_NEKO_BYTES) {
+    toast.error('NEKO 歌词不能超过 1MiB')
+    return null
+  }
+  try {
+    const document = JSON.parse(text)
+    if (!document || document.version !== 1 || !Array.isArray(document.lines)) {
+      toast.error('.neko 内容必须是 version 为 1 的 neko-v1 JSON')
+      return null
+    }
+    return document
+  } catch {
+    toast.error('无法解析 .neko JSON')
+    return null
+  }
+}
+
 function lrcTimestampSeconds(match) {
   const minutes = Number(match[1]) || 0
   const seconds = Number(match[2]) || 0
@@ -340,7 +427,7 @@ function withUid(line) {
   return {
     ...line,
     uid: ++lineSequence,
-    words: [],
+    words: Array.isArray(line.words) ? line.words.map((word) => ({ ...word })) : [],
   }
 }
 
@@ -384,18 +471,7 @@ function downloadNeko() {
   link.click()
   link.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-  toast.success(`已导出 ${output.fileName}`)
-}
-
-async function copyNeko() {
-  const output = createExport()
-  if (!output) return
-  try {
-    await navigator.clipboard.writeText(output.content)
-    toast.success('neko-v1 JSON 已复制')
-  } catch {
-    toast.error('复制失败，请使用浏览器下载按钮')
-  }
+  toast.success(`歌词已下载为 ${output.fileName}`)
 }
 
 function resetWorkspace() {
@@ -650,6 +726,13 @@ onBeforeUnmount(() => {
   font-size: var(--n-text-xs);
 }
 
+.lyrics-tool__lyrics-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--n-space-2);
+}
+
 .lyrics-tool__studio {
   margin-top: var(--n-space-4);
 }
@@ -795,6 +878,10 @@ onBeforeUnmount(() => {
   .lyrics-tool__lyrics-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .lyrics-tool__lyrics-buttons {
+    justify-content: flex-start;
   }
 
   .lyrics-tool__export-actions :deep(.n-btn) {
