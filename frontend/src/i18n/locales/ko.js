@@ -45,6 +45,7 @@ export default {
 
   footer: {
     linksAria: '바닥글 링크',
+    toolsLyr: '가사 타이밍 도구',
     downloadClient: '앱 받기',
     about: '회사 소개',
     privacy: '개인정보 처리방침',
@@ -179,6 +180,7 @@ export default {
 
   route: {
     home: '홈 - NekoMusic | 완전 무료 음악 플랫폼',
+    toolsLyr: '가사 타이밍 제작 도구 - NekoMusic',
     about: '회사 소개 - NekoMusic | 무료 음악 플랫폼',
     privacy: '개인정보 처리방침 - NekoMusic',
     download: '앱 받기 - NekoMusic | 무료 음악 앱',
@@ -659,8 +661,9 @@ export default {
     selectLyricsAria: '.lrc 또는 .neko 가사 파일 선택',
     chooseLyricsFile: '.lrc 또는 .neko 가사 파일 선택',
     removeLyricsAria: '가사 제거',
-    guideTitle: '이중 언어 가사 형식',
-    guideText: '첫 번째 줄은 “타임스탬프 + 원문”, 두 번째 줄은 JSON 번역입니다. 번역이 없으면 원문 줄만 남깁니다.',
+    makeNeko: '글자별 가사가 필요한가요? 타이밍 도구로 .neko 파일을 만드세요',
+    guideTitle: '가사 파일 형식',
+    guideText: 'LRC는 “타임스탬프 + 원문”과 다음 줄의 선택적 JSON 번역을 사용합니다. 글자별 가사는 .neko JSON 파일을 사용하세요.',
     guideLi1: '타임스탬프 형식:',
     guideLi2: '번역은',
     guideLi3: '번역이 없으면 원문 줄만 남겨도 됩니다',

@@ -45,6 +45,7 @@ export default {
 
   footer: {
     linksAria: 'フッターのリンク',
+    toolsLyr: '歌詞タイミングツール',
     downloadClient: 'アプリを入手',
     about: '運営について',
     privacy: 'プライバシーポリシー',
@@ -179,6 +180,7 @@ export default {
 
   route: {
     home: 'ホーム - NekoMusic | 完全無料の音楽プラットフォーム',
+    toolsLyr: '歌詞タイミング制作ツール - NekoMusic',
     about: '運営について - NekoMusic | 無料音楽プラットフォーム',
     privacy: 'プライバシーポリシー - NekoMusic',
     download: 'アプリを入手 - NekoMusic | 無料音楽アプリ',
@@ -659,8 +661,9 @@ export default {
     selectLyricsAria: '.lrc または .neko 歌詞ファイルを選択',
     chooseLyricsFile: '.lrc または .neko 歌詞ファイルを選択',
     removeLyricsAria: '歌詞を削除',
-    guideTitle: '二言語歌詞の形式',
-    guideText: '1行目は「タイムスタンプ＋原文」、2行目はJSON形式の翻訳です。翻訳がない場合は原文行のみを残します。',
+    makeNeko: '歌詞タイミングが必要ですか？ツールで .neko を作成できます',
+    guideTitle: '歌詞ファイル形式',
+    guideText: 'LRC は「タイムスタンプ＋原文」、次行に任意の JSON 翻訳を書けます。文字単位の歌詞は .neko JSON を使用してください。',
     guideLi1: 'タイムスタンプ形式：',
     guideLi2: '翻訳は',
     guideLi3: '翻訳がない場合は原文行のみで構いません',

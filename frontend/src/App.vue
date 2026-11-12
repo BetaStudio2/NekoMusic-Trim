@@ -37,7 +37,9 @@ const isDownloadPage = computed(() => route.name === 'download')
  * 此时底部停靠播放条必须让位——两者层级相同，否则会把全屏页压在下面。
  */
 const isPlayerPage = computed(() => route.name === 'detail')
-const isLyricsReportPage = computed(() => route.name === 'lyrics-report')
+const isLyricsToolPage = computed(() =>
+  route.name === 'lyrics-report' || route.name === 'tools-lyr'
+)
 
 /** 内容区全幅（去掉 main 内边距，由页面自行控制） */
 const isFlushMain = computed(() => !String(route.name || '').startsWith('admin'))
@@ -119,7 +121,7 @@ onMounted(() => {
 watch(
   () => route.name,
   (name) => {
-    if (name === 'lyrics-report') sendPlayerCommand('pause')
+    if (name === 'lyrics-report' || name === 'tools-lyr') sendPlayerCommand('pause')
   },
   { immediate: true },
 )
@@ -161,14 +163,14 @@ onUnmounted(() => {
 
     <div
       class="app-footer"
-      :class="{ 'app-footer--raised': hasTrack && !isDownloadPage && !isLyricsReportPage }"
+      :class="{ 'app-footer--raised': hasTrack && !isDownloadPage && !isLyricsToolPage }"
     >
       <SiteFooter v-if="!isDownloadPage" />
     </div>
 
     <div
       class="app-player"
-      :class="{ 'app-player--hidden': !hasTrack || isDownloadPage || isPlayerPage || isLyricsReportPage }"
+      :class="{ 'app-player--hidden': !hasTrack || isDownloadPage || isPlayerPage || isLyricsToolPage }"
     >
       <!-- 不能 v-if 卸载：<audio> 是唯一播放源，卸载即打断播放（含下载页） -->
       <GlobalPlayer :chrome-dark="isChromeDarkShell" />

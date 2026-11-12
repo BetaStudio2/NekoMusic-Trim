@@ -48,6 +48,7 @@ export default {
   footer: {
     linksAria: '页脚链接',
     lxmusicImport: '落雪歌单导入',
+    toolsLyr: '逐字歌词工具',
     downloadClient: '下载客户端',
     about: '关于我们',
     privacy: '隐私政策',
@@ -228,6 +229,7 @@ export default {
 
   route: {
     home: '首页 - Neko歌姬计划 | 落雪音乐 LXMC 歌单导入与免费在线音乐',
+    toolsLyr: '逐字歌词制作工具 - Neko歌姬计划',
     lxmusic: '落雪音乐 LX Music 歌单导入 - LXMC 文件迁移 | Neko歌姬计划',
     about: '关于我们 - Neko歌姬计划 | 免费音乐平台',
     privacy: '隐私政策 - Neko歌姬计划',
@@ -794,8 +796,9 @@ export default {
     selectLyricsAria: '选择 .lrc 或 .neko 歌词文件',
     chooseLyricsFile: '选择 .lrc 或 .neko 歌词文件',
     removeLyricsAria: '移除歌词',
-    guideTitle: '双语歌词格式说明',
-    guideText: '第一行为「时间戳 + 原文」，第二行为 JSON 翻译；没有翻译时只保留原文行。',
+    makeNeko: '需要逐字歌词？使用逐字歌词制作工具生成 .neko',
+    guideTitle: '歌词格式说明',
+    guideText: 'LRC 第一行为「时间戳 + 原文」，第二行可写 JSON 翻译；逐字歌词请使用 .neko JSON 文件。',
     guideLi1: '时间戳格式：',
     guideLi2: '翻译使用',
     guideLi3: '没有翻译可以只保留原文行',

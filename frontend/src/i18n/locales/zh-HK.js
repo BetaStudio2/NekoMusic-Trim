@@ -45,6 +45,7 @@ export default {
 
   footer: {
     linksAria: '頁尾連結',
+    toolsLyr: '逐字歌詞工具',
     downloadClient: '下載用戶端',
     about: '關於我們',
     privacy: '隱私權政策',
@@ -179,6 +180,7 @@ export default {
 
   route: {
     home: '首頁 - Neko歌姬計劃 | 完全免費的音樂平台',
+    toolsLyr: '逐字歌詞製作工具 - Neko歌姬計劃',
     about: '關於我們 - Neko歌姬計劃 | 免費音樂平台',
     privacy: '隱私權政策 - Neko歌姬計劃',
     download: '下載用戶端 - Neko歌姬計劃 | 免費音樂應用',
@@ -659,8 +661,9 @@ export default {
     selectLyricsAria: '選擇 .lrc 或 .neko 歌詞檔案',
     chooseLyricsFile: '選擇 .lrc 或 .neko 歌詞檔案',
     removeLyricsAria: '移除歌詞',
-    guideTitle: '雙語歌詞格式說明',
-    guideText: '第一行為「時間戳 + 原文」，第二行為 JSON 翻譯；沒有翻譯時只保留原文行。',
+    makeNeko: '需要逐字歌詞？使用逐字歌詞製作工具產生 .neko',
+    guideTitle: '歌詞格式說明',
+    guideText: 'LRC 第一行為「時間戳 + 原文」，第二行可寫 JSON 翻譯；逐字歌詞請使用 .neko JSON 檔案。',
     guideLi1: '時間戳格式：',
     guideLi2: '翻譯使用',
     guideLi3: '沒有翻譯可以只保留原文行',

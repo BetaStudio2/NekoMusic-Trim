@@ -1,4 +1,5 @@
 import { parseLyricsPayload } from '@/utils/lyrics.js'
+import { isTimingText } from '@/utils/timingUnits.js'
 
 export function toReportLines(music) {
   const parsed = parseLyricsPayload(music)
@@ -131,7 +132,7 @@ export function reportStats(lines) {
     translated: list.filter((line) => String(line.translation || '').trim()).length,
     words: list.reduce(
       (sum, line) => sum + (Array.isArray(line.words)
-        ? line.words.filter((word) => String(word.text || '').trim()).length
+        ? line.words.filter((word) => isTimingText(word.text)).length
         : 0),
       0,
     ),

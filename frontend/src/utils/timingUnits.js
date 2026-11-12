@@ -1,5 +1,5 @@
 /**
- * 逐字录入单位：拉丁字母/数字按单词聚合，日文假名与汉字按字拆分，
+ * 逐字录入单位：拉丁字母/数字按单词聚合，其它文字按字拆分，
  * 空格与标点附着在前一个单位上，避免英语逐字母点按。
  */
 export function splitTimingUnits(text) {
@@ -40,7 +40,7 @@ export function splitTimingUnits(text) {
       continue
     }
     flushWord()
-    if (/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(grapheme)) {
+    if (/\p{L}/u.test(grapheme)) {
       tokens.push({ text: leading + grapheme, startSec: null, endSec: null })
       leading = ''
     } else {
@@ -59,6 +59,16 @@ export function splitTimingUnits(text) {
 
 export function comparableLyricsText(value) {
   return String(value || '').replace(/\s+/gu, '')
+}
+
+/** 只有包含文字或数字的片段才允许成为打轴目标。 */
+export function isTimingText(value) {
+  return /[\p{L}\p{N}]/u.test(String(value || ''))
+}
+
+/** 目标提示去掉首尾空格与符号，保留单词内部符号（如 don't / well-known）。 */
+export function timingLabel(value) {
+  return String(value || '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
 }
 
 /**

@@ -116,11 +116,11 @@
           type="button"
           class="karaoke__tap"
           :class="{
-            'karaoke__tap--finish': cursor >= currentWords.length,
+            'karaoke__tap--finish': cursor >= targetWords.length,
             'karaoke__tap--playing': isPlaying,
             'karaoke__tap--hit': tapPulse,
           }"
-          :disabled="!isPlaying || finished || !currentLine"
+          :disabled="!isPlaying || finished || !currentLine || !targetWords.length"
           @click="tap"
         >
           <NIcon name="music-2" :size="24" />
@@ -170,7 +170,7 @@
                 v-for="(word, wordIndex) in line.words"
                 :key="wordIndex"
                 class="karaoke-segment"
-                :class="segmentClass(line, lineIndex, word, wordIndex)"
+                :class="segmentClass(line, lineIndex, word)"
               >{{ wordText(word) }}</span>
             </template>
             <template v-else>{{ line.text }}</template>
@@ -189,7 +189,13 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import NIcon from '@/icons/NIcon.vue'
 import { NButton } from '@/ui'
-import { comparableLyricsText, remapTimingUnits, splitTimingUnits } from '@/utils/timingUnits'
+import {
+  comparableLyricsText,
+  isTimingText,
+  remapTimingUnits,
+  splitTimingUnits,
+  timingLabel,
+} from '@/utils/timingUnits'
 
 const props = defineProps({
   lines: { type: Array, required: true },
@@ -213,24 +219,30 @@ const tapPulse = ref(false)
 
 const currentLine = computed(() => props.lines[activeLineIndex.value] || null)
 const currentWords = computed(() => currentLine.value?.words || [])
+const targetWords = computed(() => currentWords.value.filter((word) => isTimingText(wordText(word))))
 const targetLabel = computed(() => {
   if (finished.value) return '全部完成'
-  if (!currentWords.value.length) return '请先重新拆分本行'
-  if (cursor.value >= currentWords.value.length) return '结束本行'
-  return `「${wordText(currentWords.value[cursor.value]).trim()}」`
+  if (!targetWords.value.length) return '本行没有可记录文本'
+  if (cursor.value >= targetWords.value.length) return '结束本行'
+  return `「${timingLabel(wordText(targetWords.value[cursor.value]))}」`
 })
 const tapLabel = computed(() => {
   if (finished.value) return '已完成'
   if (!isPlaying.value) return '先播放音乐'
-  if (cursor.value >= currentWords.value.length) return '结束本行'
+  if (!targetWords.value.length) return '本行无文本'
+  if (cursor.value >= targetWords.value.length) return '结束本行'
   return '点我记录'
 })
 
 onMounted(() => {
   props.lines.forEach(ensureSegments)
-  const firstIncomplete = props.lines.findIndex((line) =>
-    !line.words.length || line.words.some((word) => !Number.isFinite(Number(word.startSec))))
-  selectLine(firstIncomplete >= 0 ? firstIncomplete : 0)
+  const firstIncomplete = props.lines.findIndex((line) => {
+    const targets = line.words.filter((word) => isTimingText(word.text))
+    return targets.length > 0 && targets.some((word) => !Number.isFinite(Number(word.startSec)))
+  })
+  const firstWithText = props.lines.findIndex((line) =>
+    line.words.some((word) => isTimingText(word.text)))
+  selectLine(firstIncomplete >= 0 ? firstIncomplete : Math.max(0, firstWithText))
 })
 
 watch(() => props.lines.length, () => {
@@ -345,7 +357,7 @@ function tap() {
     tapPulse.value = false
   }, 140)
   const now = Number(audioRef.value?.currentTime) || 0
-  const words = line.words
+  const words = targetWords.value
   if (!words.length) return
   if (cursor.value < words.length) {
     if (cursor.value === 0) {
@@ -386,12 +398,12 @@ function resplitLine() {
   emit('change')
 }
 
-function segmentClass(line, lineIndex, word, wordIndex) {
+function segmentClass(line, lineIndex, word) {
   if (lineIndex !== activeLineIndex.value) {
     return { 'karaoke-segment--timed': Number.isFinite(Number(word.startSec)) }
   }
   return {
-    'karaoke-segment--target': wordIndex === cursor.value,
+    'karaoke-segment--target': word === targetWords.value[cursor.value],
     'karaoke-segment--played': Number.isFinite(Number(word.startSec))
       && currentTime.value >= Number(word.startSec),
     'karaoke-segment--timed': Number.isFinite(Number(word.startSec)),

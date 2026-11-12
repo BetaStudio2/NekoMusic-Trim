@@ -78,6 +78,16 @@ const router = createRouter({
       }
     },
     {
+      path: '/tools-lyr',
+      name: 'tools-lyr',
+      component: () => import('@/views/ToolsLyrView.vue'),
+      meta: {
+        title: '逐字歌词制作工具 - Neko歌姬计划',
+        description: '在浏览器本地选择音乐、粘贴或输入歌词，通过逐字打轴制作并导出 neko-v1 格式的 .neko 逐字歌词文件。音频与歌词不会上传服务器。',
+        keywords: '逐字歌词,歌词制作,歌词打轴,LRC转逐字,neko-v1,.neko,歌词时间轴,在线歌词工具'
+      }
+    },
+    {
       path: '/about',
       name: 'about',
       component: () => import('@/views/AboutView.vue'),
@@ -465,6 +475,7 @@ const NOINDEX_PREFIXES = [
 const ROUTE_TITLE_KEYS = {
   home: 'route.home',
   lxmusic: 'route.lxmusic',
+  'tools-lyr': 'route.toolsLyr',
   about: 'route.about',
   privacy: 'route.privacy',
   download: 'route.download',

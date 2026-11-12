@@ -71,6 +71,11 @@
             </template>
           </div>
 
+          <RouterLink to="/tools-lyr" class="lyrics-maker-link">
+            <NIcon name="sparkles" :size="15" />
+            {{ $t('upload.makeNeko') }}
+          </RouterLink>
+
           <!-- 格式说明常驻展开：说明本身是使用前提，不做折叠 -->
           <section class="guide">
             <h3 class="guide__title">{{ $t('upload.guideTitle') }}</h3>
@@ -1169,6 +1174,22 @@ const handleSubmit = async () => {
   font-weight: var(--n-weight-medium);
   max-width: 100%;
   overflow-wrap: anywhere;
+}
+
+.lyrics-maker-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--n-space-3);
+  color: var(--n-accent-strong);
+  font-size: var(--n-text-xs);
+  font-weight: var(--n-weight-medium);
+}
+
+@media (hover: hover) {
+  .lyrics-maker-link:hover {
+    color: var(--n-accent);
+  }
 }
 
 .cover-preview {

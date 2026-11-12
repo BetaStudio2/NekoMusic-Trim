@@ -47,6 +47,7 @@ export default {
   footer: {
     linksAria: 'Footer links',
     lxmusicImport: 'LX Music import',
+    toolsLyr: 'Lyrics timing tool',
     downloadClient: 'Get the app',
     about: 'About us',
     privacy: 'Privacy policy',
@@ -227,6 +228,7 @@ export default {
 
   route: {
     home: 'Home - NekoMusic | LX Music LXMC playlist import and free online music',
+    toolsLyr: 'Word-by-word lyrics maker - NekoMusic',
     lxmusic: 'LX Music playlist import - LXMC migration | NekoMusic',
     about: 'About us - NekoMusic | Free music platform',
     privacy: 'Privacy policy - NekoMusic',
@@ -750,8 +752,9 @@ export default {
     selectLyricsAria: 'Choose an .lrc or .neko lyrics file',
     chooseLyricsFile: 'Choose an .lrc or .neko lyrics file',
     removeLyricsAria: 'Remove lyrics',
-    guideTitle: 'Bilingual lyrics format',
-    guideText: 'The first line is “timestamp + original text”, the second is a JSON translation; if there is no translation, keep only the original line.',
+    makeNeko: 'Need word-by-word lyrics? Create a .neko file with the lyrics timing tool',
+    guideTitle: 'Lyrics format',
+    guideText: 'For LRC, use “timestamp + original text” and an optional JSON translation on the next line. Use a .neko JSON file for word-by-word lyrics.',
     guideLi1: 'Timestamp format:',
     guideLi2: 'Translations use',
     guideLi3: 'With no translation, keep only the original line',
