@@ -1,6 +1,7 @@
 <template>
   <div class="karaoke">
-    <div class="karaoke__dock">
+    <Teleport to="body" :disabled="!teleportMobileDock">
+      <div class="karaoke__dock">
       <div class="karaoke__player karaoke__player--desktop">
         <button
           type="button"
@@ -37,14 +38,13 @@
         </div>
         <label class="karaoke__speed">
           <span>倍速</span>
-          <select v-model.number="playbackRate" @change="applyPlaybackRate">
-            <option :value="0.5">0.5×</option>
-            <option :value="0.75">0.75×</option>
-            <option :value="1">1×</option>
-            <option :value="1.25">1.25×</option>
-            <option :value="1.5">1.5×</option>
-            <option :value="2">2×</option>
-          </select>
+          <NSelect
+            v-model="playbackRate"
+            :options="speedOptions"
+            class="karaoke__speed-select"
+            aria-label="播放倍速"
+            @change="applyPlaybackRate"
+          />
         </label>
       </div>
 
@@ -97,14 +97,13 @@
           </div>
           <label class="karaoke__speed">
             <span>倍速</span>
-            <select v-model.number="playbackRate" @change="applyPlaybackRate">
-              <option :value="0.5">0.5×</option>
-              <option :value="0.75">0.75×</option>
-              <option :value="1">1×</option>
-              <option :value="1.25">1.25×</option>
-              <option :value="1.5">1.5×</option>
-              <option :value="2">2×</option>
-            </select>
+            <NSelect
+              v-model="playbackRate"
+              :options="speedOptions"
+              class="karaoke__speed-select"
+              aria-label="播放倍速"
+              @change="applyPlaybackRate"
+            />
           </label>
         </div>
 
@@ -134,7 +133,8 @@
           </NButton>
         </div>
       </div>
-    </div>
+      </div>
+    </Teleport>
 
     <div class="karaoke__guide">
       <div>
@@ -182,9 +182,9 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import NIcon from '@/icons/NIcon.vue'
-import { NButton } from '@/ui'
+import { NButton, NSelect } from '@/ui'
 import {
   comparableLyricsText,
   isTimingText,
@@ -211,6 +211,16 @@ const activeLineIndex = ref(0)
 const cursor = ref(0)
 const finished = ref(false)
 const tapPulse = ref(false)
+const teleportMobileDock = ref(false)
+let mobileQuery = null
+const speedOptions = [
+  { value: 0.5, label: '0.5×' },
+  { value: 0.75, label: '0.75×' },
+  { value: 1, label: '1×' },
+  { value: 1.25, label: '1.25×' },
+  { value: 1.5, label: '1.5×' },
+  { value: 2, label: '2×' },
+]
 
 const currentLine = computed(() => props.lines[activeLineIndex.value] || null)
 const currentWords = computed(() => currentLine.value?.words || [])
@@ -224,6 +234,9 @@ const tapLabel = computed(() => {
 })
 
 onMounted(() => {
+  mobileQuery = window.matchMedia('(max-width: 720px)')
+  teleportMobileDock.value = mobileQuery.matches
+  mobileQuery.addEventListener?.('change', syncMobileDock)
   props.lines.forEach(ensureSegments)
   const firstIncomplete = props.lines.findIndex((line) => {
     const targets = line.words.filter((word) => isTimingText(word.text))
@@ -233,6 +246,14 @@ onMounted(() => {
     line.words.some((word) => isTimingText(word.text)))
   selectLine(firstIncomplete >= 0 ? firstIncomplete : Math.max(0, firstWithText))
 })
+
+onBeforeUnmount(() => {
+  mobileQuery?.removeEventListener?.('change', syncMobileDock)
+})
+
+function syncMobileDock(event) {
+  teleportMobileDock.value = event.matches
+}
 
 watch(() => props.lines.length, () => {
   if (activeLineIndex.value >= props.lines.length) {
@@ -495,14 +516,15 @@ function formatTime(seconds) {
   font-size: var(--n-text-sm);
 }
 
-.karaoke__speed select {
-  height: 32px;
+.karaoke__speed-select {
+  width: 88px;
+  flex: none;
+}
+
+.karaoke__speed :deep(.n-select__trigger) {
   min-width: 84px;
+  min-height: 32px;
   padding: 0 10px;
-  border: 1px solid var(--n-line);
-  border-radius: var(--n-radius-control);
-  background: var(--n-surface-soft);
-  color: var(--n-text);
 }
 
 .karaoke__guide {
@@ -740,9 +762,14 @@ function formatTime(seconds) {
     display: none;
   }
 
-  .karaoke__speed select {
+  .karaoke__speed-select {
     min-width: 72px;
-    height: 30px;
+    width: 72px;
+  }
+
+  .karaoke__speed :deep(.n-select__trigger) {
+    min-width: 72px;
+    min-height: 30px;
   }
 
   .karaoke__guide {

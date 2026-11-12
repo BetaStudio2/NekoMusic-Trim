@@ -33,14 +33,13 @@
         </div>
         <label class="preview__speed">
           <span>倍速</span>
-          <select v-model.number="playbackRate" @change="applyPlaybackRate">
-            <option :value="0.5">0.5×</option>
-            <option :value="0.75">0.75×</option>
-            <option :value="1">1×</option>
-            <option :value="1.25">1.25×</option>
-            <option :value="1.5">1.5×</option>
-            <option :value="2">2×</option>
-          </select>
+          <NSelect
+            v-model="playbackRate"
+            :options="speedOptions"
+            class="preview__speed-select"
+            aria-label="播放倍速"
+            @change="applyPlaybackRate"
+          />
         </label>
       </div>
 
@@ -77,6 +76,7 @@
 import { computed, ref, watch } from 'vue'
 import NIcon from '@/icons/NIcon.vue'
 import LyricsWall from '@/components/LyricsWall.vue'
+import { NSelect } from '@/ui'
 
 const props = defineProps({
   lines: { type: Array, required: true },
@@ -94,6 +94,14 @@ const currentTime = ref(0)
 const duration = ref(0)
 const playbackRate = ref(1)
 const audioError = ref(false)
+const speedOptions = [
+  { value: 0.5, label: '0.5×' },
+  { value: 0.75, label: '0.75×' },
+  { value: 1, label: '1×' },
+  { value: 1.25, label: '1.25×' },
+  { value: 1.5, label: '1.5×' },
+  { value: 2, label: '2×' },
+]
 
 const amllLines = computed(() => props.lines.map((line, index) => {
   const next = props.lines[index + 1]
@@ -279,14 +287,15 @@ function formatTime(seconds) {
   font-size: var(--n-text-sm);
 }
 
-.preview__speed select {
-  height: 32px;
+.preview__speed-select {
+  width: 88px;
+  flex: none;
+}
+
+.preview__speed :deep(.n-select__trigger) {
   min-width: 84px;
+  min-height: 32px;
   padding: 0 10px;
-  border: 1px solid var(--n-line);
-  border-radius: var(--n-radius-control);
-  background: var(--n-surface-soft);
-  color: var(--n-text);
 }
 
 .preview__hint {
