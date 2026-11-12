@@ -86,20 +86,20 @@ public class MusicCoverHandler extends HttpServlet {
     private void sendEmbeddedCover(HttpServletRequest request, CoverArtCache.Snapshot cover,
                                    int size, HttpServletResponse response) throws IOException {
         String etag = "\"c-" + cover.etag() + (size > 0 ? "-" + size : "") + "\"";
-        if (HttpResourceCache.sendNotModifiedIfFresh(request, response, etag)) {
+        if (HttpResourceCache.sendNotModifiedIfFresh(request, response, etag, HttpResourceCache.CACHE_CONTROL_COVER)) {
             return;
         }
         if (size > 0) {
             Optional<Path> thumb = CoverThumbnails.fromBytes(cover.data(), cover.etag(), size);
             if (thumb.isPresent()) {
-                sendImageFile(request, thumb.get(), response);
+                sendImageFile(request, thumb.get(), response, HttpResourceCache.CACHE_CONTROL_COVER);
                 return;
             }
         }
         response.setStatus(HttpStatus.OK_200);
         response.setContentType(cover.mime());
         response.setHeader("ETag", etag);
-        response.setHeader("Cache-Control", HttpResourceCache.CACHE_CONTROL_FILE);
+        response.setHeader("Cache-Control", HttpResourceCache.CACHE_CONTROL_COVER);
         response.setContentLength(cover.data().length);
         try (OutputStream outputStream = response.getOutputStream()) {
             outputStream.write(cover.data());
@@ -112,17 +112,18 @@ public class MusicCoverHandler extends HttpServlet {
         }
     }
 
-    private void sendImageFile(HttpServletRequest request, Path imagePath, HttpServletResponse response) throws IOException {
+    private void sendImageFile(HttpServletRequest request, Path imagePath, HttpServletResponse response,
+                               String cacheControl) throws IOException {
         // ETag、Last-Modified、Content-Length 都来自这一次 stat；304 分支到此为止，不打开文件
         BasicFileAttributes attrs = Files.readAttributes(imagePath, BasicFileAttributes.class);
-        if (HttpResourceCache.sendNotModifiedIfFresh(request, response, HttpResourceCache.etagFor(attrs))) {
+        if (HttpResourceCache.sendNotModifiedIfFresh(request, response, HttpResourceCache.etagFor(attrs), cacheControl)) {
             return;
         }
 
         String mimeType = getMimeType(imagePath.toString());
         response.setContentType(mimeType);
         response.setStatus(HttpStatus.OK_200);
-        HttpResourceCache.applyFileCachingHeaders(attrs, response, HttpResourceCache.CACHE_CONTROL_FILE);
+        HttpResourceCache.applyFileCachingHeaders(attrs, response, cacheControl);
         response.setContentLengthLong(attrs.size());
         
         try (InputStream inputStream = Files.newInputStream(imagePath);
@@ -141,11 +142,11 @@ public class MusicCoverHandler extends HttpServlet {
         if (size > 0) {
             Optional<Path> thumb = CoverThumbnails.fromResource("DefaultIcon.png", size);
             if (thumb.isPresent()) {
-                sendImageFile(request, thumb.get(), response);
+                sendImageFile(request, thumb.get(), response, HttpResourceCache.CACHE_CONTROL_COVER);
                 return;
             }
         }
-        if (HttpResourceCache.sendNotModifiedDefaultIcon(request, response)) {
+        if (HttpResourceCache.sendNotModifiedDefaultIcon(request, response, HttpResourceCache.CACHE_CONTROL_COVER)) {
             return;
         }
 
@@ -159,7 +160,7 @@ public class MusicCoverHandler extends HttpServlet {
 
         response.setContentType("image/png");
         response.setStatus(HttpStatus.OK_200);
-        HttpResourceCache.applyDefaultIconCachingHeaders(response);
+        HttpResourceCache.applyDefaultIconCachingHeaders(response, HttpResourceCache.CACHE_CONTROL_COVER);
 
         try (InputStream inputStream = defaultIconStream;
              OutputStream outputStream = response.getOutputStream()) {

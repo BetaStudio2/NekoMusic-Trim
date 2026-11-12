@@ -44,6 +44,9 @@ public final class HttpResourceCache {
      */
     public static final String CACHE_CONTROL_PRIVATE_REVALIDATE = "private, max-age=0, must-revalidate";
 
+    /** 同一 URL 的曲库封面可被管理员替换，必须每次使用前由浏览器 / CDN 再校验。 */
+    public static final String CACHE_CONTROL_COVER = "public, max-age=0, must-revalidate";
+
     /** 内嵌默认图标，内容不变 */
     public static final String DEFAULT_ICON_ETAG = "\"DefaultIcon-v1\"";
     public static final String CACHE_CONTROL_DEFAULT_ICON =
@@ -141,12 +144,17 @@ public final class HttpResourceCache {
     }
 
     public static boolean sendNotModifiedDefaultIcon(HttpServletRequest request, HttpServletResponse response) {
+        return sendNotModifiedDefaultIcon(request, response, CACHE_CONTROL_DEFAULT_ICON);
+    }
+
+    public static boolean sendNotModifiedDefaultIcon(HttpServletRequest request, HttpServletResponse response,
+                                                     String cacheControl) {
         if (!ifNoneMatchEquals(request, DEFAULT_ICON_ETAG)) {
             return false;
         }
         response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
         response.setHeader("ETag", DEFAULT_ICON_ETAG);
-        response.setHeader("Cache-Control", CACHE_CONTROL_DEFAULT_ICON);
+        response.setHeader("Cache-Control", cacheControl);
         return true;
     }
 

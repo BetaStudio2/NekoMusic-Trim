@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class MusicAdMetadataPatcherTest {
@@ -108,6 +109,22 @@ class MusicAdMetadataPatcherTest {
         assertTrue(lyrics.contains("[00:30.00]FLAC歌词"));
     }
 
+    @Test
+    void syncLibraryMetadata_id3v23WritesReadableArtwork(@TempDir Path dir) throws Exception {
+        assumeTrue(hasFfmpeg(), "需要 ffmpeg 生成测试 MP3");
+
+        Path mp3 = dir.resolve("sync-v23.mp3");
+        runFfmpeg(mp3, "mp3", true);
+        Path cover = writePng(dir.resolve("cover-v23.png"));
+
+        MusicAdMetadataPatcher.syncLibraryMetadata(mp3, new MusicAdMetadataPatcher.LibraryMetadata(
+                "标题", "歌手", "专辑", "[00:20.00]曲库歌词", cover));
+
+        EmbeddedCoverReader.Cover embedded = EmbeddedCoverReader.read(mp3).orElseThrow();
+        assertArrayEquals(Files.readAllBytes(cover), embedded.data());
+        assertEquals("image/png", embedded.mime());
+    }
+
     private static int countOccurrences(String text, String needle) {
         int count = 0;
         int index = 0;
@@ -167,12 +184,23 @@ class MusicAdMetadataPatcherTest {
     }
 
     private static void runFfmpeg(Path out, String codec) throws Exception {
-        Process p = new ProcessBuilder(
+        runFfmpeg(out, codec, false);
+    }
+
+    private static void runFfmpeg(Path out, String codec, boolean id3v23) throws Exception {
+        ProcessBuilder builder = new ProcessBuilder(
                 "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                 "-f", "lavfi", "-i", "sine=frequency=440:duration=0.2",
                 "-acodec", codec.equals("mp3") ? "libmp3lame" : codec,
                 out.toString()
-        ).start();
+        );
+        if (id3v23) {
+            builder.command().add(builder.command().size() - 1, "-write_id3v2");
+            builder.command().add(builder.command().size() - 1, "1");
+            builder.command().add(builder.command().size() - 1, "-id3v2_version");
+            builder.command().add(builder.command().size() - 1, "3");
+        }
+        Process p = builder.start();
         assumeTrue(p.waitFor(30, TimeUnit.SECONDS) && p.exitValue() == 0);
         assumeTrue(Files.size(out) > 0);
     }

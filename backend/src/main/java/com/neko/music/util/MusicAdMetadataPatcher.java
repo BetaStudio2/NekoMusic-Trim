@@ -15,6 +15,9 @@ import org.jaudiotagger.tag.flac.FlacTag;
 import org.jaudiotagger.tag.images.Artwork;
 import org.jaudiotagger.tag.images.ArtworkFactory;
 import org.jaudiotagger.tag.id3.AbstractID3v2Tag;
+import org.jaudiotagger.tag.id3.AbstractID3v2Frame;
+import org.jaudiotagger.tag.id3.ID3v23Frame;
+import org.jaudiotagger.tag.id3.ID3v23Tag;
 import org.jaudiotagger.tag.id3.ID3v24Frame;
 import org.jaudiotagger.tag.id3.ID3v24Frames;
 import org.jaudiotagger.tag.id3.framebody.FrameBodyCOMM;
@@ -392,7 +395,7 @@ public final class MusicAdMetadataPatcher {
         tag.deleteField(FieldKey.COMMENT);
         if (tag instanceof AbstractID3v2Tag id3) {
             stripId3Frames(id3, ID3v24Frames.FRAME_ID_COMMENT);
-            ID3v24Frame comm = new ID3v24Frame(ID3v24Frames.FRAME_ID_COMMENT);
+            AbstractID3v2Frame comm = newId3Frame(id3, ID3v24Frames.FRAME_ID_COMMENT);
             comm.setBody(new FrameBodyCOMM((byte) 3, "zho", "", COMMENT));
             id3.setFrame(comm);
         } else if (tag instanceof FlacTag flacTag) {
@@ -406,13 +409,24 @@ public final class MusicAdMetadataPatcher {
         stripId3TxxxOrganization(id3);
         stripId3Frames(id3, ID3v24Frames.FRAME_ID_PUBLISHER);
 
-        ID3v24Frame tpub = new ID3v24Frame(ID3v24Frames.FRAME_ID_PUBLISHER);
+        AbstractID3v2Frame tpub = newId3Frame(id3, ID3v24Frames.FRAME_ID_PUBLISHER);
         tpub.setBody(new FrameBodyTPUB((byte) 3, PUBLISHER));
         id3.setFrame(tpub);
 
-        ID3v24Frame org = new ID3v24Frame(ID3v24Frames.FRAME_ID_USER_DEFINED_INFO);
+        AbstractID3v2Frame org = newId3Frame(id3, ID3v24Frames.FRAME_ID_USER_DEFINED_INFO);
         org.setBody(new FrameBodyTXXX((byte) 3, "ORGANIZATION", ORGANIZATION));
         id3.setFrame(org);
+    }
+
+    /**
+     * ID3v2.3 与 v2.4 的帧头长度和大小编码不同。v2.3 文件必须使用 v2.3 帧，
+     * 否则 JAudiotagger 会把后续帧写进前一帧的声明范围内，导致封面等标签整体损坏。
+     */
+    private static AbstractID3v2Frame newId3Frame(AbstractID3v2Tag id3, String frameId) {
+        if (id3 instanceof ID3v23Tag) {
+            return new ID3v23Frame(frameId);
+        }
+        return new ID3v24Frame(frameId);
     }
 
     private static void stripId3Frames(AbstractID3v2Tag id3, String frameId) {
@@ -452,7 +466,7 @@ public final class MusicAdMetadataPatcher {
         }
         stripId3Frames(id3, ID3v24Frames.FRAME_ID_UNSYNC_LYRICS);
         String text = mergeLyricsWithBanner(existing);
-        ID3v24Frame uslt = new ID3v24Frame(ID3v24Frames.FRAME_ID_UNSYNC_LYRICS);
+        AbstractID3v2Frame uslt = newId3Frame(id3, ID3v24Frames.FRAME_ID_UNSYNC_LYRICS);
         uslt.setBody(new FrameBodyUSLT((byte) 3, "zho", "", text));
         id3.setFrame(uslt);
     }

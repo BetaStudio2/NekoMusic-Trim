@@ -12,8 +12,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -103,6 +105,41 @@ class EmbeddedCoverReaderTest {
         assertEquals("image/webp", cover.mime());
     }
 
+    @Test
+    void recoversArtworkSwallowedByMalformedPreviousFrameSize() throws Exception {
+        ByteArrayOutputStream image = new ByteArrayOutputStream();
+        ImageIO.write(new BufferedImage(8, 8, BufferedImage.TYPE_INT_RGB), "png", image);
+
+        ByteArrayOutputStream apicBody = new ByteArrayOutputStream();
+        apicBody.write(0); // ISO-8859-1
+        apicBody.write("image/png".getBytes(StandardCharsets.ISO_8859_1));
+        apicBody.write(0);
+        apicBody.write(3); // front cover
+        apicBody.write(0); // empty description
+        apicBody.write(image.toByteArray());
+        byte[] apicFrame = frame("APIC", apicBody.toByteArray());
+
+        ByteArrayOutputStream malformedCommentBody = new ByteArrayOutputStream();
+        malformedCommentBody.write(new byte[]{0, 'x'});
+        malformedCommentBody.write(apicFrame);
+        byte[] commentBody = malformedCommentBody.toByteArray();
+
+        ByteArrayOutputStream tagBody = new ByteArrayOutputStream();
+        tagBody.write(frameHeader("COMM", commentBody.length));
+        tagBody.write(commentBody);
+
+        ByteArrayOutputStream audio = new ByteArrayOutputStream();
+        audio.write(new byte[]{'I', 'D', '3', 3, 0, 0});
+        audio.write(syncSafe(tagBody.size()));
+        audio.write(tagBody.toByteArray());
+        Path file = tempDir.resolve("malformed.mp3");
+        Files.write(file, audio.toByteArray());
+
+        EmbeddedCoverReader.Cover cover = EmbeddedCoverReader.read(file).orElseThrow();
+        assertArrayEquals(image.toByteArray(), cover.data());
+        assertEquals("image/png", cover.mime());
+    }
+
     private Path createAudio(String format) throws Exception {
         Path audio = tempDir.resolve("sample." + format);
         String codec = switch (format) {
@@ -132,6 +169,39 @@ class EmbeddedCoverReaderTest {
         Tag tag = audio.getTagOrCreateAndSetDefault();
         tag.setField(ArtworkFactory.createArtworkFromFile(imagePath.toFile()));
         AudioFileIO.write(audio);
+    }
+
+    private static byte[] frame(String id, byte[] body) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.writeBytes(frameHeader(id, body.length));
+        out.writeBytes(body);
+        return out.toByteArray();
+    }
+
+    private static byte[] frameHeader(String id, int size) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.writeBytes(id.getBytes(StandardCharsets.ISO_8859_1));
+        out.writeBytes(bigEndian(size));
+        out.writeBytes(new byte[]{0, 0});
+        return out.toByteArray();
+    }
+
+    private static byte[] syncSafe(int value) {
+        return new byte[]{
+                (byte) ((value >> 21) & 0x7f),
+                (byte) ((value >> 14) & 0x7f),
+                (byte) ((value >> 7) & 0x7f),
+                (byte) (value & 0x7f)
+        };
+    }
+
+    private static byte[] bigEndian(int value) {
+        return new byte[]{
+                (byte) (value >>> 24),
+                (byte) (value >>> 16),
+                (byte) (value >>> 8),
+                (byte) value
+        };
     }
 
     private static boolean hasFfmpeg() {

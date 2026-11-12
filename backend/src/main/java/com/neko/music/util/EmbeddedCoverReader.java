@@ -84,12 +84,18 @@ public final class EmbeddedCoverReader {
         if ((flags & 0x80) != 0) {
             body = deUnsynchronise(body);
         }
-        return switch (major) {
+        Optional<Cover> cover = switch (major) {
             case 2 -> scanFrames(body, 2, flags);
             case 3 -> scanFrames(body, 3, flags);
             case 4 -> scanFrames(body, 4, flags);
             default -> Optional.empty();
         };
+        if (cover.isPresent()) {
+            return cover;
+        }
+        // 部分旧版写入器会错误声明前一帧长度，使 APIC 落在前一帧范围内。
+        // 正常遍历找不到封面时，再按帧头签名做一次严格校验的兜底扫描。
+        return scanPictureFrameBytes(body, major);
     }
 
     /**
@@ -144,6 +150,51 @@ public final class EmbeddedCoverReader {
             pos += headerLen + size;
         }
         return Optional.empty();
+    }
+
+    private static Optional<Cover> scanPictureFrameBytes(byte[] body, int major) {
+        if (major < 2 || major > 4) {
+            return Optional.empty();
+        }
+        byte[] magic = (major == 2 ? "PIC" : "APIC").getBytes(StandardCharsets.US_ASCII);
+        int headerLen = major == 2 ? 6 : 10;
+        int from = 0;
+        while (from + magic.length + headerLen <= body.length) {
+            int pos = indexOf(body, magic, from);
+            if (pos < 0) {
+                return Optional.empty();
+            }
+            int size = major == 2 ? bigEndian24(body, pos + 3)
+                    : major == 4 ? syncSafe32(body, pos + 4)
+                    : bigEndian32(body, pos + 4);
+            int frameStart = pos + headerLen;
+            if (size > 0 && frameStart + size <= body.length) {
+                Optional<Cover> cover = parsePictureFrame(
+                        Arrays.copyOfRange(body, frameStart, frameStart + size), major == 2);
+                if (cover.isPresent()) {
+                    return cover;
+                }
+            }
+            from = pos + 1;
+        }
+        return Optional.empty();
+    }
+
+    private static int indexOf(byte[] source, byte[] needle, int from) {
+        int last = source.length - needle.length;
+        for (int i = Math.max(0, from); i <= last; i++) {
+            boolean match = true;
+            for (int j = 0; j < needle.length; j++) {
+                if (source[i + j] != needle[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** APIC：编码 / MIME / 图片类型 / 描述 / 图片数据；PIC 的 MIME 位置换成了 3 字节格式名。 */
