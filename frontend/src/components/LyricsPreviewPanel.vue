@@ -46,7 +46,7 @@
 
       <div class="preview__hint">
         <NIcon name="eye" :size="17" />
-        <p>这是提交后的歌词效果预览。播放音乐时当前行会自动跟随，点击任意歌词行可跳转。</p>
+        <p>{{ hint }}</p>
       </div>
     </aside>
 
@@ -82,6 +82,10 @@ const props = defineProps({
   lines: { type: Array, required: true },
   audioUrl: { type: String, required: true },
   audioLoading: { type: Boolean, default: false },
+  hint: {
+    type: String,
+    default: '这是提交后的歌词效果预览。播放音乐时当前行会自动跟随，点击任意歌词行可跳转。',
+  },
 })
 
 const audioRef = ref(null)

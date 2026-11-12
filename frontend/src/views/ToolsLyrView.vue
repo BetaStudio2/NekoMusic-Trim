@@ -116,11 +116,43 @@
           <span :style="{ width: `${timingStats.progress * 100}%` }" />
         </div>
 
+        <div class="lyrics-tool__modes" role="tablist" aria-label="逐字歌词工作区">
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="activeStudioTab === 'timing'"
+            :class="{ 'lyrics-tool__mode--active': activeStudioTab === 'timing' }"
+            @click="activeStudioTab = 'timing'"
+          >
+            <NIcon name="music-2" :size="15" />
+            逐字打轴
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="activeStudioTab === 'preview'"
+            :class="{ 'lyrics-tool__mode--active': activeStudioTab === 'preview' }"
+            @click="activeStudioTab = 'preview'"
+          >
+            <NIcon name="eye" :size="15" />
+            效果预览
+          </button>
+        </div>
+
         <KaraokeTimingEditor
+          v-if="activeStudioTab === 'timing'"
           :lines="lines"
           :audio-url="audioUrl"
           :audio-loading="false"
           @change="timingRevision += 1"
+        />
+
+        <LyricsPreviewPanel
+          v-else
+          :lines="lines"
+          :audio-url="audioUrl"
+          :audio-loading="false"
+          hint="这是本地歌词效果预览。播放音乐后可检查逐字高亮、滚动和行间衔接。"
         />
 
         <footer class="lyrics-tool__export">
@@ -165,6 +197,7 @@ import { buildNekoDocument, toReportLines } from '@/utils/lyricsReport'
 import { isTimingText } from '@/utils/timingUnits'
 import { AmbientBackdrop, PageShell } from '@/layouts'
 import KaraokeTimingEditor from '@/components/KaraokeTimingEditor.vue'
+import LyricsPreviewPanel from '@/components/LyricsPreviewPanel.vue'
 
 const MAX_NEKO_BYTES = 1024 * 1024
 const MAX_LRC_BYTES = 200 * 1024
@@ -183,6 +216,7 @@ const audioDragging = ref(false)
 const lyricsText = ref('')
 const lines = ref([])
 const timingRevision = ref(0)
+const activeStudioTab = ref('timing')
 
 let lineSequence = 0
 
@@ -316,6 +350,7 @@ function applyLyrics() {
   }
   lines.value = parsed
   timingRevision.value += 1
+  activeStudioTab.value = 'timing'
   toast.success(`已生成 ${parsed.length} 行歌词，开始播放并逐字打轴吧`)
 }
 
@@ -481,6 +516,7 @@ function resetWorkspace() {
   lines.value = []
   lyricsText.value = ''
   timingRevision.value += 1
+  activeStudioTab.value = 'timing'
   if (audioUrl.value) URL.revokeObjectURL(audioUrl.value)
   audioUrl.value = ''
   audioFile.value = null
@@ -775,6 +811,36 @@ onBeforeUnmount(() => {
   border-radius: inherit;
   background: linear-gradient(90deg, var(--n-accent), var(--n-accent-strong));
   transition: width var(--n-duration) var(--n-ease);
+}
+
+.lyrics-tool__modes {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: var(--n-space-4);
+  padding: 4px;
+  border: 1px solid var(--n-line);
+  border-radius: var(--n-radius-control);
+  background: var(--n-surface-soft);
+}
+
+.lyrics-tool__modes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: calc(var(--n-radius-control) - 3px);
+  color: var(--n-text-muted);
+  font-size: var(--n-text-sm);
+  font-weight: var(--n-weight-medium);
+}
+
+.lyrics-tool__modes button:hover {
+  color: var(--n-text);
+}
+
+.lyrics-tool__modes .lyrics-tool__mode--active {
+  background: var(--n-accent-soft);
+  color: var(--n-accent-strong);
 }
 
 .lyrics-tool__export {
