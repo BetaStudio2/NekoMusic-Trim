@@ -110,7 +110,12 @@ public final class MusicIngestSupport {
      * 避免「接口返回成功但歌词没入库」的静默失败。
      */
     public static void saveLyricsAndRebuild(int musicId, String lyricsContent, Logger logger) {
-        if (!Main.getLyricsDatabaseManager().upsert(musicId, lyricsContent)) {
+        saveLyricsAndRebuild(musicId, lyricsContent, "lrc", logger);
+    }
+
+    /** 指定歌词存储格式写入；{@code neko-v1} 会保留逐字时间轴。 */
+    public static void saveLyricsAndRebuild(int musicId, String lyricsContent, String format, Logger logger) {
+        if (!Main.getLyricsDatabaseManager().upsert(musicId, lyricsContent, format)) {
             logger.error("保存数据库歌词失败 musicId={}", musicId);
             throw new IllegalStateException("保存歌词到数据库失败 musicId=" + musicId);
         }

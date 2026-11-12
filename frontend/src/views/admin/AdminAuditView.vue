@@ -226,6 +226,7 @@ import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import API_CONFIG from '@/config/apiConfig.js'
 import { useToast } from '@/composables/useToast'
+import { parseLyricsPayload } from '@/utils/lyrics.js'
 import NIcon from '@/icons/NIcon.vue'
 import { NButton, NCard, NInput, NModal, NSpinner, NTag } from '@/ui'
 import { PageShell, AmbientBackdrop } from '@/layouts'
@@ -727,8 +728,8 @@ const loadLyricsForUpload = async (uploadId) => {
     // 保存原始歌词
     uploadRawLyrics.value[uploadId] = lyricsText
     
-    // 解析歌词
-    uploadLyrics.value[uploadId] = parseLrcLyrics(lyricsText)
+    // .neko 直接按 neko-v1 解析；.lrc 继续走行级 LRC 解析。
+    uploadLyrics.value[uploadId] = parseUploadedLyrics(lyricsText)
     
   } catch (error) {
     console.error('加载歌词失败:', error)
@@ -797,6 +798,21 @@ const parseLrcLyrics = (lrcText) => {
   // 按时间排序
   parsed.sort((a, b) => a.time - b.time)
   return parsed
+}
+
+const parseUploadedLyrics = (content) => {
+  const text = String(content || '').trim()
+  if (text.startsWith('{')) {
+    try {
+      const rich = JSON.parse(text)
+      if (Array.isArray(rich?.lines)) {
+        return parseLyricsPayload({ lyricsRich: rich })
+      }
+    } catch {
+      // 非 JSON 内容继续按普通 LRC 处理。
+    }
+  }
+  return parseLrcLyrics(text)
 }
 
 // 设置歌词滚动区域的ref

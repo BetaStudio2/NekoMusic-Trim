@@ -7,8 +7,10 @@ import com.neko.music.service.EmbeddedMetadataSyncService;
 import com.neko.music.service.MusicIngestSupport;
 import com.neko.music.service.UploadStorageRecovery;
 import com.neko.music.util.AtomicFiles;
+import com.neko.music.util.LyricsFileValidator;
 import com.neko.music.util.MusicAdMetadataPatcher;
 import com.neko.music.util.MusicPinyinColumns;
+import com.neko.music.util.NekoLyrics;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -306,8 +308,11 @@ public class AdminUploadAuditHandler extends ApiServlet {
             if (upload.getLyricsFilePath() != null && !upload.getLyricsFilePath().isEmpty()
                     && Files.exists(Paths.get(upload.getLyricsFilePath()))) {
                 String lyricsContent = Files.readString(Paths.get(upload.getLyricsFilePath()), StandardCharsets.UTF_8);
-                Main.getLyricsDatabaseManager().upsert(conn, musicId, lyricsContent);
-                logger.info("审核通过歌词已保存到数据库 musicId={}", musicId);
+                String lyricsFormat = LyricsFileValidator.isNekoFile(upload.getLyricsFilePath())
+                        ? NekoLyrics.FORMAT
+                        : "lrc";
+                Main.getLyricsDatabaseManager().upsert(conn, musicId, lyricsContent, lyricsFormat);
+                logger.info("审核通过歌词已保存到数据库 musicId={}, format={}", musicId, lyricsFormat);
             }
 
             // 状态更新必须复用同一连接，否则它会在 conn.commit() 之前单独提交，

@@ -76,9 +76,9 @@
 
           <div class="field field--last">
             <label class="field__label">歌词文件 <span class="req">*</span></label>
-            <input type="file" class="file" accept=".lrc" @change="handleLyricsFileChange" />
+            <input type="file" class="file" accept=".lrc,.neko" @change="handleLyricsFileChange" />
             <p v-if="newMusic.lyricsFileName" class="field__file">已选择：{{ newMusic.lyricsFileName }}</p>
-            <p class="field__hint">请上传 .lrc 格式的歌词文件。</p>
+            <p class="field__hint">请上传 .lrc 或 .neko 格式的歌词文件。</p>
           </div>
         </div>
       </div>
@@ -161,9 +161,9 @@
 
           <div class="field field--last">
             <label class="field__label">歌词文件</label>
-            <input type="file" class="file" accept=".lrc" @change="handleEditLyricsFileChange" />
+            <input type="file" class="file" accept=".lrc,.neko" @change="handleEditLyricsFileChange" />
             <p v-if="editingMusic.lyricsFileName" class="field__file">已选择：{{ editingMusic.lyricsFileName }}</p>
-            <p class="field__hint">可选；不选择时保留当前歌词。选择后请使用 .lrc 格式。</p>
+            <p class="field__hint">可选；不选择时保留当前歌词。选择后请使用 .lrc 或 .neko 格式。</p>
           </div>
         </div>
       </div>
@@ -992,9 +992,8 @@ const handleEditCoverFileChange = (event) => {
 const handleLyricsFileChange = (event) => {
   const file = event.target.files[0]
   if (file) {
-    // 检查文件类型是否为LRC
-    if (!file.name.toLowerCase().endsWith('.lrc')) {
-      toast.error('请选择LRC格式的歌词文件')
+    if (!isSupportedLyricsFile(file)) {
+      toast.error('请选择 LRC 或 NEKO 格式的歌词文件')
       event.target.value = '' // 清空选择
       return
     }
@@ -1007,9 +1006,8 @@ const handleLyricsFileChange = (event) => {
 const handleEditLyricsFileChange = (event) => {
   const file = event.target.files[0]
   if (file) {
-    // 检查文件类型是否为LRC
-    if (!file.name.toLowerCase().endsWith('.lrc')) {
-      toast.error('请选择LRC格式的歌词文件')
+    if (!isSupportedLyricsFile(file)) {
+      toast.error('请选择 LRC 或 NEKO 格式的歌词文件')
       event.target.value = '' // 清空选择
       return
     }
@@ -1018,6 +1016,8 @@ const handleEditLyricsFileChange = (event) => {
     editingMusic.value.lyricsFileName = file.name
   }
 }
+
+const isSupportedLyricsFile = (file) => /\.(lrc|neko)$/i.test(file?.name || '')
 
 // 管理员信息
 const adminInfo = ref({})

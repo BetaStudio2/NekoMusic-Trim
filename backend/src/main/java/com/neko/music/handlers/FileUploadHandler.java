@@ -14,7 +14,7 @@ import com.neko.music.util.RuntimeDiskGuard;
 import com.neko.music.util.AudioFileValidator;
 import com.neko.music.util.AudioIntegrityValidator;
 import com.neko.music.util.ImageUploadValidator;
-import com.neko.music.util.LrcValidator;
+import com.neko.music.util.LyricsFileValidator;
 import com.neko.music.util.MusicAdMetadataPatcher;
 import com.neko.music.util.TempAudioSpool;
 import org.eclipse.jetty.http.HttpStatus;
@@ -36,7 +36,6 @@ import org.jaudiotagger.tag.TagException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -348,7 +347,7 @@ public class FileUploadHandler extends HttpServlet {
         }
     }
 
-    /** 校验歌词文件（可选时未提供直接通过；提供时校验 .lrc 扩展名与格式）。 */
+    /** 校验歌词文件（可选时未提供直接通过；提供时校验 .lrc / .neko 扩展名与格式）。 */
     private boolean validateLyricsOrReject(HttpServletResponse response, Part lyricsFilePart,
                                            boolean required) throws IOException {
         if (lyricsFilePart == null) {
@@ -359,17 +358,16 @@ public class FileUploadHandler extends HttpServlet {
             return false;
         }
         
-        // 检查歌词文件类型
         String lyricsFileName = getFileName(lyricsFilePart);
-        if (!lyricsFileName.toLowerCase().endsWith(".lrc")) {
+        if (!LyricsFileValidator.isSupportedFile(lyricsFileName)) {
             HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse("upload.lyrics_only_lrc"));
             return false;
         }
         
         // 校验歌词文件格式
         try (InputStream lyricsInputStream = lyricsFilePart.getInputStream()) {
-            LrcValidator.ValidationResult validationResult = LrcValidator.validate(
-                    lyricsInputStream, lyricsFilePart.getSize());
+            LyricsFileValidator.ValidationResult validationResult = LyricsFileValidator.validate(
+                    lyricsFileName, lyricsInputStream, lyricsFilePart.getSize());
             if (!validationResult.isValid()) {
                 HandlerResponses.writeJson(response, HttpStatus.BAD_REQUEST_400, new ErrorResponse(ApiMessages.translate("upload.lyrics_format_invalid", validationResult.getErrorMessage())));
                 return false;
@@ -772,11 +770,15 @@ public class FileUploadHandler extends HttpServlet {
 
     // 保存歌词到数据库：失败时抛异常，由调用方回滚本次入库
     private void saveLyricsToDatabase(int musicId, Part lyricsFilePart) throws IOException {
-        String lyricsContent;
+        LyricsFileValidator.ValidationResult result;
         try (InputStream inputStream = lyricsFilePart.getInputStream()) {
-            lyricsContent = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            result = LyricsFileValidator.validate(getFileName(lyricsFilePart), inputStream, lyricsFilePart.getSize());
         }
-        MusicIngestSupport.saveLyricsAndRebuild(musicId, lyricsContent, logger);
+        if (!result.isValid()) {
+            throw new IOException(result.getErrorMessage());
+        }
+        MusicIngestSupport.saveLyricsAndRebuild(
+                musicId, result.getNormalizedContent(), result.getFormat().databaseFormat(), logger);
     }
 
     /** 尽力删除文件，失败只打 WARN（用于回滚已落盘但不完整的产物）。 */

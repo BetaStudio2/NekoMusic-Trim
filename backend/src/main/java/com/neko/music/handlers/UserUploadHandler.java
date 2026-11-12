@@ -6,7 +6,7 @@ import com.neko.music.util.AudioFileValidator;
 import com.neko.music.util.RuntimeDiskGuard;
 import com.neko.music.util.AudioIntegrityValidator;
 import com.neko.music.util.TempAudioSpool;
-import com.neko.music.util.LrcValidator;
+import com.neko.music.util.LyricsFileValidator;
 import com.neko.music.util.ImageUploadValidator;
 import com.neko.music.util.SensitiveWordUtil;
 import jakarta.servlet.ServletException;
@@ -219,9 +219,10 @@ public class UserUploadHandler extends ApiServlet {
             // 保存歌词文件（可选）
             String lyricsFilePath = null;
             if (lyricsFilePart != null && lyricsFilePart.getSize() > 0) {
-                // 检查歌词文件类型
-                String lyricsFileName = "lyrics_" + timestamp + getFileExtension(lyricsFilePart.getSubmittedFileName());
-                if (!lyricsFileName.toLowerCase().endsWith(".lrc")) {
+                // .lrc 走行级歌词校验；.neko 走 neko-v1 JSON 校验，二者共用同一个上传入口。
+                String lyricsExtension = getFileExtension(lyricsFilePart.getSubmittedFileName());
+                String lyricsFileName = "lyrics_" + timestamp + lyricsExtension;
+                if (!LyricsFileValidator.isSupportedFile(lyricsFileName)) {
                     sendErrorResponse(response, 400, "upload.lyrics_only_lrc");
                     // 删除已上传的音乐和封面文件
                     deleteFileIfExists(musicFilePath);
@@ -229,11 +230,10 @@ public class UserUploadHandler extends ApiServlet {
                     return;
                 }
 
-                // 同时间戳的原文/译文先规范成 JSON 翻译行，再按最终写入内容校验和保存
                 byte[] normalizedLyrics;
                 try (InputStream lyricsInputStream = lyricsFilePart.getInputStream()) {
-                    LrcValidator.ValidationResult validationResult =
-                            LrcValidator.validate(lyricsInputStream, lyricsFilePart.getSize());
+                    LyricsFileValidator.ValidationResult validationResult =
+                            LyricsFileValidator.validate(lyricsFileName, lyricsInputStream, lyricsFilePart.getSize());
                     if (!validationResult.isValid()) {
                         sendErrorResponse(response, 400, ApiMessages.translate("upload.lyrics_format_invalid", validationResult.getErrorMessage()));
                         // 删除已上传的音乐和封面文件

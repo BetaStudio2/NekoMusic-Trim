@@ -54,7 +54,7 @@
             @dragleave.prevent="isLyricsDragging = false"
             @drop.prevent="handleLyricsFileDrop"
           >
-            <input ref="lyricsFileInput" type="file" accept=".lrc" class="dropzone__input" @change="handleLyricsFileChange" />
+            <input ref="lyricsFileInput" type="file" accept=".lrc,.neko" class="dropzone__input" @change="handleLyricsFileChange" />
             <button type="button" class="dropzone__hit" @click="selectLyricsFile">
               <span class="n-visually-hidden">{{ $t('upload.selectLyricsAria') }}</span>
               <template v-if="!lyricsFile">
@@ -653,10 +653,15 @@ const selectLyricsFile = () => {
 
 const handleLyricsFileChange = (event) => {
   const file = event.target.files[0]
-  if (file) {
+  if (file && isSupportedLyricsFile(file)) {
     lyricsFile.value = file
+  } else if (file) {
+    event.target.value = ''
+    toast.error(t('upload.dropLrc'))
   }
 }
+
+const isSupportedLyricsFile = (file) => /\.(lrc|neko)$/i.test(file?.name || '')
 
 const removeLyricsFile = () => {
   lyricsFile.value = null
@@ -858,8 +863,7 @@ const handleLyricsFileDrop = (event) => {
   const files = event.dataTransfer.files
   if (files.length > 0) {
     const file = files[0]
-    const fileName = file.name.toLowerCase()
-    if (fileName.endsWith('.lrc')) {
+    if (isSupportedLyricsFile(file)) {
       lyricsFile.value = file
     } else {
       toast.error(t('upload.dropLrc'))
