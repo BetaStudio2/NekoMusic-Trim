@@ -61,6 +61,7 @@ public record SystemSettingDefinition(
         EXTERNAL("外站补全"),
         RECOMMENDATION("每日推荐"),
         RECOGNITION("听歌识曲"),
+        SEARCH("本地搜索"),
         PAY("支付"),
         LOGGING("日志");
 

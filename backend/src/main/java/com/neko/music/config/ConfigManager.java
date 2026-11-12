@@ -169,6 +169,11 @@ public class ConfigManager {
     private int musicRecognitionFfmpegTimeoutSeconds = 45;
     private int musicRecognitionIndexFfmpegTimeoutSeconds = 180;
 
+    /** 本地搜索索引（SQLite FTS5）：灰度开关、文件路径、周期增量刷新间隔 */
+    private boolean searchIndexEnabled = true;
+    private String searchIndexPath = "data/search.db";
+    private int searchIndexRefreshSeconds = 300;
+
     private ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
 
     /**
@@ -533,6 +538,19 @@ public class ConfigManager {
                     }
                 }
 
+                JsonNode searchIndexNode = configNode.get("search_index");
+                if (searchIndexNode != null) {
+                    if (searchIndexNode.has("enabled")) {
+                        searchIndexEnabled = searchIndexNode.get("enabled").asBoolean();
+                    }
+                    if (searchIndexNode.has("path")) {
+                        searchIndexPath = searchIndexNode.get("path").asText("data/search.db").trim();
+                    }
+                    if (searchIndexNode.has("refresh_seconds")) {
+                        searchIndexRefreshSeconds = searchIndexNode.get("refresh_seconds").asInt();
+                    }
+                }
+
             }
 
             clampPerformanceConfig();
@@ -756,6 +774,10 @@ public class ConfigManager {
         musicRecognitionFfmpegTimeoutSeconds = Math.max(5, Math.min(300, musicRecognitionFfmpegTimeoutSeconds));
         musicRecognitionIndexFfmpegTimeoutSeconds = Math.max(musicRecognitionFfmpegTimeoutSeconds,
                 Math.min(900, musicRecognitionIndexFfmpegTimeoutSeconds));
+        searchIndexRefreshSeconds = Math.max(0, Math.min(86_400, searchIndexRefreshSeconds));
+        if (searchIndexPath == null || searchIndexPath.isBlank()) {
+            searchIndexPath = "data/search.db";
+        }
         if (videoRenderFfmpegPath == null || videoRenderFfmpegPath.isBlank()) {
             videoRenderFfmpegPath = "auto";
         }
@@ -1189,6 +1211,10 @@ public class ConfigManager {
     public int getMusicRecognitionIndexRefreshSeconds() { return musicRecognitionIndexRefreshSeconds; }
     public int getMusicRecognitionFfmpegTimeoutSeconds() { return musicRecognitionFfmpegTimeoutSeconds; }
     public int getMusicRecognitionIndexFfmpegTimeoutSeconds() { return musicRecognitionIndexFfmpegTimeoutSeconds; }
+
+    public boolean isSearchIndexEnabled() { return searchIndexEnabled; }
+    public String getSearchIndexPath() { return searchIndexPath; }
+    public int getSearchIndexRefreshSeconds() { return searchIndexRefreshSeconds; }
 
     /** 从 public_base_url 推出站点根（用于 return_url 默认 /vip） */
     private static String zpaySiteRootFromPublicBase(String publicTrimmed) {

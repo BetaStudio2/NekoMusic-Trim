@@ -99,28 +99,6 @@ public class LyricsDatabaseManager {
         }
     }
 
-    public List<StoredLyrics> findAllForIndex() {
-        String sql = """
-                SELECT ml.music_id, ml.content, ml.plain_text, ml.content_hash, ml.format,
-                       ml.is_placeholder, ml.size_bytes, ml.created_at, ml.updated_at
-                FROM music_lyrics ml
-                JOIN music m ON m.id = ml.music_id
-                ORDER BY ml.music_id
-                """;
-        List<StoredLyrics> rows = new ArrayList<>();
-        try (Connection conn = databaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            while (rs.next()) {
-                rows.add(mapStoredLyrics(rs));
-            }
-        } catch (SQLException e) {
-            // 这里失败会直接导致歌词索引为空，必须带堆栈，否则线上只剩「索引就绪: 0 首」这种看不清原因的现象
-            logger.warn("读取歌词索引数据失败（歌词搜索将无结果）", e);
-        }
-        return rows;
-    }
-
     public List<AdminLyricsMeta> findAllForAdmin() {
         String sql = """
                 SELECT ml.music_id, m.title, m.artist, ml.size_bytes, ml.updated_at, ml.is_placeholder

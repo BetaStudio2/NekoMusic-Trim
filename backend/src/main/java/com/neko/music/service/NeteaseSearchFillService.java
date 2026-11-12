@@ -999,9 +999,7 @@ public class NeteaseSearchFillService {
                 logger.warn("保存 Neko 字级歌词失败 musicId={}", musicId);
                 return;
             }
-            if (Main.getLyricsSearchIndex() != null) {
-                Main.getLyricsSearchIndex().rebuildOne(musicId);
-            }
+            SearchIndexService.notifyMusicChanged(musicId);
         } catch (Exception e) {
             logger.warn("保存 Neko 字级歌词异常 musicId={}: {}", musicId, e.getMessage());
         }

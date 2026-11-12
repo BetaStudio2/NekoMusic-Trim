@@ -6,6 +6,8 @@ import com.neko.music.service.AdminMusicIngestService;
 import com.neko.music.service.ExternalFillQuotaService;
 import com.neko.music.service.MusicSearchRanker;
 import com.neko.music.service.NeteaseSearchFillService;
+import com.neko.music.service.SearchIndexService;
+import com.neko.music.search.SearchSession;
 import com.neko.music.util.ChineseConverter;
 import com.neko.music.util.ClientIpResolver;
 import com.neko.music.util.RequestAuthUtil;
@@ -37,10 +39,8 @@ public class MusicSearchHandler extends ApiServlet {
     /** 单个查询词条的候选上限；多词条查询按词条分别取回后在内存里合并去重。 */
     private static final int TERM_FETCH_LIMIT = SEARCH_LIMIT * 3;
     private static final int STRONG_METADATA_SCORE = 80;
-    private static final int LYRICS_EXISTING_BONUS = 10;
-    private static final int LYRICS_EXISTING_SCORE_CAP = 70;
-    private static final int MAX_LYRIC_HITS_TO_MERGE = 80;
-    private static final int MAX_LYRIC_CANDIDATES = 500;
+    /** 索引召回的单次取回上限；与旧歌词索引的合并上限保持一致。 */
+    private static final int MAX_INDEX_HITS = 80;
     private static final Set<String> LOW_INFORMATION_ENGLISH_WORDS = Set.of(
             "a", "an", "and", "are", "be", "do", "for", "i", "in", "is", "it", "its",
             "la", "me", "my", "na", "of", "oh", "on", "or", "the", "to", "we",
@@ -323,7 +323,17 @@ public class MusicSearchHandler extends ApiServlet {
                 }
             }
 
-            mergeLyricsSearchResults(conn, query, scoredResults, topMetadataScore);
+            // 歌词正文 / 拼音 / 首字母命中走本地索引库；短查询且元数据已有结果时不必再跑一遍索引。
+            if (shouldSearchLyricsForQuery(query, topMetadataScore, !scoredResults.isEmpty())
+                    || scoredResults.isEmpty()) {
+                // 索引召回 / 回表失败只降级：已经拿到的元数据结果必须照常返回。
+                try {
+                    mergeIndexSearchResults(conn, query, scoredResults);
+                } catch (Exception e) {
+                    logger.warn("索引召回失败，继续使用元数据结果: query='{}', error={}",
+                            query, e.toString());
+                }
+            }
 
             // 按分数排序
             scoredResults.sort((a, b) -> Integer.compare(b.score, a.score));
@@ -380,15 +390,7 @@ public class MusicSearchHandler extends ApiServlet {
                     }
 
                     Music music = mapMusicRow(rs);
-
-                    // 读取预计算的拼音列
-                    music.setTitlePinyin(rs.getString("title_pinyin"));
-                    music.setTitlePinyinInitials(rs.getString("title_pinyin_initials"));
-                    music.setTitleWordInitials(rs.getString("title_word_initials"));
-                    music.setArtistPinyin(rs.getString("artist_pinyin"));
-                    music.setArtistPinyinInitials(rs.getString("artist_pinyin_initials"));
-                    music.setArtistWordInitials(rs.getString("artist_word_initials"));
-                    music.setAlbumPinyin(rs.getString("album_pinyin"));
+                    applyPinyinColumns(music, rs);
 
                     MusicSearchRanker.MusicFields fields = toRankerFields(music);
                     int score = concatenations == null
@@ -465,55 +467,83 @@ public class MusicSearchHandler extends ApiServlet {
                 music.getAlbumPinyin());
     }
 
-    private void mergeLyricsSearchResults(
-            Connection conn, String query, List<ScoredMusic> scoredResults, int topMetadataScore)
+    /**
+     * 用本地搜索索引召回候选（灰度开关 {@code search_index.enabled}）。
+     *
+     * <p>索引把歌名 / 歌手 / 专辑 / 歌词正文 / 拼音 / 首字母 / 读音统一建成词元，
+     * 能补上 SQL LIKE 覆盖不到的拼音首字母、模糊音与歌词正文命中。
+     * 命中后仍用既有排序器按元数据重新打分，与 SQL 候选保持同一尺度；
+     * 元数据完全打不上分的命中视为歌词正文命中，按歌词档位给分并标记 lrc。</p>
+     *
+     * @return 本次新增的候选数；索引未启用 / 无命中时返回 0
+     */
+    private int mergeIndexSearchResults(Connection conn, String query, List<ScoredMusic> scoredResults)
             throws SQLException {
-        var index = Main.getLyricsSearchIndex();
-        if (index == null || !index.isReady()) {
-            return;
+        SearchIndexService indexService = Main.getSearchIndexService();
+        if (indexService == null || !indexService.enabled()) {
+            return 0;
+        }
+        List<SearchSession.SearchHit> hits = indexService.search(query, MAX_INDEX_HITS, 1);
+        if (hits.isEmpty()) {
+            return 0;
         }
 
-        if (!shouldSearchLyricsForQuery(query, topMetadataScore, !scoredResults.isEmpty())) {
-            logger.debug("跳过歌词搜索: query='{}', 元数据分={}", query, topMetadataScore);
-            return;
+        Set<Integer> seenIds = new HashSet<>();
+        List<Integer> ids = new ArrayList<>(hits.size());
+        for (SearchSession.SearchHit hit : hits) {
+            int id = parseTrackId(hit.trackId());
+            if (id > 0 && seenIds.add(id)) {
+                ids.add(id);
+            }
+        }
+        if (ids.isEmpty()) {
+            return 0;
         }
 
-        var outcome = index.searchWithStats(query, MAX_LYRIC_HITS_TO_MERGE + 1);
-        List<Integer> lyricIds = outcome.ids();
-        if (lyricIds.isEmpty()) {
-            return;
-        }
-        if (outcome.saturated() || lyricIds.size() > MAX_LYRIC_HITS_TO_MERGE
-                || outcome.candidateCount() > MAX_LYRIC_CANDIDATES) {
-            logger.info("放弃过宽泛的歌词搜索: query='{}', hits={}, candidates={}, saturated={}",
-                    query, lyricIds.size(), outcome.candidateCount(), outcome.saturated());
-            return;
-        }
-
-        Map<Integer, ScoredMusic> existingById = new HashMap<>();
+        Set<Integer> existingIds = new HashSet<>();
         for (ScoredMusic scored : scoredResults) {
-            existingById.put(scored.music.getId(), scored);
+            existingIds.add(scored.music.getId());
         }
 
-        Map<Integer, Music> lyricMusicById = fetchMusicByIds(conn, lyricIds);
-        int lyricScore = calculateLyricsMatchScore(query);
-        for (Integer id : lyricIds) {
-            ScoredMusic existing = existingById.get(id);
-            if (existing != null) {
-                existing.score = Math.max(existing.score,
-                        Math.min(existing.score + LYRICS_EXISTING_BONUS, LYRICS_EXISTING_SCORE_CAP));
-                existing.music.setLrc(true);
+        Map<Integer, Music> hitMusicById = fetchMusicByIdsWithPinyin(conn, ids);
+        List<String> terms = MusicSearchRanker.splitTerms(query);
+        int lyricsScore = calculateLyricsMatchScore(query);
+
+        int added = 0;
+        for (Integer id : ids) {
+            if (existingIds.contains(id)) {
                 continue;
             }
-            Music music = lyricMusicById.get(id);
-            if (music != null) {
-                music.setLrc(true);
-                scoredResults.add(new ScoredMusic(music, lyricScore));
+            Music music = hitMusicById.get(id);
+            if (music == null) {
+                continue;
             }
+            int metadataScore = terms.isEmpty() ? 0 : MusicSearchRanker.score(toRankerFields(music), terms);
+            if (metadataScore > 0) {
+                scoredResults.add(new ScoredMusic(music, metadataScore));
+            } else {
+                music.setLrc(true);
+                scoredResults.add(new ScoredMusic(music, lyricsScore));
+            }
+            added++;
+        }
+        return added;
+    }
+
+    /** 索引里的曲目标识就是 music.id 的字符串形式。 */
+    private static int parseTrackId(String trackId) {
+        if (trackId == null || trackId.isEmpty()) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(trackId);
+        } catch (NumberFormatException e) {
+            return -1;
         }
     }
 
-    private Map<Integer, Music> fetchMusicByIds(Connection conn, List<Integer> ids) throws SQLException {
+    /** 按 ID 批量取回曲目（含预计算拼音列），供索引召回后重新打分。 */
+    private Map<Integer, Music> fetchMusicByIdsWithPinyin(Connection conn, List<Integer> ids) throws SQLException {
         if (ids == null || ids.isEmpty()) {
             return Map.of();
         }
@@ -526,7 +556,7 @@ public class MusicSearchHandler extends ApiServlet {
             placeholders.append('?');
         }
 
-        String sql = "SELECT " + MUSIC_BASE_COLUMNS + " FROM music WHERE id IN (" + placeholders + ")";
+        String sql = "SELECT " + MUSIC_SEARCH_COLUMNS + " FROM music WHERE id IN (" + placeholders + ")";
         Map<Integer, Music> byId = new HashMap<>();
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             for (int i = 0; i < ids.size(); i++) {
@@ -535,6 +565,7 @@ public class MusicSearchHandler extends ApiServlet {
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
                     Music music = mapMusicRow(rs);
+                    applyPinyinColumns(music, rs);
                     byId.put(music.getId(), music);
                 }
             }
@@ -741,6 +772,17 @@ public class MusicSearchHandler extends ApiServlet {
         music.setCreatedAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toString() : "");
         music.setMaxQuality(rs.getString("max_quality"));
         return music;
+    }
+
+    /** 读取查询侧需要用到的预计算拼音列（不返回给客户端）。 */
+    private static void applyPinyinColumns(Music music, ResultSet rs) throws SQLException {
+        music.setTitlePinyin(rs.getString("title_pinyin"));
+        music.setTitlePinyinInitials(rs.getString("title_pinyin_initials"));
+        music.setTitleWordInitials(rs.getString("title_word_initials"));
+        music.setArtistPinyin(rs.getString("artist_pinyin"));
+        music.setArtistPinyinInitials(rs.getString("artist_pinyin_initials"));
+        music.setArtistWordInitials(rs.getString("artist_word_initials"));
+        music.setAlbumPinyin(rs.getString("album_pinyin"));
     }
 
     // 辅助类：带分数的音乐

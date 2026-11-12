@@ -161,9 +161,7 @@ public class AdminMusicIngestService {
             if (!Main.getLyricsDatabaseManager().upsert(musicId, lyricsContent)) {
                 throw new SQLException("保存歌词到数据库失败");
             }
-            if (com.neko.music.Main.getLyricsSearchIndex() != null) {
-                com.neko.music.Main.getLyricsSearchIndex().rebuildOne(musicId);
-            }
+            SearchIndexService.notifyMusicChanged(musicId);
 
             // 曲库落盘后把歌词/封面/基础标签同步进音频文件；封面写入失败则回滚本次入库。
             if (!EmbeddedMetadataSyncService.syncOne(musicId, coverTempOrNull)) {

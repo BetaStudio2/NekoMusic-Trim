@@ -120,8 +120,6 @@ public final class MusicIngestSupport {
             throw new IllegalStateException("保存歌词到数据库失败 musicId=" + musicId);
         }
         logger.info("歌词已保存到数据库 musicId={}", musicId);
-        if (Main.getLyricsSearchIndex() != null) {
-            Main.getLyricsSearchIndex().rebuildOne(musicId);
-        }
+        SearchIndexService.notifyMusicChanged(musicId);
     }
 }
