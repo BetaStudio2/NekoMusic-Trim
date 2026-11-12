@@ -108,10 +108,6 @@
           </label>
         </div>
 
-        <div class="karaoke__target">
-          <span>下一个目标</span>
-          <strong>{{ targetLabel }}</strong>
-        </div>
         <button
           type="button"
           class="karaoke__tap"
@@ -194,7 +190,6 @@ import {
   isTimingText,
   remapTimingUnits,
   splitTimingUnits,
-  timingLabel,
 } from '@/utils/timingUnits'
 
 const props = defineProps({
@@ -220,12 +215,6 @@ const tapPulse = ref(false)
 const currentLine = computed(() => props.lines[activeLineIndex.value] || null)
 const currentWords = computed(() => currentLine.value?.words || [])
 const targetWords = computed(() => currentWords.value.filter((word) => isTimingText(wordText(word))))
-const targetLabel = computed(() => {
-  if (finished.value) return '全部完成'
-  if (!targetWords.value.length) return '本行没有可记录文本'
-  if (cursor.value >= targetWords.value.length) return '结束本行'
-  return `「${timingLabel(wordText(targetWords.value[cursor.value]))}」`
-})
 const tapLabel = computed(() => {
   if (finished.value) return '已完成'
   if (!isPlaying.value) return '先播放音乐'
@@ -344,8 +333,16 @@ function selectLine(index) {
   cursor.value = 0
   finished.value = false
   nextTick(() => {
-    const active = scrollRef.value?.querySelector('.karaoke-line--active')
-    active?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const container = scrollRef.value
+    const active = container?.querySelector('.karaoke-line--active')
+    if (!container || !active) return
+    const containerRect = container.getBoundingClientRect()
+    const activeRect = active.getBoundingClientRect()
+    const top = container.scrollTop
+      + activeRect.top
+      - containerRect.top
+      - (container.clientHeight - activeRect.height) / 2
+    container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
   })
 }
 
@@ -542,6 +539,7 @@ function formatTime(seconds) {
   border-radius: var(--n-radius-lg);
   background: rgba(0, 0, 0, 0.18);
   scroll-behavior: smooth;
+  overscroll-behavior: contain;
 }
 
 .karaoke-line {
@@ -618,22 +616,6 @@ function formatTime(seconds) {
   border: 1px solid var(--n-line);
   border-radius: var(--n-radius-lg);
   background: var(--n-surface);
-}
-
-.karaoke__target {
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-}
-
-.karaoke__target span {
-  color: var(--n-text-muted);
-  font-size: var(--n-text-sm);
-}
-
-.karaoke__target strong {
-  color: var(--n-accent-strong);
-  font-size: clamp(28px, 5vw, 44px);
 }
 
 .karaoke__tap {
@@ -773,12 +755,13 @@ function formatTime(seconds) {
 
   .karaoke__tap-panel {
     position: static;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "player player"
-      "target tap"
-      "actions actions";
+      "player"
+      "tap"
+      "actions";
     align-items: center;
+    justify-items: center;
     gap: 8px 16px;
     padding: 0;
     border: 0;
@@ -787,15 +770,6 @@ function formatTime(seconds) {
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-  }
-
-  .karaoke__target {
-    grid-area: target;
-    justify-items: start;
-  }
-
-  .karaoke__target strong {
-    font-size: 30px;
   }
 
   .karaoke__tap {
