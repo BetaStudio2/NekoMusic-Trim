@@ -20,7 +20,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 静态路由（首页 / 落雪导入 / 下载 / 关于 / 隐私 / 排行榜 / 最新）的服务端 SEO HTML。
+ * 静态路由（首页 / 落雪导入 / 逐字歌词工具 / 下载 / 关于 / 隐私 / 排行榜 / 最新）的服务端 SEO HTML。
  *
  * <p>
  * 与 {@link MusicDetailPageRenderer} 一样，只在请求来自爬虫 / 链接预览 / AI 抓取器 时由
@@ -43,7 +43,7 @@ public final class StaticPageSeoRenderer {
     private static final String SITE_ICON_PATH = "/icons/icon-512.png";
 
     private static final Set<String> STATIC_PAGES = Set.of(
-            "/", "/lxmusic", "/download", "/about", "/privacy", "/ranking", "/latest", "/search");
+            "/", "/lxmusic", "/tools-lyr", "/download", "/about", "/privacy", "/ranking", "/latest", "/search");
 
     public static boolean isStaticPage(String path) {
         return STATIC_PAGES.contains(normalizePath(path));
@@ -92,6 +92,8 @@ public final class StaticPageSeoRenderer {
                 homePage();
             case "/lxmusic" ->
                 lxmusicPage();
+            case "/tools-lyr" ->
+                toolsLyrPage();
             case "/download" ->
                 downloadPage(base);
             case "/about" ->
@@ -291,6 +293,42 @@ public final class StaticPageSeoRenderer {
                 "落雪音乐 LX Music 歌单导入",
                 "上传落雪音乐导出的 LXMC / .lxmc 文件，自动识别歌单、匹配曲库并在后台完成迁移。",
                 "落雪导入 LX Music", sections, faqs, false, true, "", List.of());
+    }
+
+    private Page toolsLyrPage() {
+        List<Section> sections = List.of(
+                paragraph("在线制作逐字歌词",
+                        "逐字歌词制作工具在浏览器本地完成选曲、打轴、预览与导出。"
+                        + "无需安装软件，也不需要把音乐或歌词上传到服务器。",
+                        "适合为 LRC、普通文本或已有的 neko-v1 歌词补充逐字时间轴，最终下载可供 Neko歌姬计划歌词入口使用的 .neko 文件。"),
+                bullets("工具能力", List.of(
+                        "选择本地 MP3、FLAC、WAV、M4A、OGG 等浏览器可播放的音频。",
+                        "粘贴纯文本、LRC 或完整 neko-v1 JSON，也可以直接导入 .lrc / .neko 文件。",
+                        "播放音乐并逐字点击打轴；空格、标点和纯符号不会成为记录目标。",
+                        "使用 AMLL 歌词墙预览逐字高亮、自动跟随和行间衔接。",
+                        "导出并下载最大 1 MiB 的 neko-v1 .neko 歌词文件。")),
+                bullets("歌词输入格式", List.of(
+                        "纯文本：每行一句歌词，适合从任意地方复制后开始制作。",
+                        "LRC：支持 [mm:ss.xx] 时间轴与 {\"翻译\"} 翻译行。",
+                        "NEKO：version 为 1 的 neko-v1 JSON，可保留已有 words[] 逐字时间轴。")),
+                paragraph("隐私与兼容性",
+                        "音频文件通过浏览器 Blob URL 本地播放，歌词只保存在当前页面中，不会上传服务器。",
+                        "页面支持桌面与移动端；移动端播放和打轴控件固定在视口底部，方便边听边记录。"));
+        List<Faq> faqs = List.of(
+                new Faq("逐字歌词制作工具是免费的吗？", "是，工具完全免费，无需登录，也不需要安装客户端。"),
+                new Faq("音乐会上传到 Neko歌姬计划吗？", "不会。音乐只在浏览器本地播放，歌词和时间轴也不会发送到服务器。"),
+                new Faq("可以导入已有的 LRC 或 .neko 吗？", "可以。支持粘贴 LRC、纯文本、neko-v1 JSON，也支持直接导入 .lrc 或 .neko 文件。"),
+                new Faq(".neko 文件是什么？", ".neko 是 UTF-8 编码的 neko-v1 JSON 歌词文件，包含行级、逐字/逐词时间轴、翻译和罗马音等字段。"),
+                new Faq("手机可以使用吗？", "可以。工具适配移动端，并将播放、倍速和打轴按钮固定在页面底部。"));
+        return new Page("/tools-lyr",
+                "逐字歌词制作工具 - LRC/NEKO 在线打轴与下载 | Neko歌姬计划",
+                "免费在线逐字歌词制作工具：在浏览器本地选择音乐，粘贴或导入 LRC、纯文本、neko-v1 JSON，"
+                        + "逐字打轴、AMLL 效果预览并下载 .neko 歌词文件。音频与歌词不上传服务器。",
+                "逐字歌词,逐字歌词制作,歌词打轴,LRC转逐字,LRC转NEKO,neko-v1,.neko文件,"
+                        + "歌词时间轴,在线歌词工具,AMLL歌词,免费歌词工具,Neko歌姬计划",
+                "逐字歌词制作工具",
+                "在浏览器本地选择音乐，粘贴或导入 LRC / NEKO 歌词，逐字打轴、预览效果并下载 .neko 文件。",
+                "逐字歌词工具 Lyrics Tool", sections, faqs, false, true, "", List.of());
     }
 
     private Page searchPage(String base) {
@@ -548,11 +586,16 @@ public final class StaticPageSeoRenderer {
                 String itemListId = pageUrl + "#itemlist";
                 webPage.put("mainEntity", ref(itemListId));
                 graph.add(itemListNode(page, base, itemListId));
+            } else if ("/tools-lyr".equals(page.path())) {
+                webPage.put("mainEntity", ref(pageUrl + "#webapp"));
             }
             graph.add(webPage);
 
             if (page.softwareApp()) {
                 graph.add(softwareAppNode(page, base));
+            }
+            if ("/tools-lyr".equals(page.path())) {
+                graph.add(toolsWebAppNode(page, pageUrl, base));
             }
             if (page.howTo()) {
                 graph.add(howToNode(page, base));
@@ -599,6 +642,33 @@ public final class StaticPageSeoRenderer {
         return app;
     }
 
+    private static ObjectNode toolsWebAppNode(Page page, String pageUrl, String base) {
+        ObjectNode app = JSON.createObjectNode();
+        app.put("@type", "WebApplication");
+        app.put("@id", pageUrl + "#webapp");
+        app.put("name", "逐字歌词制作工具");
+        app.put("url", pageUrl);
+        app.put("description", page.description());
+        app.put("applicationCategory", "MultimediaApplication");
+        app.put("operatingSystem", "Any");
+        app.put("browserRequirements", "Requires JavaScript");
+        app.put("isAccessibleForFree", true);
+        app.put("provider", ref(base + "/#organization"));
+        app.put("isPartOf", ref(base + "/#website"));
+        app.set("inLanguage", langs());
+        ArrayNode features = app.putArray("featureList");
+        features.add("本地音乐逐字打轴");
+        features.add("LRC、纯文本与 neko-v1 导入");
+        features.add("AMLL 歌词效果预览");
+        features.add(".neko 歌词文件下载");
+        ObjectNode offers = app.putObject("offers");
+        offers.put("@type", "Offer");
+        offers.put("price", "0");
+        offers.put("priceCurrency", "CNY");
+        offers.put("description", "Free / 免费");
+        return app;
+    }
+
     private static ObjectNode itemListNode(Page page, String base, String itemListId) {
         ObjectNode list = JSON.createObjectNode();
         list.put("@type", "ItemList");
@@ -630,14 +700,27 @@ public final class StaticPageSeoRenderer {
         ObjectNode howTo = JSON.createObjectNode();
         howTo.put("@type", "HowTo");
         boolean lxmusic = "/lxmusic".equals(page.path());
+        boolean tools = "/tools-lyr".equals(page.path());
         howTo.put("@id", base + page.path() + "#howto");
-        howTo.put("name", lxmusic
-                ? "导入落雪音乐 LX Music 的 LXMC 歌单"
-                : "从网易云音乐 / QQ 音乐 / 酷狗音乐迁入歌单");
-        howTo.put("description", lxmusic
-                ? "在 Neko歌姬计划 Web 端上传 LXMC 文件并匹配导入落雪歌单的步骤。"
-                : "在 Neko 客户端内导入外部歌单的步骤。");
-        String[][] steps = lxmusic
+        howTo.put("name", tools
+                ? "在浏览器中制作逐字歌词并下载 .neko 文件"
+                : lxmusic
+                        ? "导入落雪音乐 LX Music 的 LXMC 歌单"
+                        : "从网易云音乐 / QQ 音乐 / 酷狗音乐迁入歌单");
+        howTo.put("description", tools
+                ? "使用 Neko歌姬计划逐字歌词制作工具完成本地选曲、歌词导入、逐字打轴、预览与下载。"
+                : lxmusic
+                        ? "在 Neko歌姬计划 Web 端上传 LXMC 文件并匹配导入落雪歌单的步骤。"
+                        : "在 Neko 客户端内导入外部歌单的步骤。");
+        String[][] steps = tools
+                ? new String[][]{
+                    {"选择本地音乐", "在浏览器中选择需要制作歌词的音频文件，音频不会上传服务器。"},
+                    {"粘贴或导入歌词", "粘贴纯文本、LRC、neko-v1 JSON，或导入 .lrc / .neko 文件。"},
+                    {"逐字打轴", "播放音乐，在目标文字出现时点击记录；空格和标点不会成为目标。"},
+                    {"预览效果", "切换到效果预览，检查逐字高亮、自动跟随和行间衔接。"},
+                    {"下载歌词", "确认时间轴完成后下载 neko-v1 格式的 .neko 歌词文件。"}
+                }
+                : lxmusic
                 ? new String[][]{
                     {"导出 LXMC 文件", "在落雪音乐中将需要迁移的歌单导出为 LXMC / .lxmc 文件。"},
                     {"登录并打开我的歌单", "登录 Neko歌姬计划 Web 播放器，进入「我的歌单」。"},
@@ -716,11 +799,17 @@ public final class StaticPageSeoRenderer {
         sb.append("<meta name=\"googlebot\" content=\"index, follow\">\n");
         sb.append("<meta name=\"bingbot\" content=\"index, follow\">\n");
         sb.append("<meta name=\"theme-color\" content=\"#04090b\">\n");
+        sb.append("<meta name=\"color-scheme\" content=\"dark\">\n");
+        sb.append("<meta name=\"application-name\" content=\"NekoMusic\">\n");
+        sb.append("<meta name=\"format-detection\" content=\"telephone=no\">\n");
+        sb.append("<meta name=\"mobile-web-app-capable\" content=\"yes\">\n");
+        sb.append("<meta name=\"apple-mobile-web-app-title\" content=\"NekoMusic\">\n");
         sb.append("<link rel=\"canonical\" href=\"").append(esc(pageUrl)).append("\">\n");
         sb.append("<link rel=\"alternate\" hreflang=\"zh-CN\" href=\"").append(esc(pageUrl)).append("\">\n");
         sb.append("<link rel=\"alternate\" hreflang=\"en\" href=\"").append(esc(pageUrl)).append("\">\n");
         sb.append("<link rel=\"alternate\" hreflang=\"x-default\" href=\"").append(esc(pageUrl)).append("\">\n");
         sb.append("<link rel=\"icon\" href=\"/favicon.ico\">\n");
+        sb.append("<link rel=\"manifest\" href=\"/manifest.webmanifest\">\n");
         sb.append("<link rel=\"sitemap\" type=\"application/xml\" href=\"/sitemap.xml\">\n");
         sb.append("<link rel=\"alternate\" type=\"text/plain\" href=\"/llms.txt\" title=\"llms.txt\">\n");
         sb.append("<meta property=\"og:type\" content=\"website\">\n");
@@ -729,6 +818,7 @@ public final class StaticPageSeoRenderer {
         sb.append("<meta property=\"og:title\" content=\"").append(esc(page.title())).append("\">\n");
         sb.append("<meta property=\"og:description\" content=\"").append(esc(page.description())).append("\">\n");
         sb.append("<meta property=\"og:image\" content=\"").append(esc(base)).append("/og-image.jpg\">\n");
+        sb.append("<meta property=\"og:image:type\" content=\"image/jpeg\">\n");
         sb.append("<meta property=\"og:image:width\" content=\"1024\">\n");
         sb.append("<meta property=\"og:image:height\" content=\"559\">\n");
         sb.append("<meta property=\"og:image:alt\" content=\"").append(esc(page.title())).append("\">\n");
@@ -739,6 +829,7 @@ public final class StaticPageSeoRenderer {
         sb.append("<meta name=\"twitter:title\" content=\"").append(esc(page.title())).append("\">\n");
         sb.append("<meta name=\"twitter:description\" content=\"").append(esc(page.description())).append("\">\n");
         sb.append("<meta name=\"twitter:image\" content=\"").append(esc(base)).append("/og-image.jpg\">\n");
+        sb.append("<meta name=\"twitter:image:alt\" content=\"").append(esc(page.title())).append("\">\n");
         sb.append(STYLE);
         sb.append("<script type=\"application/ld+json\">").append(jsonLd).append("</script>\n");
         sb.append("</head>\n<body>\n");
@@ -746,6 +837,7 @@ public final class StaticPageSeoRenderer {
         sb.append("<header>\n<nav aria-label=\"Main navigation\">\n");
         sb.append(link(base + "/", "首页 Home")).append(" | ")
                 .append(link(base + "/lxmusic", "落雪导入 LX Music")).append(" | ")
+                .append(link(base + "/tools-lyr", "逐字歌词工具 Lyrics Tool")).append(" | ")
                 .append(link(base + "/download", "下载 Download")).append(" | ")
                 .append(link(base + "/ranking", "排行榜 Ranking")).append(" | ")
                 .append(link(base + "/latest", "最新 Latest")).append(" | ")
@@ -775,6 +867,12 @@ public final class StaticPageSeoRenderer {
                     .append("<a class=\"cta\" href=\"").append(esc(base + "/playlists?import=lxmc"))
                     .append("\">导入落雪歌单 Import LXMC</a> ")
                     .append("<a href=\"").append(esc(base + "/playlists")).append("\">打开我的歌单</a></p>\n");
+        } else if ("/tools-lyr".equals(page.path())) {
+            sb.append("<p class=\"actions\">")
+                    .append("<a class=\"cta\" href=\"").append(esc(base + "/tools-lyr"))
+                    .append("\">打开逐字歌词工具 Open Lyrics Tool</a> ")
+                    .append("<a href=\"").append(esc(base + "/upload"))
+                    .append("\">上传音乐</a></p>\n");
         } else {
             sb.append("<p class=\"actions\">")
                     .append("<a class=\"cta\" href=\"").append(esc(base + "/download")).append("\">下载客户端 Download</a> ")
@@ -787,6 +885,7 @@ public final class StaticPageSeoRenderer {
                 .append(" · 免费开源在线音乐 / Free open-source online music</p>\n");
         sb.append("<p>").append(link(base + "/about", "关于 About")).append(" · ")
                 .append(link(base + "/lxmusic", "落雪导入 LX Music")).append(" · ")
+                .append(link(base + "/tools-lyr", "逐字歌词工具 Lyrics Tool")).append(" · ")
                 .append(link(base + "/privacy", "隐私政策 Privacy")).append(" · ")
                 .append(link(base + "/download", "下载 Download")).append(" · ")
                 .append("<a href=\"").append(REPO).append("\" rel=\"noopener noreferrer\">GitHub</a> · ")

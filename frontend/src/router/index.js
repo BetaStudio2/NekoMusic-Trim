@@ -82,9 +82,75 @@ const router = createRouter({
       name: 'tools-lyr',
       component: () => import('@/views/ToolsLyrView.vue'),
       meta: {
-        title: '逐字歌词制作工具 - Neko歌姬计划',
+        title: '逐字歌词制作工具 - LRC/NEKO 在线打轴与下载 | Neko歌姬计划',
         description: '在浏览器本地选择音乐、粘贴或输入歌词，通过逐字打轴制作并导出 neko-v1 格式的 .neko 逐字歌词文件。音频与歌词不会上传服务器。',
-        keywords: '逐字歌词,歌词制作,歌词打轴,LRC转逐字,neko-v1,.neko,歌词时间轴,在线歌词工具'
+        keywords: '逐字歌词,歌词制作,歌词打轴,LRC转逐字,LRC转NEKO,neko-v1,.neko,歌词时间轴,在线歌词工具,AMLL歌词',
+        jsonLd: [
+          {
+            '@type': 'WebApplication',
+            '@id': `${SITE_ORIGIN}/tools-lyr#webapp`,
+            name: '逐字歌词制作工具',
+            url: `${SITE_ORIGIN}/tools-lyr`,
+            description: '在浏览器本地为 LRC、纯文本或 neko-v1 歌词制作逐字时间轴，并下载 .neko 文件。',
+            applicationCategory: 'MultimediaApplication',
+            operatingSystem: 'Any',
+            browserRequirements: 'Requires JavaScript',
+            isAccessibleForFree: true,
+            isPartOf: { '@id': `${SITE_ORIGIN}/#website` },
+            provider: { '@id': `${SITE_ORIGIN}/#organization` },
+            offers: {
+              '@type': 'Offer',
+              price: '0',
+              priceCurrency: 'CNY',
+              description: 'Free / 免费',
+            },
+            featureList: [
+              '本地音乐逐字打轴',
+              'LRC、纯文本与 neko-v1 导入',
+              'AMLL 歌词效果预览',
+              '.neko 歌词文件下载',
+            ],
+          },
+          {
+            '@type': 'HowTo',
+            '@id': `${SITE_ORIGIN}/tools-lyr#howto`,
+            name: '在浏览器中制作逐字歌词并下载 .neko 文件',
+            description: '使用 Neko歌姬计划逐字歌词制作工具完成本地选曲、歌词导入、逐字打轴、预览与下载。',
+            step: [
+              { '@type': 'HowToStep', position: 1, name: '选择本地音乐', text: '选择浏览器可播放的音频文件，音频不会上传服务器。' },
+              { '@type': 'HowToStep', position: 2, name: '粘贴或导入歌词', text: '粘贴纯文本、LRC、neko-v1 JSON，或导入 .lrc / .neko 文件。' },
+              { '@type': 'HowToStep', position: 3, name: '逐字打轴', text: '播放音乐，在目标文字出现时点击记录；空格和标点不会成为目标。' },
+              { '@type': 'HowToStep', position: 4, name: '预览效果', text: '切换到效果预览，检查逐字高亮、自动跟随和行间衔接。' },
+              { '@type': 'HowToStep', position: 5, name: '下载歌词', text: '确认时间轴完成后下载 neko-v1 格式的 .neko 歌词文件。' },
+            ],
+          },
+          {
+            '@type': 'FAQPage',
+            '@id': `${SITE_ORIGIN}/tools-lyr#faq`,
+            mainEntity: [
+              {
+                '@type': 'Question',
+                name: '逐字歌词制作工具是免费的吗？',
+                acceptedAnswer: { '@type': 'Answer', text: '是，工具完全免费，无需登录，也不需要安装客户端。' },
+              },
+              {
+                '@type': 'Question',
+                name: '音乐会上传到 Neko歌姬计划吗？',
+                acceptedAnswer: { '@type': 'Answer', text: '不会。音乐只在浏览器本地播放，歌词和时间轴也不会发送到服务器。' },
+              },
+              {
+                '@type': 'Question',
+                name: '可以导入已有的 LRC 或 .neko 吗？',
+                acceptedAnswer: { '@type': 'Answer', text: '可以。支持粘贴 LRC、纯文本、neko-v1 JSON，也支持直接导入 .lrc 或 .neko 文件。' },
+              },
+              {
+                '@type': 'Question',
+                name: '.neko 文件是什么？',
+                acceptedAnswer: { '@type': 'Answer', text: '.neko 是 UTF-8 编码的 neko-v1 JSON 歌词文件，包含行级、逐字/逐词时间轴、翻译和罗马音等字段。' },
+              },
+            ],
+          },
+        ],
       }
     },
     {
@@ -531,16 +597,24 @@ router.beforeEach((to) => {
     keywords,
     path: canonicalPath,
     robots: isNotFound ? NOT_FOUND_ROBOTS : isPrivate ? PRIVATE_ROBOTS : DEFAULT_ROBOTS,
-    // 每条路由注入一个 WebPage 实体；与 index.html 中的 @graph 通过 @id 合并。
+    // 每条路由注入 WebPage 实体；页面可通过 meta.jsonLd 追加 WebApplication / HowTo / FAQ 等实体。
     jsonLd: {
       '@context': 'https://schema.org',
-      '@type': 'WebPage',
-      '@id': `${url}#webpage`,
-      url,
-      name: title,
-      description,
-      isPartOf: { '@id': `${SITE_ORIGIN}/#website` },
-      inLanguage: ['zh-CN', 'en'],
+      '@graph': [
+        {
+          '@type': 'WebPage',
+          '@id': `${url}#webpage`,
+          url,
+          name: title,
+          description,
+          isPartOf: { '@id': `${SITE_ORIGIN}/#website` },
+          inLanguage: ['zh-CN', 'en'],
+          ...(to.name === 'tools-lyr' ? { mainEntity: { '@id': `${url}#webapp` } } : {}),
+        },
+        ...(Array.isArray(to.meta.jsonLd)
+          ? to.meta.jsonLd
+          : to.meta.jsonLd ? [to.meta.jsonLd] : []),
+      ],
     },
   })
 

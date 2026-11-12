@@ -180,7 +180,7 @@ export default {
 
   route: {
     home: '홈 - NekoMusic | 완전 무료 음악 플랫폼',
-    toolsLyr: '가사 타이밍 제작 도구 - NekoMusic',
+    toolsLyr: '가사 타이밍 제작 도구 - LRC/NEKO 타임라인 | NekoMusic',
     about: '회사 소개 - NekoMusic | 무료 음악 플랫폼',
     privacy: '개인정보 처리방침 - NekoMusic',
     download: '앱 받기 - NekoMusic | 무료 음악 앱',

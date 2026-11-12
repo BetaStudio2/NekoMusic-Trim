@@ -26,6 +26,7 @@
 - 多端一致：Web、Android、Windows、Linux、macOS 体验一致。
 - 外部歌单迁入：Web 可上传落雪音乐导出的 `.lxmc` 文件并匹配导入歌单；Android / PC 客户端还可从网易云音乐、QQ 音乐、酷狗音乐导入歌单。
 - 音乐上传：用户可上传作品并分享。
+- 逐字歌词制作：可在浏览器本地选择音乐，导入 LRC / NEKO 歌词，逐字打轴、预览并下载 `.neko` 文件。
 
 ## 3. 平台与客户端
 
@@ -75,10 +76,23 @@
 ## 6. 抓取与索引
 
 - 站点地图：https://music.nekocore.cn/sitemap.xml
+- 逐字歌词制作工具：https://music.nekocore.cn/tools-lyr
 - 允许搜索引擎与 AI 抓取器抓取公开页面。
-- 结构化数据：Organization、WebSite、WebPage、CollectionPage、BreadcrumbList、ItemList、FAQPage、SoftwareApplication、HowTo、MusicRecording、AudioObject、MusicPlaylist。
+- 结构化数据：Organization、WebSite、WebPage、WebApplication、CollectionPage、BreadcrumbList、ItemList、FAQPage、SoftwareApplication、HowTo、MusicRecording、AudioObject、MusicPlaylist。
 - 站点地图：索引文件下分固定页、歌曲页、歌单页三个子图，并为歌曲页附带封面图片条目。
-- 主要公开页面：`/`、`/lxmusic`、`/download`、`/ranking`、`/latest`、`/about`、`/privacy`、`/detail/{id}`、`/playlist/{id}`。
-- 无 JS 抓取：对搜索引擎、链接预览与 AI 抓取器，`/`、`/lxmusic`、`/download`、`/detail/{id}`、`/playlist/{id}` 等服务端直接返回含正文与 JSON-LD 的 HTML；普通浏览器加载 SPA。
+- 主要公开页面：`/`、`/lxmusic`、`/tools-lyr`、`/download`、`/ranking`、`/latest`、`/about`、`/privacy`、`/detail/{id}`、`/playlist/{id}`。
+- 无 JS 抓取：对搜索引擎、链接预览与 AI 抓取器，`/`、`/lxmusic`、`/tools-lyr`、`/download`、`/detail/{id}`、`/playlist/{id}` 等服务端直接返回含正文与 JSON-LD 的 HTML；普通浏览器加载 SPA。
+
+## 7. 逐字歌词制作工具
+
+页面：https://music.nekocore.cn/tools-lyr
+
+- 完全在浏览器本地运行，音频和歌词不会上传服务器。
+- 支持本地 MP3、FLAC、WAV、M4A、OGG 等浏览器可播放音频。
+- 支持粘贴纯文本、LRC、neko-v1 JSON，或直接导入 `.lrc` / `.neko` 文件。
+- 播放音乐后逐字点击打轴；空格、标点和纯符号不会成为记录目标。
+- 提供 AMLL 歌词墙效果预览，可检查逐字高亮、自动跟随与行间衔接。
+- 完成后下载 neko-v1 格式的 `.neko` 歌词，可用于音乐上传的歌词入口。
+- 工具免费、无需登录、无需安装客户端，并适配桌面与移动端。
 
 最后更新：2026 年。

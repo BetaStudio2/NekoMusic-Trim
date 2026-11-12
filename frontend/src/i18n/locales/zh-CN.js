@@ -229,7 +229,7 @@ export default {
 
   route: {
     home: '首页 - Neko歌姬计划 | 落雪音乐 LXMC 歌单导入与免费在线音乐',
-    toolsLyr: '逐字歌词制作工具 - Neko歌姬计划',
+    toolsLyr: '逐字歌词制作工具 - LRC/NEKO 在线打轴与下载 | Neko歌姬计划',
     lxmusic: '落雪音乐 LX Music 歌单导入 - LXMC 文件迁移 | Neko歌姬计划',
     about: '关于我们 - Neko歌姬计划 | 免费音乐平台',
     privacy: '隐私政策 - Neko歌姬计划',

@@ -26,6 +26,7 @@ class SitemapHandlerTest {
 
         assertTrue(xml.contains("<loc>https://music.example.com/</loc>"));
         assertTrue(xml.contains("<loc>https://music.example.com/lxmusic</loc>"));
+        assertTrue(xml.contains("<loc>https://music.example.com/tools-lyr</loc>"));
         assertTrue(xml.contains("<loc>https://music.example.com/ranking</loc>"));
         assertFalse(xml.contains("<lastmod>"), "固定页没有可靠更新时间时不应写入 lastmod");
     }

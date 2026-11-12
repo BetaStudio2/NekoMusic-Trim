@@ -11,6 +11,7 @@ export const DEFAULT_ROBOTS =
   'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'
 export const PRIVATE_ROBOTS = 'noindex, nofollow'
 export const NOT_FOUND_ROBOTS = 'noindex, follow'
+const SITE_NAME = 'Neko歌姬计划 (Neko Music)'
 
 export const DEFAULT_DESCRIPTION =
   'Neko歌姬计划 - 完全免费的在线音乐播放平台，支持落雪音乐 LX Music LXMC 歌单导入、海量音乐搜索、高品质播放与个性化收藏。无需付费，永久免费。'
@@ -37,6 +38,17 @@ function upsertLink(rel, href) {
   if (!el) {
     el = document.createElement('link')
     el.setAttribute('rel', rel)
+    document.head.appendChild(el)
+  }
+  el.setAttribute('href', href)
+}
+
+function upsertAlternate(hreflang, href) {
+  let el = document.head.querySelector(`link[rel="alternate"][hreflang="${hreflang}"]`)
+  if (!el) {
+    el = document.createElement('link')
+    el.setAttribute('rel', 'alternate')
+    el.setAttribute('hreflang', hreflang)
     document.head.appendChild(el)
   }
   el.setAttribute('href', href)
@@ -83,17 +95,28 @@ export function applyPageSeo({
   const isDefaultImage = imageUrl === DEFAULT_OG_IMAGE
 
   document.title = title
+  upsertMeta('name', 'application-name', 'NekoMusic')
   upsertMeta('name', 'description', description)
   upsertMeta('name', 'keywords', keywords)
   upsertMeta('name', 'robots', robots)
+  upsertMeta('name', 'theme-color', '#04090b')
+  upsertMeta('name', 'color-scheme', 'dark')
+  upsertMeta('name', 'format-detection', 'telephone=no')
   upsertLink('canonical', url)
+  upsertLink('manifest', '/manifest.webmanifest')
+  upsertAlternate('zh-CN', url)
+  upsertAlternate('en', url)
+  upsertAlternate('x-default', url)
 
   upsertMeta('property', 'og:type', type)
+  upsertMeta('property', 'og:site_name', SITE_NAME)
   upsertMeta('property', 'og:url', url)
   upsertMeta('property', 'og:title', title)
   upsertMeta('property', 'og:description', description)
   upsertMeta('property', 'og:image', imageUrl)
   upsertMeta('property', 'og:image:alt', imageAlt)
+  upsertMeta('property', 'og:locale', 'zh_CN')
+  upsertMeta('property', 'og:locale:alternate', 'en_US')
   if (isDefaultImage) {
     upsertMeta('property', 'og:image:type', 'image/jpeg')
     upsertMeta('property', 'og:image:width', '1024')

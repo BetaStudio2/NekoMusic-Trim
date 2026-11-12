@@ -180,7 +180,7 @@ export default {
 
   route: {
     home: '首頁 - Neko歌姬計劃 | 完全免費的音樂平台',
-    toolsLyr: '逐字歌詞製作工具 - Neko歌姬計劃',
+    toolsLyr: '逐字歌詞製作工具 - LRC/NEKO 線上打軸與下載 | Neko歌姬計劃',
     about: '關於我們 - Neko歌姬計劃 | 免費音樂平台',
     privacy: '隱私權政策 - Neko歌姬計劃',
     download: '下載用戶端 - Neko歌姬計劃 | 免費音樂應用',

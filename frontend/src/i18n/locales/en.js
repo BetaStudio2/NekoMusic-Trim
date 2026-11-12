@@ -228,7 +228,7 @@ export default {
 
   route: {
     home: 'Home - NekoMusic | LX Music LXMC playlist import and free online music',
-    toolsLyr: 'Word-by-word lyrics maker - NekoMusic',
+    toolsLyr: 'Word-by-word lyrics maker - LRC/NEKO timing tool | NekoMusic',
     lxmusic: 'LX Music playlist import - LXMC migration | NekoMusic',
     about: 'About us - NekoMusic | Free music platform',
     privacy: 'Privacy policy - NekoMusic',

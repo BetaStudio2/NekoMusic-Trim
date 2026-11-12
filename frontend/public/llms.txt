@@ -17,6 +17,7 @@
 
 - [首页 / Web 播放器](https://music.nekocore.cn/)：在线搜索、播放、收藏与歌单。
 - [落雪音乐 LX Music 歌单导入](https://music.nekocore.cn/lxmusic)：上传 LXMC / `.lxmc` 文件，选择目标歌单后自动匹配导入。
+- [逐字歌词制作工具](https://music.nekocore.cn/tools-lyr)：本地选择音乐，粘贴或导入 LRC / NEKO 歌词，逐字打轴、预览并下载 `.neko` 文件。
 - [下载客户端](https://music.nekocore.cn/download)：Android / Windows / Linux / macOS 安装包，以及歌单迁入步骤与系统要求。
 - [热门排行榜](https://music.nekocore.cn/ranking)：按站内播放次数排序的热门曲目。
 - [最新音乐](https://music.nekocore.cn/latest)：最近上传到站内的曲目。
@@ -31,7 +32,7 @@
 - 公开歌单页：`https://music.nekocore.cn/playlist/{id}`
 - 搜索页：`https://music.nekocore.cn/search?q={关键词}`
 
-抓取说明：对搜索引擎 / 链接预览 / AI 抓取器（curl、GPTBot、OAI-SearchBot、ChatGPT-User、PerplexityBot、ClaudeBot、CCBot 等），上述页面返回服务端渲染的 HTML 与 JSON-LD，普通浏览器则加载 SPA。结构化数据包含 Organization、WebSite、WebPage、CollectionPage、BreadcrumbList、ItemList、SoftwareApplication、HowTo、FAQPage、MusicRecording、AudioObject 与 MusicPlaylist。站点地图索引还包含歌曲页封面图片条目。
+抓取说明：对搜索引擎 / 链接预览 / AI 抓取器（curl、GPTBot、OAI-SearchBot、ChatGPT-User、PerplexityBot、ClaudeBot、CCBot 等），上述页面返回服务端渲染的 HTML 与 JSON-LD，普通浏览器则加载 SPA。结构化数据包含 Organization、WebSite、WebPage、WebApplication、CollectionPage、BreadcrumbList、ItemList、SoftwareApplication、HowTo、FAQPage、MusicRecording、AudioObject 与 MusicPlaylist。站点地图索引还包含歌曲页封面图片条目。
 
 ## 常见问题
 

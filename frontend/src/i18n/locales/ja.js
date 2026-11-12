@@ -180,7 +180,7 @@ export default {
 
   route: {
     home: 'ホーム - NekoMusic | 完全無料の音楽プラットフォーム',
-    toolsLyr: '歌詞タイミング制作ツール - NekoMusic',
+    toolsLyr: '歌詞タイミング制作ツール - LRC/NEKO 打軸・書き出し | NekoMusic',
     about: '運営について - NekoMusic | 無料音楽プラットフォーム',
     privacy: 'プライバシーポリシー - NekoMusic',
     download: 'アプリを入手 - NekoMusic | 無料音楽アプリ',

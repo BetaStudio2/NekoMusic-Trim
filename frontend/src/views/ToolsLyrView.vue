@@ -184,6 +184,27 @@
         <h2>准备好音乐和歌词后开始</h2>
         <p>选择上方音乐并生成歌词行，逐字编辑器会显示在这里。</p>
       </NCard>
+
+      <section class="lyrics-tool__faq" aria-labelledby="lyrics-tool-faq-title">
+        <div class="lyrics-tool__faq-head">
+          <span class="lyrics-tool__eyebrow">LYRICS TOOL FAQ</span>
+          <h2 id="lyrics-tool-faq-title">逐字歌词制作常见问题</h2>
+          <p>工具完全在浏览器本地运行，支持 LRC、纯文本和 neko-v1 歌词。</p>
+        </div>
+        <div class="lyrics-tool__faq-grid">
+          <article v-for="faq in toolFaqs" :key="faq.question">
+            <h3>{{ faq.question }}</h3>
+            <p>{{ faq.answer }}</p>
+          </article>
+        </div>
+        <p class="lyrics-tool__related">
+          制作完成后可前往
+          <RouterLink to="/upload">上传音乐</RouterLink>
+          选择 .neko 歌词文件，或返回
+          <RouterLink to="/">Web 播放器</RouterLink>
+          继续听歌。
+        </p>
+      </section>
     </div>
   </PageShell>
 </template>
@@ -217,6 +238,24 @@ const lyricsText = ref('')
 const lines = ref([])
 const timingRevision = ref(0)
 const activeStudioTab = ref('timing')
+const toolFaqs = [
+  {
+    question: '逐字歌词制作工具是免费的吗？',
+    answer: '是，工具完全免费，无需登录，也不需要安装客户端。',
+  },
+  {
+    question: '音乐会上传到 Neko歌姬计划吗？',
+    answer: '不会。音乐只在浏览器本地播放，歌词和时间轴也不会发送到服务器。',
+  },
+  {
+    question: '可以导入已有的 LRC 或 .neko 吗？',
+    answer: '可以。支持粘贴 LRC、纯文本、neko-v1 JSON，也支持直接导入 .lrc 或 .neko 文件。',
+  },
+  {
+    question: '.neko 文件是什么？',
+    answer: '.neko 是 UTF-8 编码的 neko-v1 JSON 歌词文件，包含行级、逐字/逐词时间轴、翻译和罗马音等字段。',
+  },
+]
 
 let lineSequence = 0
 
@@ -899,6 +938,63 @@ onBeforeUnmount(() => {
   background: rgba(95, 208, 224, 0.1);
 }
 
+.lyrics-tool__faq {
+  margin-top: var(--n-space-4);
+  padding: clamp(22px, 3vw, 34px);
+  border: 1px solid var(--n-line);
+  border-radius: var(--n-radius-lg);
+  background: rgba(8, 18, 22, 0.62);
+}
+
+.lyrics-tool__faq-head h2 {
+  margin: var(--n-space-2) 0 0;
+  color: var(--n-text);
+  font-size: clamp(1.25rem, 2vw, 1.6rem);
+}
+
+.lyrics-tool__faq-head p {
+  margin: 8px 0 0;
+  color: var(--n-text-faint);
+  font-size: var(--n-text-sm);
+}
+
+.lyrics-tool__faq-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--n-space-3);
+  margin-top: var(--n-space-5);
+}
+
+.lyrics-tool__faq-grid article {
+  padding: var(--n-space-4);
+  border: 1px solid var(--n-line-subtle);
+  border-radius: var(--n-radius-control);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.lyrics-tool__faq-grid h3 {
+  margin: 0;
+  color: var(--n-text);
+  font-size: var(--n-text-sm);
+}
+
+.lyrics-tool__faq-grid p {
+  margin: 7px 0 0;
+  color: var(--n-text-muted);
+  font-size: var(--n-text-sm);
+  line-height: 1.7;
+}
+
+.lyrics-tool__related {
+  margin: var(--n-space-4) 0 0;
+  color: var(--n-text-faint);
+  font-size: var(--n-text-sm);
+}
+
+.lyrics-tool__related a {
+  color: var(--n-accent-strong);
+}
+
 @media (hover: hover) {
   .lyrics-tool__audio-drop:hover {
     border-color: var(--n-accent);
@@ -916,6 +1012,10 @@ onBeforeUnmount(() => {
   }
 
   .lyrics-tool__setup {
+    grid-template-columns: 1fr;
+  }
+
+  .lyrics-tool__faq-grid {
     grid-template-columns: 1fr;
   }
 
