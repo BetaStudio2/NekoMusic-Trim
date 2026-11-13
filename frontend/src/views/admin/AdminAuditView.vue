@@ -128,6 +128,8 @@
                       v-for="(line, index) in uploadLyrics[upload.id]"
                       :key="index"
                       class="lyric-line"
+                      :class="{ 'lyric-line--active': activeLyricIndexes[upload.id] === index }"
+                      :aria-current="activeLyricIndexes[upload.id] === index ? 'true' : undefined"
                     >
                       <div class="lyric-text">{{ line.text }}</div>
                       <div v-if="line.translation" class="lyric-translation">{{ line.translation }}</div>
@@ -162,6 +164,8 @@
               :ref="(el) => setAudioPlayerRef(upload.id, el)"
               :src="currentAudioUrl"
               controls
+              @timeupdate="handleAudioTimeUpdate(upload.id, $event)"
+              @seeked="handleAudioTimeUpdate(upload.id, $event)"
               @ended="handleAudioEnded"
               @error="handleAudioError"
             />
@@ -222,7 +226,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, nextTick, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import API_CONFIG from '@/config/apiConfig.js'
 import { useToast } from '@/composables/useToast'
@@ -248,6 +252,7 @@ const uploadLyrics = ref({})
 const uploadRawLyrics = ref({})
 const loadingLyrics = ref({})
 const lyricsScrollRefs = ref({})
+const activeLyricIndexes = ref({})
 const showRejectConfirm = ref(false)
 const rejectUploadId = ref(null)
 const rejectReason = ref('')
@@ -560,6 +565,7 @@ const stopPreview = () => {
   currentPlayingId.value = null
   if (playingId) {
     loadingAudios.value[playingId] = false
+    delete activeLyricIndexes.value[playingId]
   }
 }
 
@@ -569,6 +575,7 @@ const handleAudioEnded = () => {
   currentPlayingId.value = null
   if (playingId) {
     loadingAudios.value[playingId] = false
+    delete activeLyricIndexes.value[playingId]
   }
 }
 
@@ -580,6 +587,7 @@ const handleAudioError = (error) => {
   currentPlayingId.value = null
   if (playingId) {
     loadingAudios.value[playingId] = false
+    delete activeLyricIndexes.value[playingId]
   }
 }
 
@@ -692,6 +700,13 @@ const toggleLyricsPreview = async (uploadId) => {
   if (!uploadLyrics.value[uploadId] && !loadingLyrics.value[uploadId]) {
     await loadLyricsForUpload(uploadId)
   }
+
+  // 播放中重新展开歌词时，立即定位到当前歌词行。
+  nextTick(() => {
+    if (currentPlayingId.value !== uploadId) return
+    const player = audioPlayers.value[uploadId]
+    if (player) updateLyricsAutoScroll(uploadId, player.currentTime)
+  })
 }
 
 // 加载上传的歌词
@@ -846,6 +861,65 @@ const handleLyricsScroll = (uploadId, sourceSide, event) => {
     const targetScrollTop = scrollRatio * targetScrollHeight
     targetElement.scrollTop = targetScrollTop
   }
+}
+
+// 查找当前播放时间对应的歌词行。
+const findActiveLyricIndex = (lines, currentTime) => {
+  let activeIndex = -1
+  for (let index = 0; index < lines.length; index++) {
+    const lineTime = Number(lines[index]?.time)
+    if (!Number.isFinite(lineTime)) continue
+    if (lineTime > currentTime) break
+    activeIndex = index
+  }
+  return activeIndex
+}
+
+// 将解析后歌词平滑滚动到视区中部；纯文本面板由现有滚动联动跟随。
+const scrollLyricsToActiveLine = (uploadId, index) => {
+  const container = lyricsScrollRefs.value[uploadId]?.left
+  if (!container) return
+
+  if (index < 0) {
+    container.scrollTo({
+      top: 0,
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    })
+    return
+  }
+
+  const line = container.children[index]
+  if (!line) return
+
+  const containerRect = container.getBoundingClientRect()
+  const lineRect = line.getBoundingClientRect()
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+  const targetTop = container.scrollTop
+    + lineRect.top
+    - containerRect.top
+    - (container.clientHeight - lineRect.height) / 2
+
+  container.scrollTo({
+    top: Math.max(0, Math.min(maxScrollTop, targetTop)),
+    behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  })
+}
+
+const updateLyricsAutoScroll = (uploadId, currentTime) => {
+  if (showLyricsPreviewId.value !== uploadId) return
+  const lines = uploadLyrics.value[uploadId]
+  if (!Array.isArray(lines) || lines.length === 0) return
+
+  const safeTime = Math.max(0, Number(currentTime) || 0)
+  const nextIndex = findActiveLyricIndex(lines, safeTime)
+  if (nextIndex === activeLyricIndexes.value[uploadId]) return
+
+  activeLyricIndexes.value[uploadId] = nextIndex
+  nextTick(() => scrollLyricsToActiveLine(uploadId, nextIndex))
+}
+
+const handleAudioTimeUpdate = (uploadId, event) => {
+  updateLyricsAutoScroll(uploadId, event?.currentTarget?.currentTime)
 }
 
 // 退出登录
@@ -1189,10 +1263,23 @@ onMounted(() => {
 }
 
 .lyric-line {
-  padding: 2px 0;
+  margin: 0 calc(var(--n-space-2) * -1);
+  padding: 2px var(--n-space-2);
+  border-left: 2px solid transparent;
+  border-radius: var(--n-radius-xs);
   color: var(--n-text-muted);
   font-size: var(--n-text-sm);
   line-height: var(--n-leading-normal);
+  transition:
+    color var(--n-duration-fast) var(--n-ease),
+    background var(--n-duration-fast) var(--n-ease),
+    border-color var(--n-duration-fast) var(--n-ease);
+}
+
+.lyric-line--active {
+  border-left-color: var(--n-accent-strong);
+  background: var(--n-accent-soft);
+  color: var(--n-text);
 }
 
 .lyric-text {
