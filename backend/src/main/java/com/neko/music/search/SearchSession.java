@@ -3,7 +3,6 @@
  * Copyright (C) 2026 NekoMusic contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Java port of ArchoeraMusic/app/core/indexer/SearchSession.cs
  * Portions derived from ArchoeraMusic, Copyright (C) 2026 Archoera && BetaStudio2,
  * AGPL-3.0-or-later. 修改说明：去掉 FFI JSON 解析，改为强类型请求；增加索引重建后的
  * 会话 / 查询缓存失效入口。
