@@ -3,9 +3,8 @@
  * Copyright (C) 2026 NekoMusic contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Java port of ArchoeraMusic/app/core/indexer/HanziData.cs
  * Portions derived from ArchoeraMusic, Copyright (C) 2026 Archoera && BetaStudio2,
- * AGPL-3.0-or-later. 修改说明：由 C# 逐函数翻译为 Java，资源路径改为 classpath。
+ * AGPL-3.0-or-later. 修改说明：资源路径改为 classpath。
  *
  * 数据表来源与许可证见 backend/THIRD-PARTY-NOTICES.md（Unicode License）。
  */

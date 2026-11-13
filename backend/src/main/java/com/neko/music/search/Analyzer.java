@@ -3,9 +3,8 @@
  * Copyright (C) 2026 NekoMusic contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Java port of ArchoeraMusic/app/core/indexer/Analyzer.cs
  * Portions derived from ArchoeraMusic, Copyright (C) 2026 Archoera && BetaStudio2,
- * AGPL-3.0-or-later. 修改说明：由 C# 翻译为 Java；繁转简复用 Neko 既有的 opencc4j，
+ * AGPL-3.0-or-later. 修改说明：繁转简复用 Neko 既有的 opencc4j，
  * 拼音改为离线导出词库的最长匹配（详见 PinyinFacade）。
  */
 
@@ -31,7 +30,7 @@ public final class Analyzer {
 
     /**
      * 分析器语义版本；任何影响词元输出的变更都必须递增（触发全量重建）。
-     * 与 ArchoeraMusic 的 analyzer v12 对齐：数据表与算法移植自同一版本。
+     * 采用 analyzer v12：数据表结构与算法版本固定。
      */
     public static final int ANALYZER_VERSION = 12;
 

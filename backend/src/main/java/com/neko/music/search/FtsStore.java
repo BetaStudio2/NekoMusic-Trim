@@ -3,7 +3,6 @@
  * Copyright (C) 2026 NekoMusic contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Java port of ArchoeraMusic/app/core/indexer/FtsStore.cs + IndexStore.cs
  * Portions derived from ArchoeraMusic, Copyright (C) 2026 Archoera && BetaStudio2,
  * AGPL-3.0-or-later. 修改说明：Microsoft.Data.Sqlite → sqlite-jdbc；接口收敛为单个 Java 类，
  * 所有公开方法串行化（单实例索引，读写共用一条连接）。
