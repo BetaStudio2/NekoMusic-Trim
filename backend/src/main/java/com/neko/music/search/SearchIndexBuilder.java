@@ -3,7 +3,6 @@
  * Copyright (C) 2026 NekoMusic contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Java port of ArchoeraMusic/app/core/indexer/IndexerEngine.cs（数据源改为 MySQL）
  * Portions derived from ArchoeraMusic, Copyright (C) 2026 Archoera && BetaStudio2,
  * AGPL-3.0-or-later. 修改说明：去掉 library.db / mtime / 世代水位线，改用
  * 「元数据 + 歌词 content_hash」指纹做增量判定；歌词按批读取，全量不常驻内存。
@@ -38,7 +37,7 @@ import java.util.Set;
 /**
  * 以 MySQL 为数据源的曲库索引器。
  *
- * <p>与 C# 原实现的差异：
+ * <p>与原始实现的差异：
  * <ul>
  *   <li>脏集判定改用 64 位指纹（title/artist/album/language/歌词 content_hash/大小/占位标记），
  *       不再依赖文件 mtime；</li>
@@ -47,9 +46,9 @@ import java.util.Set;
  *   <li>译文 / 音译歌词层首期留空（Neko 的 {@code music_lyrics} 尚无独立分层）。</li>
  * </ul>
  */
-public final class LibraryIndexer implements AutoCloseable {
+public final class SearchIndexBuilder implements AutoCloseable {
 
-    private static final Logger logger = LoggerFactory.getLogger(LibraryIndexer.class);
+    private static final Logger logger = LoggerFactory.getLogger(SearchIndexBuilder.class);
 
     /** 累计改写曲数达到该值时做一次 FTS5 merge。 */
     static final int MERGE_EVERY_UPDATES = 30;
@@ -70,7 +69,7 @@ public final class LibraryIndexer implements AutoCloseable {
     private long indexVersion;
     private volatile boolean closed;
 
-    public LibraryIndexer(Path indexPath, ConnectionSource connections) {
+    public SearchIndexBuilder(Path indexPath, ConnectionSource connections) {
         this.indexPath = indexPath.toAbsolutePath();
         this.connections = connections;
     }

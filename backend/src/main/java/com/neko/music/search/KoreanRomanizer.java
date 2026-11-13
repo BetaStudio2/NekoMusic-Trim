@@ -3,9 +3,8 @@
  * Copyright (C) 2026 NekoMusic contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Java port of ArchoeraMusic/app/core/indexer/Korean.cs
  * Portions derived from ArchoeraMusic, Copyright (C) 2026 Archoera && BetaStudio2,
- * AGPL-3.0-or-later. 修改说明：由 C# 逐函数翻译为 Java。
+ * AGPL-3.0-or-later. 修改说明：
  */
 
 package com.neko.music.search;

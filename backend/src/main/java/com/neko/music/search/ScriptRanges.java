@@ -3,9 +3,8 @@
  * Copyright (C) 2026 NekoMusic contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Java port of ArchoeraMusic/app/core/shared/text/ScriptRanges.cs
  * Portions derived from ArchoeraMusic, Copyright (C) 2026 Archoera && BetaStudio2,
- * AGPL-3.0-or-later. 修改说明：由 C# 逐函数翻译为 Java，行为保持一致。
+ * AGPL-3.0-or-later. 修改说明：行为保持一致。
  */
 
 package com.neko.music.search;

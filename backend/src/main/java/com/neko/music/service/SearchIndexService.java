@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * 本地搜索索引服务：灰度开关、后台构建 / 增量刷新、查询入口。
- * 索引实现移植自 ArchoeraMusic/app/core/indexer（AGPL-3.0-or-later）。
  */
 
 package com.neko.music.service;
 
 import com.neko.music.config.ConfigManager;
 import com.neko.music.database.DatabaseManager;
-import com.neko.music.search.LibraryIndexer;
+import com.neko.music.search.SearchIndexBuilder;
 import com.neko.music.search.SearchSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +46,7 @@ public final class SearchIndexService implements AutoCloseable {
 
     private final Object lock = new Object();
 
-    private LibraryIndexer indexer;
+    private SearchIndexBuilder indexer;
     private Path indexPath;
     private ThreadPoolExecutor writer;
     private ScheduledExecutorService scheduler;
@@ -125,7 +124,7 @@ public final class SearchIndexService implements AutoCloseable {
         if (!Files.exists(indexPath)) {
             return List.of();
         }
-        LibraryIndexer current = ensureIndexer();
+        SearchIndexBuilder current = ensureIndexer();
         if (current == null) {
             return List.of();
         }
@@ -145,7 +144,7 @@ public final class SearchIndexService implements AutoCloseable {
         if (!enabled() || musicId <= 0 || closed) {
             return;
         }
-        LibraryIndexer current = ensureIndexer();
+        SearchIndexBuilder current = ensureIndexer();
         if (current == null) {
             return;
         }
@@ -164,7 +163,7 @@ public final class SearchIndexService implements AutoCloseable {
         if (!enabled() || musicId <= 0 || closed) {
             return;
         }
-        LibraryIndexer current = indexer;
+        SearchIndexBuilder current = indexer;
         if (current == null) {
             return;
         }
@@ -183,7 +182,7 @@ public final class SearchIndexService implements AutoCloseable {
         if (!enabled() || closed) {
             return;
         }
-        LibraryIndexer current = ensureIndexer();
+        SearchIndexBuilder current = ensureIndexer();
         if (current == null) {
             return;
         }
@@ -227,7 +226,7 @@ public final class SearchIndexService implements AutoCloseable {
 
     /* ------------------------------------------------------------------ */
 
-    private LibraryIndexer ensureIndexer() {
+    private SearchIndexBuilder ensureIndexer() {
         synchronized (lock) {
             if (closed || !enabled()) {
                 return null;
@@ -236,7 +235,7 @@ public final class SearchIndexService implements AutoCloseable {
         }
     }
 
-    private LibraryIndexer ensureIndexerLocked() {
+    private SearchIndexBuilder ensureIndexerLocked() {
         if (indexer != null) {
             return indexer;
         }
@@ -245,7 +244,7 @@ public final class SearchIndexService implements AutoCloseable {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            indexer = new LibraryIndexer(indexPath, databaseManager::getConnection);
+            indexer = new SearchIndexBuilder(indexPath, databaseManager::getConnection);
             writer = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
                     new ArrayBlockingQueue<>(512),
                     runnable -> {
@@ -256,7 +255,7 @@ public final class SearchIndexService implements AutoCloseable {
                     // 队列满时在提交线程记一条告警后丢弃：不阻塞搜索 / 上传，交给周期刷新兜底。
                     (runnable, executor) -> logger.warn(
                             "索引写任务队列已满，本次任务已丢弃，交由周期刷新兜底"));
-            LibraryIndexer created = indexer;
+            SearchIndexBuilder created = indexer;
             submit(() -> {
                 try {
                     created.ensureReady();
@@ -279,7 +278,7 @@ public final class SearchIndexService implements AutoCloseable {
         }
         try {
             // 开关可能是启动后才打开的，这里按需创建索引器与写线程池。
-            LibraryIndexer current = ensureIndexer();
+            SearchIndexBuilder current = ensureIndexer();
             if (current != null) {
                 current.refresh();
                 SearchSession.invalidateQueryCache();
